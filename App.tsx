@@ -1,0 +1,28 @@
+import {StatusBar} from "expo-status-bar";
+import {NavigationContainer, DarkTheme, DefaultTheme} from "@react-navigation/native";
+import {SafeAreaProvider} from "react-native-safe-area-context";
+import {useColorScheme} from "react-native";
+import {AuthProvider} from "./src/context/AuthContext";
+import {LanguageProvider} from "./src/context/LanguageContext";
+import {ProfileProvider} from "./src/context/ProfileContext";
+import {darkTheme, lightTheme} from "./src/theme";
+import Tabs from "./src/navigation/Tabs";
+export default function App() {
+  const scheme = useColorScheme();
+  const navTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
+  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  return (
+    <SafeAreaProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <ProfileProvider>
+            <NavigationContainer theme={{...navTheme, colors: {...navTheme.colors, background: theme.background, card: theme.paper, text: theme.text, primary: theme.primary, border: theme.border}}}>
+              <Tabs />
+            </NavigationContainer>
+            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+          </ProfileProvider>
+        </AuthProvider>
+      </LanguageProvider>
+    </SafeAreaProvider>
+  );
+}
