@@ -1,15 +1,15 @@
 import {useCallback, useEffect, useState} from "react";
 import {ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View, useColorScheme} from "react-native";
-import MapView, {Marker} from "react-native-maps";
+import {Camera, MapView, PointAnnotation} from "@maplibre/maplibre-react-native";
 import {myFlags, submitFlag, unflag, type Flag, type FlagType} from "../api/flags";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {usePlaceSearch} from "../components/place-search";
+import {maptilerStyleUrl} from "../map/style";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 const TYPES: FlagType[] = ["FLOOD", "OBSTRUCTION", "ACCIDENT"];
-const HCMC = {latitude: 10.7626, longitude: 106.6602, latitudeDelta: 0.05, longitudeDelta: 0.05};
 export default function HazardScreen() {
   const {t, lang} = useStrings();
   const {token} = useAuth();
@@ -27,7 +27,16 @@ export default function HazardScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const reloadMine = useCallback(async () => { if (!token) return; try { setMine(await myFlags(token)); } catch (err) { setError(toMessage(err)); } }, [token]);
   useEffect(() => { void reloadMine(); }, [reloadMine]);
-  async function onMapPress(lat: number, lng: number) { setPoint({lat, lng}); setPointLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); setPointLabel(await search.resolvePoint(lat, lng)); }
+  async function onMapPress(e: unknown) {
+    const feature = e as {geometry?: {coordinates?: [number, number]}};
+    const coords = feature.geometry?.coordinates;
+    if (!coords || coords.length < 2) return;
+    const lng = coords[0];
+    const lat = coords[1];
+    setPoint({lat, lng});
+    setPointLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    setPointLabel(await search.resolvePoint(lat, lng));
+  }
   async function onSubmit() {
     if (!token || !point) return;
     setBusy(true); setError(null); setNotice(null);
@@ -44,7 +53,12 @@ export default function HazardScreen() {
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.hazards.radius} placeholderTextColor={theme.muted} value={radius} onChangeText={setRadius} keyboardType="numeric" />
           <Text style={[styles.hint, {color: theme.muted}]}>{t.hazards.pickHint}</Text>
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={pointLabel} editable={false} placeholder={t.hazards.pickHint} placeholderTextColor={theme.muted} />
-          <MapView style={styles.map} initialRegion={HCMC} onPress={(e) => void onMapPress(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)}>{point ? <Marker coordinate={{latitude: point.lat, longitude: point.lng}} /> : null}</MapView>
+          <View style={styles.map}>
+            <MapView style={styles.mapInner} mapStyle={maptilerStyleUrl} logoEnabled={false} attributionEnabled={false} onPress={(e: unknown) => void onMapPress(e)}>
+              <Camera centerCoordinate={[106.6602, 10.7626]} zoomLevel={13} />
+              {point ? <PointAnnotation id="hazardPoint" coordinate={[point.lng, point.lat]}><View style={styles.marker} /></PointAnnotation> : null}
+            </MapView>
+          </View>
           {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
           {notice ? <Text style={[styles.notice, {color: theme.success}]}>{notice}</Text> : null}
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (busy || !point) && styles.disabled]} disabled={busy || !point} onPress={() => void onSubmit()}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.hazards.submit}</Text>}</Pressable>
@@ -65,7 +79,9 @@ const styles = StyleSheet.create({
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   hint: {fontSize: 12},
-  map: {height: 220, borderRadius: 16},
+  map: {height: 220, borderRadius: 16, overflow: "hidden"},
+  mapInner: {flex: 1},
+  marker: {width: 16, height: 16, borderRadius: 8, backgroundColor: "#dc2626", borderWidth: 2, borderColor: "#fff"},
   error: {fontSize: 13},
   notice: {fontSize: 13},
   primary: {borderRadius: 8, padding: 12, alignItems: "center"},

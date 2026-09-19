@@ -7,6 +7,10 @@ export const mapDefaults = {
 
 const TILE_ZOOM = 14;
 
+export const maptilerStyleUrl = config.maptilerKey
+  ? `https://api.maptiler.com/maps/streets-v4/style.json?key=${config.maptilerKey}`
+  : undefined;
+
 export function brandTileUrl(): string {
   const n = 2 ** TILE_ZOOM;
   const [lng, lat] = mapDefaults.center;

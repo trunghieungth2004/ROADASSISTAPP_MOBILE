@@ -1,54 +1,38 @@
 import {useState} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme} from "react-native";
-import MapView, {Marker, Polyline} from "react-native-maps";
-import * as Location from "expo-location";
+import {ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useColorScheme} from "react-native";
+import {Camera, LineLayer, MapView, PointAnnotation, ShapeSource} from "@maplibre/maplibre-react-native";
 import {findRoute, saveRoute, type RouteOption} from "../api/routes";
+import {reverseLabel} from "../api/places";
 import {toMessage} from "../api/client";
-import type {Place} from "../components/place-search/PlaceSearch.types";
-import {PlaceSearchField, usePlaceSearch} from "../components/place-search";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
+import {maptilerStyleUrl} from "../map/style";
 import {darkTheme, lightTheme} from "../theme";
-import ScreenContainer from "../components/ScreenContainer";
 type Point = {lat: number; lng: number};
-const HCMC = {latitude: 10.7626, longitude: 106.6602, latitudeDelta: 0.05, longitudeDelta: 0.05};
+const HCMC_CENTER: [number, number] = [106.6602, 10.7626];
 export default function RouteScreen() {
   const {t, lang} = useStrings();
   const {token} = useAuth();
   const {activeVehicle} = useProfile();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const originSearch = usePlaceSearch({token: token ?? undefined, lang});
-  const destSearch = usePlaceSearch({token: token ?? undefined, lang});
   const [origin, setOrigin] = useState<Point | null>(null);
   const [dest, setDest] = useState<Point | null>(null);
-  const [pickMode, setPickMode] = useState<"origin" | "dest" | null>(null);
+  const [originText, setOriginText] = useState("");
+  const [destText, setDestText] = useState("");
   const [result, setResult] = useState<RouteOption | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  function pick(search: "origin" | "dest", place: Place) {
-    const next = {lat: place.lat, lng: place.lng};
-    if (search === "origin") setOrigin(next); else setDest(next);
-  }
-  async function onMapPress(lat: number, lng: number) {
-    if (!pickMode) return;
-    const search = pickMode === "origin" ? originSearch : destSearch;
-    const label = await search.resolvePoint(lat, lng);
-    search.pin(label);
-    const next = {lat, lng};
-    if (pickMode === "origin") setOrigin(next); else setDest(next);
-    setPickMode(null);
-  }
-  async function useMyLocation() {
-    const {status} = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return;
-    const pos = await Location.getCurrentPositionAsync({});
-    const next = {lat: pos.coords.latitude, lng: pos.coords.longitude};
-    setOrigin(next);
-    const label = await originSearch.resolvePoint(next.lat, next.lng);
-    originSearch.pin(label);
+  async function onMapPress(e: unknown) {
+    const feature = e as {geometry?: {coordinates?: [number, number]}};
+    const coords = feature.geometry?.coordinates;
+    if (!coords || coords.length < 2) return;
+    const lng = coords[0];
+    const lat = coords[1];
+    const label = await reverseLabel(lat, lng, lang);
+    if (!origin) { setOrigin({lat, lng}); setOriginText(label); } else if (!dest) { setDest({lat, lng}); setDestText(label); } else { setDest({lat, lng}); setDestText(label); }
   }
   async function onFind() {
     if (!token || !origin || !dest) return;
@@ -61,43 +45,61 @@ export default function RouteScreen() {
     try { await saveRoute({originLat: origin.lat, originLng: origin.lng, destLat: dest.lat, destLng: dest.lng, width: activeVehicle?.baseWidth, distanceMeters: result.distanceMeters, durationSeconds: result.durationSeconds, source: result.source, geometry: result.geometry}, token); setNotice(t.route.savedMsg); } catch (err) { setError(toMessage(err)); }
   }
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={[styles.container, {backgroundColor: theme.background}]}>
-        <Text style={[styles.label, {color: theme.text}]}>{t.route.origin}</Text>
-        <PlaceSearchField search={originSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={(p) => pick("origin", p)} />
-        <View style={styles.row}>
-          <Pressable style={[styles.chip, {borderColor: theme.primary}, pickMode === "origin" && {backgroundColor: theme.primary}]} onPress={() => setPickMode(pickMode === "origin" ? null : "origin")}><Text style={{color: pickMode === "origin" ? "#fff" : theme.primary}}>{t.common.useMapPoint}</Text></Pressable>
-          <Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => void useMyLocation()}><Text style={{color: theme.primary}}>{t.common.currentLocation}</Text></Pressable>
-          <Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => { setOrigin(dest); setDest(origin); originSearch.pin(dest ? `${dest.lat}, ${dest.lng}` : ""); destSearch.pin(origin ? `${origin.lat}, ${origin.lng}` : ""); }}><Text style={{color: theme.primary}}>{t.route.swap}</Text></Pressable>
+    <View style={styles.root}>
+      <MapView style={StyleSheet.absoluteFill} mapStyle={maptilerStyleUrl} logoEnabled={false} attributionEnabled={false} onPress={(e: unknown) => void onMapPress(e)}>
+        <Camera centerCoordinate={HCMC_CENTER} zoomLevel={13} />
+        {origin ? <PointAnnotation id="origin" coordinate={[origin.lng, origin.lat]}><View style={[styles.marker, {backgroundColor: theme.primary}]}><Text style={styles.markerText}>A</Text></View></PointAnnotation> : null}
+        {dest ? <PointAnnotation id="dest" coordinate={[dest.lng, dest.lat]}><View style={[styles.marker, {backgroundColor: "#dc2626"}]}><Text style={styles.markerText}>B</Text></View></PointAnnotation> : null}
+        {result ? <ShapeSource id="route" shape={{type: "Feature", geometry: result.geometry, properties: {}}}><LineLayer id="routeLine" style={{lineColor: theme.primary, lineWidth: 5, lineCap: "round", lineJoin: "round"}} /></ShapeSource> : null}
+      </MapView>
+      <View style={styles.bottomContainer}>
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <View style={styles.row}>
+            <View style={styles.fieldCol}>
+              <Text style={[styles.fieldLabel, {color: theme.text}]}>A · {t.route.origin}</Text>
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.route.searchOrigin} placeholderTextColor={theme.muted} value={originText} onChangeText={setOriginText} />
+              <Text style={[styles.fieldLabel, {color: theme.text}]}>B · {t.route.destination}</Text>
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.route.searchDestination} placeholderTextColor={theme.muted} value={destText} onChangeText={setDestText} />
+            </View>
+            <Pressable style={[styles.swapBtn, {borderColor: theme.border}]} onPress={() => { const o = origin; const ot = originText; setOrigin(dest); setDest(o); setOriginText(destText); setDestText(ot); }}>
+              <Text style={{color: theme.primary}}>⇅</Text>
+            </Pressable>
+          </View>
+          {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
+          {notice ? <Text style={[styles.notice, {color: theme.success}]}>{notice}</Text> : null}
+          {result ? (
+            <View style={styles.actionRow}>
+              <Pressable style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void onFind()}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.route.find}</Text>}</Pressable>
+              <Pressable style={[styles.outline, {borderColor: theme.border}]} onPress={() => { setOrigin(null); setDest(null); setOriginText(""); setDestText(""); setResult(null); setError(null); setNotice(null); }}><Text style={{color: theme.text}}>{t.route.clear}</Text></Pressable>
+            </View>
+          ) : origin && dest ? (
+            <Pressable style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void onFind()}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.route.find}</Text>}</Pressable>
+          ) : null}
+          {result ? <View style={[styles.resultCard, {borderColor: theme.border}]}><Text style={{color: theme.text}}>{t.route.distance}: {(result.distanceMeters / 1000).toFixed(1)} km · {t.route.duration}: {Math.round(result.durationSeconds / 60)} min</Text><Pressable style={[styles.chip, {borderColor: theme.success}]} onPress={() => void onSave()}><Text style={{color: theme.success}}>{t.route.saveRoute}</Text></Pressable><Text style={[styles.attribution, {color: theme.muted}]}>{t.route.geoAttribution}</Text></View> : null}
         </View>
-        <Text style={[styles.label, {color: theme.text}]}>{t.route.dest}</Text>
-        <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={(p) => pick("dest", p)} />
-        <Pressable style={[styles.chip, {borderColor: theme.primary}, pickMode === "dest" && {backgroundColor: theme.primary}]} onPress={() => setPickMode(pickMode === "dest" ? null : "dest")}><Text style={{color: pickMode === "dest" ? "#fff" : theme.primary}}>{t.common.useMapPoint}</Text></Pressable>
-        <MapView style={styles.map} initialRegion={HCMC} onPress={(e) => void onMapPress(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)}>
-          {origin ? <Marker coordinate={{latitude: origin.lat, longitude: origin.lng}} title={t.route.origin} /> : null}
-          {dest ? <Marker coordinate={{latitude: dest.lat, longitude: dest.lng}} title={t.route.dest} pinColor="blue" /> : null}
-          {result ? <Polyline coordinates={result.geometry.coordinates.map(([lng, lat]) => ({latitude: lat, longitude: lng}))} strokeColor={theme.primary} strokeWidth={4} /> : null}
-        </MapView>
-        {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
-        {notice ? <Text style={[styles.notice, {color: theme.success}]}>{notice}</Text> : null}
-        <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (busy || !origin || !dest) && styles.disabled]} disabled={busy || !origin || !dest} onPress={() => void onFind()}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.route.find}</Text>}
-        </Pressable>
-        {result ? <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}><Text style={{color: theme.text}}>{t.route.distance}: {(result.distanceMeters / 1000).toFixed(1)} km</Text><Text style={{color: theme.text}}>{t.route.duration}: {Math.round(result.durationSeconds / 60)} min ({result.source})</Text><Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => void onSave()}><Text style={{color: theme.primary}}>{t.route.saveRoute}</Text></Pressable></View> : null}
-      </ScrollView>
-    </ScreenContainer>
+      </View>
+    </View>
   );
 }
 const styles = StyleSheet.create({
-  container: {padding: 16, gap: 8},
-  label: {fontWeight: "700", marginTop: 4},
-  row: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
+  root: {flex: 1},
+  bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12},
+  card: {width: "100%", borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
+  row: {flexDirection: "row", gap: 8, alignItems: "center"},
+  fieldCol: {flex: 1, gap: 8, minWidth: 0},
+  fieldLabel: {fontSize: 12, fontWeight: "600"},
+  input: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
+  swapBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
-  map: {height: 260, borderRadius: 16},
-  error: {fontSize: 13},
-  notice: {fontSize: 13},
-  primary: {borderRadius: 8, padding: 12, alignItems: "center"},
+  actionRow: {flexDirection: "row", gap: 8},
+  primary: {flex: 1, borderRadius: 8, padding: 12, alignItems: "center"},
+  outline: {borderWidth: 1, borderRadius: 8, padding: 12, alignItems: "center"},
   disabled: {opacity: 0.6},
   primaryText: {color: "#fff", fontWeight: "700"},
-  card: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 6},
+  error: {fontSize: 13},
+  notice: {fontSize: 13},
+  resultCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, borderStyle: "dashed"},
+  attribution: {fontSize: 10, textAlign: "right"},
+  marker: {width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff"},
+  markerText: {color: "#fff", fontWeight: "700", fontSize: 12},
 });
