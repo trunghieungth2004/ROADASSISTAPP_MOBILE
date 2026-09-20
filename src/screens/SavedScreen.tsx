@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
-import {FlatList, Pressable, StyleSheet, Text, View, useColorScheme} from "react-native";
+import {FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text} from "../components/AppText";
 import {deleteSavedRoute, listSavedRoutes, type SavedRouteSummary} from "../api/routes";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";

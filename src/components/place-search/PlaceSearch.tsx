@@ -1,4 +1,5 @@
-import {ActivityIndicator, Text, TextInput, View, Pressable, StyleSheet} from "react-native";
+import {ActivityIndicator, View, Pressable, StyleSheet} from "react-native";
+import {AppText as Text, AppTextInput as TextInput} from "../AppText";
 import type {Place} from "./PlaceSearch.types";
 import type {PlaceSearch} from "./usePlaceSearch";
 type Props = {search: PlaceSearch; placeholder: string; noResultsText: string; onSelect: (place: Place) => void; groupLabels?: {saved: string; directory: string; map: string}};

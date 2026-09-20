@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme} from "react-native";
+import {Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {updateProfile} from "../api/users";
 import {toMessage} from "../api/client";
@@ -8,6 +9,8 @@ import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
+import OnboardingScreen from "./OnboardingScreen";
+import {useThemeMode} from "../context/ThemeContext";
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -17,14 +20,18 @@ function initials(name: string): string {
 export default function MoreScreen() {
   const {t, lang, toggle} = useStrings();
   const {signOut} = useAuth();
-  const {user, activeVehicle, refresh} = useProfile();
+  const {user, refresh, markOnboarded} = useProfile();
   const {token} = useAuth();
-  const scheme = useColorScheme();
+  const {mode, toggle: toggleTheme} = useThemeMode();
+  const scheme = mode;
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [editOpen, setEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const [servicesBusy, setServicesBusy] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
   const displayName = user?.displayName || user?.email || "—";
   const services = user?.services ?? [];
   const isAdmin = user?.role === "1";
@@ -33,6 +40,14 @@ export default function MoreScreen() {
     if (!token || !nameDraft.trim()) return;
     setEditError(null);
     try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); }
+  }
+  async function onServicesFinish(selected: string[]) {
+    setServicesBusy(true); setServicesError(null);
+    try { for (const service of selected) await markOnboarded(service); await refresh(); setServicesOpen(false); setNotice(t.more.saved); } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
+  }
+  async function onServicesSkip() {
+    setServicesBusy(true); setServicesError(null);
+    try { await markOnboarded("RIDER"); await refresh(); setServicesOpen(false); } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
   }
   return (
     <ScreenContainer>
@@ -50,18 +65,22 @@ export default function MoreScreen() {
             </View>
             <Pressable style={[styles.editBtn, {backgroundColor: theme.primary}]} onPress={openEdit}><Text style={styles.editBtnText}>{t.common.save}</Text></Pressable>
           </View>
-          <Text style={[styles.vehicleLine, {color: theme.muted}]}>{activeVehicle ? `${activeVehicle.type} · ${activeVehicle.baseWidth} m` : t.more.services + ": " + (services.join(", ") || "—")}</Text>
         </View>
         <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
           <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><Text style={[styles.modalTitle, {color: theme.text}]}>{t.more.displayName}</Text>{editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}<TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} /><View style={styles.modalActions}><Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => setEditOpen(false)}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable><Pressable style={[styles.primary, {backgroundColor: theme.primary, opacity: !nameDraft.trim() ? 0.5 : 1}]} disabled={!nameDraft.trim()} onPress={() => void onSaveName()}><Text style={styles.primaryText}>{t.common.save}</Text></Pressable></View></View></View>
+        </Modal>
+        <Modal visible={servicesOpen} animationType="slide" onRequestClose={() => setServicesOpen(false)}>
+          <OnboardingScreen t={t} busy={servicesBusy} error={servicesError} onFinish={(selected) => void onServicesFinish(selected)} onSkip={() => void onServicesSkip()} />
         </Modal>
         {notice ? <Text style={[styles.notice, {color: theme.success}]}>{notice}</Text> : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow}><MaterialIcons name="home" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.tabs.home}</Text></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
-          <Pressable style={styles.listRow}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text></Pressable>
+          <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={toggleTheme} accessibilityRole="switch" accessibilityState={{checked: scheme === "dark"}}><MaterialIcons name={scheme === "dark" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text><View pointerEvents="none"><Switch value={scheme === "dark"} onValueChange={() => toggleTheme()} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View></Pressable>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>

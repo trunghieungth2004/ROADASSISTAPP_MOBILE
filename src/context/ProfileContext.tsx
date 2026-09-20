@@ -13,7 +13,15 @@ export function ProfileProvider({children}: {children: ReactNode}) {
     try { const next = await fetchMeBundle(token); setBundle(next); return next; } catch { return bundle; } finally { setLoading(false); }
   }, [token]);
   useEffect(() => { if (token) void refresh(); else setBundle(null); }, [token, refresh]);
-  const activateVehicle = useCallback(async (profileId: string | null) => { if (!token) return; await apiActivateVehicle({profileId}, token); await refresh(); }, [token, refresh]);
+  const activateVehicle = useCallback(async (profileId: string | null) => {
+    if (!token) return;
+    const res = await apiActivateVehicle({profileId}, token);
+    setBundle((prev) => {
+      if (!prev) return prev;
+      const active = res.profileId ? prev.vehicles.find((vehicle) => vehicle.id === res.profileId) ?? null : null;
+      return {...prev, activeVehicle: active};
+    });
+  }, [token]);
   const markOnboarded = useCallback(async (service: string) => {
     if (!token) return;
     const res = await apiSetOnboarded({service}, token);

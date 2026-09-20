@@ -36,6 +36,14 @@ export type WidthBlock = {
   distanceMeters: number;
 };
 
+export type RouteStep = {
+  at: [number, number];
+  kind: string;
+  street?: string;
+  distMeters: number;
+  durationSec: number;
+};
+
 export type RouteOption = {
   source: string;
   geometry: RouteGeometry;
@@ -43,6 +51,7 @@ export type RouteOption = {
   durationSeconds: number;
   hazards?: HazardZone[];
   warnings?: unknown[];
+  steps?: RouteStep[];
 };
 
 export type RouteResult = {

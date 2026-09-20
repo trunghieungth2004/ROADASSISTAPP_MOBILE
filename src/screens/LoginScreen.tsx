@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {signInWithEmailAndPassword} from "firebase/auth";
 import {auth} from "../auth/firebase";
 import {register} from "../api/auth";

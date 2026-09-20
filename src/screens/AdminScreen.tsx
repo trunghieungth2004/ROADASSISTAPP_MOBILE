@@ -1,4 +1,5 @@
-import {ScrollView, StyleSheet, Text, View, useColorScheme} from "react-native";
+import {ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text} from "../components/AppText";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";

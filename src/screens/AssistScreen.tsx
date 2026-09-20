@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
-import {ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View, useColorScheme} from "react-native";
+import {ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import * as Location from "expo-location";
 import {cancelTicket, createTicket, myTickets, type DispatchTicket, type TicketType} from "../api/dispatch";
 import {toMessage} from "../api/client";

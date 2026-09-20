@@ -1,6 +1,16 @@
 import {config} from "../config";
 
 export const API_URL = config.apiBaseUrl;
+let tokenRefresher: (() => Promise<string | null>) | null = null;
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setTokenRefresher(fn: (() => Promise<string | null>) | null): void {
+  tokenRefresher = fn;
+}
+
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  unauthorizedHandler = fn;
+}
 
 export type ApiEnvelope<T> = {
   statusCode: number;
@@ -27,7 +37,24 @@ export function toMessage(err: unknown): string {
 }
 
 async function request<T>(path: string, init: RequestInit, token?: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  let res = await send(path, init, token);
+  if (res.status === 401 && tokenRefresher) {
+    const fresh = await tokenRefresher().catch(() => null);
+    if (fresh) res = await send(path, init, fresh);
+  }
+  const body = (await res.json()) as ApiEnvelope<T> & {message?: string};
+  if (!res.ok || body.status === "ERROR") {
+    const statusCode = body.statusCode ?? res.status;
+    if (res.status === 401 || statusCode === 401 || (statusCode === 403 && body.message === "User is inactive")) {
+      unauthorizedHandler?.();
+    }
+    throw new ApiError(body.message ?? `Request failed (${res.status})`, statusCode, body.errors);
+  }
+  return body.data;
+}
+
+function send(path: string, init: RequestInit, token?: string): Promise<Response> {
+  return fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -35,11 +62,6 @@ async function request<T>(path: string, init: RequestInit, token?: string): Prom
       ...(init.headers ?? {}),
     },
   });
-  const body = (await res.json()) as ApiEnvelope<T> & {message?: string};
-  if (!res.ok || body.status === "ERROR") {
-    throw new ApiError(body.message ?? `Request failed (${res.status})`, body.statusCode ?? res.status, body.errors);
-  }
-  return body.data;
 }
 
 export const api = {

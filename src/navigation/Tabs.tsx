@@ -1,6 +1,7 @@
 import {useState, type ReactNode} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, Text, View, useColorScheme} from "react-native";
-import {createBottomTabNavigator} from "@react-navigation/bottom-tabs";
+import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text} from "../components/AppText";
+import {createBottomTabNavigator, type BottomTabBarProps} from "@react-navigation/bottom-tabs";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {toMessage} from "../api/client";
@@ -24,6 +25,26 @@ const TAB_ICONS: Record<string, (props: IconProps) => ReactNode> = {
   Vehicle: (p) => <MaterialCommunityIcons name="motorbike" {...p} />,
   More: (p) => <MaterialIcons name="more-horiz" {...p} />,
 };
+function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
+  const scheme = useColorScheme();
+  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const insets = useSafeAreaInsets();
+  const focusedOptions = descriptors[state.routes[state.index].key]?.options as {tabBarStyle?: {display?: string}} | undefined;
+  if (focusedOptions?.tabBarStyle?.display === "none") return null;
+  return <View style={[styles.tabBar, {backgroundColor: theme.paper, borderTopColor: theme.divider, paddingBottom: insets.bottom}]}>{state.routes.map((route, index) => {
+    const focused = state.index === index;
+    const options = descriptors[route.key].options;
+    const color = focused ? theme.primary : theme.tabInactive;
+    const onPress = () => {
+      const event = navigation.emit({type: "tabPress", target: route.key, canPreventDefault: true});
+      if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
+    };
+    return <Pressable key={route.key} accessibilityRole="tab" accessibilityState={{selected: focused}} onPress={onPress} style={styles.tabItem}>
+      <View style={[styles.iconSlot, focused && {backgroundColor: `${theme.primary}33`}]}>{(TAB_ICONS[route.name] ?? (() => null))({color, size: 22})}</View>
+      <Text numberOfLines={1} style={[styles.tabLabel, {color}]}>{options.title ?? route.name}</Text>
+    </Pressable>;
+  })}</View>;
+}
 function UnsupportedRole() {
   const {signOut} = useAuth();
   return <View style={styles.center}><Text>Role not supported on mobile yet.</Text><Pressable style={styles.primary} onPress={() => void signOut()}><Text style={styles.primaryText}>Sign out</Text></Pressable></View>;
@@ -46,13 +67,12 @@ export default function Tabs() {
   const {loading, roleChosen, isRider, bundle} = useProfile();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const insets = useSafeAreaInsets();
   if (!loaded || (token && loading && !bundle)) return <View style={styles.center}><ActivityIndicator /></View>;
   if (!token) return <LoginScreen />;
   if (!roleChosen) return <OnboardingGate />;
   if (!isRider) return <UnsupportedRole />;
   return (
-    <Tab.Navigator initialRouteName="Route" screenOptions={({route}) => ({headerShown: true, tabBarShowLabel: true, tabBarActiveTintColor: theme.primary, tabBarInactiveTintColor: theme.tabInactive, tabBarStyle: {backgroundColor: theme.paper, borderTopWidth: 1, borderTopColor: theme.divider, paddingBottom: insets.bottom}, headerStyle: {backgroundColor: theme.paper}, headerTintColor: theme.text, tabBarIcon: ({color, size}) => (TAB_ICONS[route.name] ?? (() => null))({color, size})})}>
+    <Tab.Navigator initialRouteName="Route" tabBar={(props) => <TabBar {...props} />} screenOptions={{headerShown: true, headerStyle: {backgroundColor: theme.paper}, headerTintColor: theme.text}}>
       <Tab.Screen name="Route" component={RouteScreen} options={{title: t.tabs.route}} />
       <Tab.Screen name="Hazards" component={HazardScreen} options={{title: t.tabs.hazards}} />
       <Tab.Screen name="Assist" component={AssistScreen} options={{title: `${t.tabs.dispatch} · ${t.tabs.soon}`}} listeners={{tabPress: (e) => e.preventDefault()}} />
@@ -61,4 +81,4 @@ export default function Tabs() {
     </Tab.Navigator>
   );
 }
-const styles = StyleSheet.create({center: {flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", gap: 12}, primary: {backgroundColor: "#0284c7", borderRadius: 8, padding: 12}, primaryText: {color: "#fff", fontWeight: "700"}});
+const styles = StyleSheet.create({center: {flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", gap: 12}, primary: {backgroundColor: "#0284c7", borderRadius: 8, padding: 12}, primaryText: {color: "#fff", fontWeight: "700"}, tabBar: {flexDirection: "row", borderTopWidth: 1, paddingTop: 6}, tabItem: {flex: 1, alignItems: "center", justifyContent: "center", minHeight: 58, gap: 3}, iconSlot: {width: 48, height: 32, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center"}, tabLabel: {fontSize: 11, fontWeight: "600", maxWidth: "100%"}});

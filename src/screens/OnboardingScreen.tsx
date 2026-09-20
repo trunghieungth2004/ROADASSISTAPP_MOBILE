@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Pressable, StyleSheet, Text, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {AppText as Text} from "../components/AppText";
 import type {Strings} from "../i18n/en";
 import {darkTheme, lightTheme} from "../theme";
 export type OnboardingProps = {t: Strings; busy?: boolean; error?: string | null; onFinish: (services: string[]) => void; onSkip: () => void};

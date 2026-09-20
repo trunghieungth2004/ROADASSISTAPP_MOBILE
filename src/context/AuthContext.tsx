@@ -2,6 +2,7 @@ import {createContext, useCallback, useContext, useEffect, useMemo, useState, ty
 import {onIdTokenChanged, signOut as firebaseSignOut} from "firebase/auth";
 import * as SecureStore from "expo-secure-store";
 import {auth} from "../auth/firebase";
+import {setTokenRefresher, setUnauthorizedHandler} from "../api/client";
 
 type Session = {uid: string; token: string};
 type AuthState = {uid: string | null; token: string | null; loaded: boolean; signIn: (uid: string, token: string) => Promise<void>; signOut: () => Promise<void>; refreshToken: () => Promise<string | null>};
@@ -44,6 +45,14 @@ export function AuthProvider({children}: {children: ReactNode}) {
     await signIn(user.uid, token);
     return token;
   }, [signIn]);
+  useEffect(() => {
+    setTokenRefresher(refreshToken);
+    setUnauthorizedHandler(() => { void signOut(); });
+    return () => {
+      setTokenRefresher(null);
+      setUnauthorizedHandler(null);
+    };
+  }, [refreshToken, signOut]);
   const value = useMemo<AuthState>(() => ({uid: session?.uid ?? null, token: session?.token ?? null, loaded, signIn, signOut, refreshToken}), [session, loaded, signIn, signOut, refreshToken]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
