@@ -4,6 +4,7 @@ export type RouteProgress = {
   totalMeters: number;
   distToRoute: number;
   segIndex: number;
+  point: [number, number];
 };
 
 export const OFF_ROUTE_METERS = 50;
@@ -30,10 +31,11 @@ export function routeLengths(coords: [number, number][]): {cum: number[]; total:
 export function projectOntoRoute(lat: number, lng: number, coords: [number, number][]): RouteProgress {
   const {cum, total} = routeLengths(coords);
   if (coords.length < 2) {
-    return {progressMeters: 0, remainingMeters: total, totalMeters: total, distToRoute: Number.POSITIVE_INFINITY, segIndex: 0};
+    const fallback: [number, number] = coords.length === 1 ? [coords[0][0], coords[0][1]] : [lng, lat];
+    return {progressMeters: 0, remainingMeters: total, totalMeters: total, distToRoute: Number.POSITIVE_INFINITY, segIndex: 0, point: fallback};
   }
   const kx = Math.cos(toRad(lat));
-  let best = {d2: Number.POSITIVE_INFINITY, along: 0, seg: 0};
+  let best = {d2: Number.POSITIVE_INFINITY, along: 0, seg: 0, cx: 0, cy: 0};
   for (let i = 0; i + 1 < coords.length; i++) {
     const ax = coords[i][0] * kx;
     const ay = coords[i][1];
@@ -51,7 +53,7 @@ export function projectOntoRoute(lat: number, lng: number, coords: [number, numb
     const dLng = (cx - px) * 111320;
     const d2 = dLat * dLat + dLng * dLng;
     if (d2 < best.d2) {
-      best = {d2, along: cum[i] + t * (cum[i + 1] - cum[i]), seg: i};
+      best = {d2, along: cum[i] + t * (cum[i + 1] - cum[i]), seg: i, cx, cy};
     }
   }
   return {
@@ -60,5 +62,6 @@ export function projectOntoRoute(lat: number, lng: number, coords: [number, numb
     totalMeters: total,
     distToRoute: Math.sqrt(best.d2),
     segIndex: best.seg,
+    point: [best.cx / kx, best.cy],
   };
 }

@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {signInWithEmailAndPassword} from "firebase/auth";
 import {auth} from "../auth/firebase";
@@ -35,7 +35,8 @@ export default function LoginScreen() {
   }
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={[styles.container, {backgroundColor: theme.background}]}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.avoid}>
+      <ScrollView contentContainerStyle={[styles.container, {backgroundColor: theme.background}]} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, {color: theme.text}]}>{t.appName}</Text>
         <View style={styles.tabs}>
           <Pressable style={[styles.tab, {borderColor: theme.border}, mode === "login" && {borderColor: theme.primary, borderWidth: 2}]} onPress={() => setMode("login")}><Text style={{color: theme.text}}>{t.auth.signIn}</Text></Pressable>
@@ -50,10 +51,12 @@ export default function LoginScreen() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === "login" ? t.auth.signIn : t.auth.createAccount}</Text>}
         </Pressable>
       </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
 const styles = StyleSheet.create({
+  avoid: {flex: 1},
   container: {flexGrow: 1, padding: 20, justifyContent: "center", gap: 10},
   title: {fontSize: 28, fontWeight: "700", textAlign: "center", marginBottom: 12},
   tabs: {flexDirection: "row", gap: 8},

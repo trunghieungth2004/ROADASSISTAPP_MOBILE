@@ -1,0 +1,9 @@
+export type Point = {lat: number; lng: number};
+export type Stop = {label: string; lat: number; lng: number};
+export type DragTarget = "origin" | "destination" | "handle";
+export type CamState = {center: [number, number]; zoom: number; ne: [number, number]; sw: [number, number]; w: number; h: number} | null;
+export type SearchField = "origin" | "destination" | "stop";
+export const HCMC_CENTER: [number, number] = [106.6602, 10.7626];
+export const MAX_STOPS = 10;
+export const ARM_RADIUS = 48;
+export const PILL_LIFT_PX = 34;
