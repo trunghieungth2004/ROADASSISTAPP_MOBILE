@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useState, type ComponentProps} from "react";
 import {ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
@@ -8,6 +8,27 @@ import {usePlaceSearch, type Place} from "../components/place-search";
 import {toMessage} from "../api/client";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
+const CATEGORY_ICONS: Record<string, ComponentProps<typeof MaterialIcons>["name"]> = {
+  park: "park",
+  landmark: "museum",
+  fuel: "local-gas-station",
+  repair: "car-repair",
+  hospital: "local-hospital",
+  school: "school",
+  cafe: "local-cafe",
+  restaurant: "restaurant",
+  market: "store",
+  store: "store",
+  hotel: "hotel",
+  bank: "account-balance",
+  pharmacy: "local-pharmacy",
+};
+
+function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
+  if (item.source === "saved") return "bookmark";
+  if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
+  return "place";
+}
 type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap: () => void; onClose: () => void};
 export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onClose}: Props) {
   const scheme = useColorScheme();
@@ -66,7 +87,10 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
       <FlatList style={styles.results} data={grouped} keyExtractor={(row) => `${row.item.source}:${row.item.label}:${row.item.lat},${row.item.lng}`} keyboardShouldPersistTaps="handled" renderItem={({item: row}) => (
         <View>
           {row.header ? <Text style={[styles.header, {color: theme.muted}]}>{row.header}</Text> : null}
-          <Pressable style={styles.row} onPress={() => { search.select(row.item); onPick(row.item); }}><Text style={{color: theme.text}}>{row.item.label}</Text></Pressable>
+          <Pressable style={styles.row} onPress={() => { search.select(row.item); onPick(row.item); }}>
+            <MaterialIcons name={resultIcon(row.item)} size={20} color={theme.primary} />
+            <Text style={[styles.rowText, {color: theme.text}]}>{row.item.label}</Text>
+          </Pressable>
         </View>
       )} />
     </View>
@@ -86,5 +110,6 @@ const styles = StyleSheet.create({
   hint: {fontSize: 13},
   results: {flex: 1},
   header: {fontSize: 12, fontWeight: "700", marginTop: 8},
-  row: {paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f0f0f0"},
+  row: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f0f0f0"},
+  rowText: {flex: 1, fontSize: 14, minWidth: 0},
 });

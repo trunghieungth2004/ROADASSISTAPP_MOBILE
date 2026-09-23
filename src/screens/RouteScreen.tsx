@@ -17,6 +17,10 @@ import PlaceSearchScreen from "./PlaceSearchScreen";
 import NavigationScreen from "./NavigationScreen";
 import SavedRoutesSheet from "../components/SavedRoutesSheet";
 import Snack from "../components/Snack";
+import FlagSheet, {type FlagReport} from "../components/FlagSheet";
+import FlagDetailSheet from "../components/FlagDetailSheet";
+import {confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
+import {markDenied, markVoted} from "../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./route/types";
 import {boundsOf, midOf, vehicleIcon} from "./route/routeGeo";
 import {useRouteDrag} from "./route/useRouteDrag";
@@ -25,7 +29,7 @@ import RouteCard from "./route/RouteCard";
 
 export default function RouteScreen() {
   const {t, lang} = useStrings();
-  const {token} = useAuth();
+  const {token, uid} = useAuth();
   const navigation = useNavigation();
   const {vehicles, activeVehicle, activateVehicle} = useProfile();
   const scheme = useColorScheme();
@@ -51,6 +55,13 @@ export default function RouteScreen() {
   const [navInitial, setNavInitial] = useState<{route: RouteOption; dest: Point; stops: Stop[]} | null>(null);
   const [pickingFor, setPickingFor] = useState<SearchField | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
+  const [flagMode, setFlagMode] = useState(false);
+  const [flagPoint, setFlagPoint] = useState<Point | null>(null);
+  const [selectedFlag, setSelectedFlag] = useState<Flag | null>(null);
+  const [flagBusy, setFlagBusy] = useState(false);
+  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+  const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
+  const [flagsKey, setFlagsKey] = useState(0);
   const [gpsPos, setGpsPos] = useState<Point | null>(null);
   const [gpsBusy, setGpsBusy] = useState(false);
   const [vehicleOpen, setVehicleOpen] = useState(false);
@@ -61,23 +72,26 @@ export default function RouteScreen() {
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   const pillBgActive = scheme === "dark" ? "pill-active-dark" : "pill-active-light";
   function fitRouteGeometry(coords: [number, number][]) {
+    if (__DEV__) console.log("[TRACE] fitRouteGeometry", coords.length);
     const b = boundsOf(coords);
-    if (b) cameraRef.current?.fitBounds(b.ne, b.sw, [80, 60, 340, 60], 0);
+    if (b) cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
   }
-  async function requestRoute(o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean) {
-    if (!token || !o || !d) return;
+  async function requestRoute(o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean): Promise<RouteOption[] | null> {
+    if (!token || !o || !d) return null;
     const id = (seqRef.current += 1);
     setBusy(true);
     setError(null);
     try {
       const res = await findRoute({originLat: o.lat, originLng: o.lng, destLat: d.lat, destLng: d.lng, stops: s.map((stop) => ({lat: stop.lat, lng: stop.lng})), width: width ?? activeVehicle?.baseWidth, vehicleType: vehicleType ?? activeVehicle?.type}, token);
-      if (seqRef.current !== id) return;
+      if (seqRef.current !== id) return null;
       const next = res.routes ?? [];
       setRoutes(next);
       setSelectedIndex(0);
       if (fit && next[0]) fitRouteGeometry(next[0].geometry.coordinates);
+      return next;
     } catch (err) {
       if (seqRef.current === id) setError(toMessage(err));
+      return null;
     } finally {
       if (seqRef.current === id) setBusy(false);
     }
@@ -135,7 +149,8 @@ export default function RouteScreen() {
       if (routes.length > 0 && origin && dest) void requestRoute(origin, dest, next);
     }
     if (routes.length === 0) {
-      cameraRef.current?.setCamera({centerCoordinate: [place.lng, place.lat], zoomLevel: 15, animationDuration: 500});
+      if (__DEV__) console.log("[TRACE] pick jump", place.lat.toFixed(5), place.lng.toFixed(5));
+      void cameraRef.current?.setStop({center: [place.lng, place.lat], zoom: 15, duration: 500});
     }
     setSearchingFor(null);
   }
@@ -158,6 +173,9 @@ export default function RouteScreen() {
       setPickingFor(null);
     }
   }
+  async function onFlagMapPoint(lat: number, lng: number) {
+    setFlagPoint({lat, lng});
+  }
   const drag = useRouteDrag({
     origin,
     dest,
@@ -166,6 +184,7 @@ export default function RouteScreen() {
     selectedIndex,
     busy,
     pickingFor,
+    flagMode,
     requestRoute,
     setOrigin,
     setOriginText,
@@ -173,6 +192,7 @@ export default function RouteScreen() {
     setDestText,
     setStops,
     onPickMapPoint,
+    onFlagMapPoint,
   });
   useEffect(() => {
     navigation.setOptions({
@@ -185,6 +205,14 @@ export default function RouteScreen() {
   }, [navigation, searchingFor]);
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (selectedFlag) {
+        setSelectedFlag(null);
+        return true;
+      }
+      if (flagPoint) {
+        cancelFlagReport();
+        return true;
+      }
       if (savedOpen) {
         setSavedOpen(false);
         return true;
@@ -200,7 +228,83 @@ export default function RouteScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [savedOpen, searchingFor, pickingFor]);
+  }, [savedOpen, searchingFor, pickingFor, selectedFlag, flagPoint]);
+  function toggleFlagMode() {
+    setFlagMode((v) => !v);
+    setPickingFor(null);
+  }
+  function cancelFlagReport() {
+    setFlagPoint(null);
+    setFlagMode(false);
+  }
+  async function onSubmitFlag(report: FlagReport) {
+    if (!token || !flagPoint) return;
+    setFlagBusy(true);
+    try {
+      await submitFlag({type: report.type, lat: flagPoint.lat, lng: flagPoint.lng, radiusMeters: report.radiusMeters, note: report.note}, token);
+      setFlagPoint(null);
+      setFlagMode(false);
+      setFlagsKey((k) => k + 1);
+      setSnack(t.flag.reported);
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setFlagBusy(false);
+    }
+  }
+  async function onConfirmFlag(flagId: string) {
+    if (!token) return;
+    setFlagBusy(true);
+    try {
+      const res = await confirmFlag(flagId, token);
+      void markVoted(flagId);
+      setVotedIds((prev) => new Set(prev).add(flagId));
+      setSelectedFlag(null);
+      setFlagsKey((k) => k + 1);
+      if (routes.length > 0 && origin && dest) {
+        const before = result ? JSON.stringify(result.geometry.coordinates) : "";
+        const next = await requestRoute(origin, dest, stops);
+        const after = next?.[0] ? JSON.stringify(next[0].geometry.coordinates) : "";
+        setSnack(after !== "" && after !== before ? t.flag.rerouted : res.alreadyVoted ? t.flag.alreadyVoted : t.flag.confirmedMsg);
+      } else {
+        setSnack(res.alreadyVoted ? t.flag.alreadyVoted : t.flag.confirmedMsg);
+      }
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setFlagBusy(false);
+    }
+  }
+  async function onDenyFlag(flagId: string) {
+    if (!token) return;
+    setFlagBusy(true);
+    try {
+      const res = await denyFlag(flagId, token);
+      void markDenied(flagId);
+      setDeniedIds((prev) => new Set(prev).add(flagId));
+      setSelectedFlag(null);
+      setFlagsKey((k) => k + 1);
+      setSnack(res.alreadyVoted ? t.flag.alreadyDenied : t.flag.deniedMsg);
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setFlagBusy(false);
+    }
+  }
+  async function onRemoveFlag(flagId: string) {
+    if (!token) return;
+    setFlagBusy(true);
+    try {
+      await unflag(flagId, token);
+      setSelectedFlag(null);
+      setFlagsKey((k) => k + 1);
+      setSnack(t.flag.removedMsg);
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setFlagBusy(false);
+    }
+  }
   function onDeleteStop(index: number) {
     const next = stops.filter((_, i) => i !== index);
     setStops(next);
@@ -234,7 +338,8 @@ export default function RouteScreen() {
       const fix = await Location.getCurrentPositionAsync({accuracy: Location.Accuracy.Balanced});
       const next = {lat: fix.coords.latitude, lng: fix.coords.longitude};
       setGpsPos(next);
-      cameraRef.current?.setCamera({centerCoordinate: [next.lng, next.lat], animationDuration: 500});
+      if (__DEV__) console.log("[TRACE] gps center", next.lat.toFixed(5), next.lng.toFixed(5));
+      void cameraRef.current?.setStop({center: [next.lng, next.lat], duration: 500});
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -334,7 +439,27 @@ export default function RouteScreen() {
         onRegionDid={drag.onRegionDid}
         onSelectIndex={onSelectRoute}
         onCancelPick={() => setPickingFor(null)}
+        flagCamRef={drag.camRef}
+        flagsToken={token}
+        flagsKey={flagsKey}
+        onPickFlag={setSelectedFlag}
+        subscribeRegionDid={drag.subscribeRegionDid}
       />
+      {!pickingFor && !flagPoint && !selectedFlag ? (
+        <Pressable
+          style={[styles.flagFab, {backgroundColor: flagMode ? theme.primary : theme.paper, borderColor: flagMode ? theme.primary : theme.border, top: routes.length > 1 ? 64 : 12}]}
+          onPress={toggleFlagMode}
+          accessibilityRole="button"
+          accessibilityLabel={t.route.flagMode}
+        >
+          <MaterialIcons name="add-alert" size={22} color={flagMode ? "#fff" : theme.primary} />
+        </Pressable>
+      ) : null}
+      {flagMode && !flagPoint && !selectedFlag ? (
+        <View style={[styles.flagHint, {top: routes.length > 1 ? 120 : 68}]} pointerEvents="none">
+          <Text style={styles.flagHintText}>{t.route.flagHint}</Text>
+        </View>
+      ) : null}
       {!pickingFor ? (
       <View style={styles.bottomContainer}>
         <View style={styles.fabRow}>
@@ -366,7 +491,7 @@ export default function RouteScreen() {
           error={error}
           hazardZones={hazardZones}
           widthBlocks={widthBlocks}
-          onOpenSearch={(f) => { setPickingFor(null); setSearchingFor(f); }}
+          onOpenSearch={(f) => { setPickingFor(null); setFlagMode(false); setSearchingFor(f); }}
           onSwap={onSwap}
           onDeleteStop={onDeleteStop}
           onOpenVehicle={() => setVehicleOpen(true)}
@@ -381,9 +506,9 @@ export default function RouteScreen() {
           <View style={[styles.modalCard, {backgroundColor: theme.paper}]}>
             {vehicles.length === 0 ? <Text style={{color: theme.muted}}>{t.route.vehicleCta}</Text> : vehicles.map((v) => (
               <Pressable key={v.id} style={styles.vehicleRow} onPress={() => void onVehiclePress(v.id)}>
+                <MaterialIcons name={activeVehicle?.id === v.id ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={activeVehicle?.id === v.id ? theme.primary : theme.muted} />
                 <MaterialCommunityIcons name={vehicleIcon(v.type)} size={20} color={theme.primary} />
                 <Text style={[styles.vehicleRowText, {color: theme.text}]}>{t.vehicle.types[v.type as keyof typeof t.vehicle.types] ?? v.type} · {v.baseWidth}m</Text>
-                {activeVehicle?.id === v.id ? <MaterialIcons name="check" size={20} color={theme.primary} /> : null}
               </Pressable>
             ))}
             <Pressable style={[styles.chip, styles.modalClose, {borderColor: theme.border}]} onPress={() => setVehicleOpen(false)}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable>
@@ -403,6 +528,7 @@ export default function RouteScreen() {
                 const f = searchingFor;
                 Keyboard.dismiss();
                 setSearchingFor(null);
+                setFlagMode(false);
                 setPickingFor(f);
               }}
               onClose={() => { Keyboard.dismiss(); setSearchingFor(null); }}
@@ -434,6 +560,34 @@ export default function RouteScreen() {
         </View>
       </Modal>
       <Snack message={snack} onHide={() => setSnack(null)} />
+      {flagPoint ? (
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={cancelFlagReport} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
+            <FlagSheet t={t} lat={flagPoint.lat} lng={flagPoint.lng} busy={flagBusy} centered onClose={cancelFlagReport} onSubmit={(r) => void onSubmitFlag(r)} />
+          </View>
+        </View>
+      ) : null}
+      {selectedFlag ? (
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFlag(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
+            <FlagDetailSheet
+              t={t}
+              flag={selectedFlag}
+              isOwn={uid != null && selectedFlag.reporterId === uid}
+              busy={flagBusy}
+              voted={votedIds.has(selectedFlag.id)}
+              denied={deniedIds.has(selectedFlag.id)}
+              centered
+              onClose={() => setSelectedFlag(null)}
+              onConfirm={(id) => void onConfirmFlag(id)}
+              onDeny={(id) => void onDenyFlag(id)}
+              onRemove={(id) => void onRemoveFlag(id)}
+            />
+          </View>
+        </View>
+      ) : null}
       <Modal visible={navInitial !== null} animationType="slide" onRequestClose={() => setNavInitial(null)}>
         {navInitial && token ? (
           <NavigationScreen
@@ -455,7 +609,12 @@ export default function RouteScreen() {
 const styles = StyleSheet.create({
   root: {flex: 1},
   fullScreen: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, elevation: 6},
+  flagFab: {position: "absolute", left: 12, width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center", zIndex: 10, elevation: 4},
+  flagHint: {position: "absolute", left: 12, alignItems: "flex-start"},
+  flagHintText: {backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 12, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, overflow: "hidden"},
   savedRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
+  centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
+  centerWrap: {width: "100%", paddingHorizontal: 24},
   sheetWrap: {width: "100%"},
   bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12, gap: 8},
   fabRow: {flexDirection: "row", alignItems: "center", gap: 8},

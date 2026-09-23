@@ -38,14 +38,12 @@ export default function RouteCard(props: Props) {
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
       <View style={styles.row}>
         <View style={styles.fieldCol}>
-          <Text style={[styles.fieldLabel, {color: theme.text}]} numberOfLines={1}>A · {t.route.origin}</Text>
           <Pressable style={[styles.input, styles.selectBtn, {borderColor: theme.border}]} onPress={() => props.onOpenSearch("origin")}><Text style={{color: props.originText ? theme.text : theme.muted}} numberOfLines={1}>{props.originText || t.route.selectOrigin}</Text></Pressable>
         </View>
         <Pressable style={[styles.swapBtn, {borderColor: theme.border}]} onPress={props.onSwap}>
           <Text style={{color: theme.primary}}>⇄</Text>
         </Pressable>
         <View style={styles.fieldCol}>
-          <Text style={[styles.fieldLabel, {color: theme.text}]} numberOfLines={1}>B · {t.route.destination}</Text>
           <Pressable style={[styles.input, styles.selectBtn, {borderColor: theme.border}]} onPress={() => props.onOpenSearch("destination")}><Text style={{color: props.destText ? theme.text : theme.muted}} numberOfLines={1}>{props.destText || t.route.selectDestination}</Text></Pressable>
         </View>
       </View>
@@ -107,7 +105,6 @@ const styles = StyleSheet.create({
   card: {width: "100%", borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
   row: {flexDirection: "row", gap: 8, alignItems: "center"},
   fieldCol: {flex: 1, gap: 8, minWidth: 0},
-  fieldLabel: {fontSize: 12, fontWeight: "600"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
   selectBtn: {justifyContent: "center", minHeight: 42},
   swapBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},

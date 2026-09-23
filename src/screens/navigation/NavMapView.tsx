@@ -1,10 +1,12 @@
 import type {RefObject} from "react";
 import {StyleSheet} from "react-native";
-import {Camera, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import {maptilerStyleUrl} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
+import type {Flag} from "../../api/flags";
 import {NAV_HOME} from "./navUtils";
+import NavFlags from "./NavFlags";
 
 type Props = {
   theme: AppTheme;
@@ -15,6 +17,16 @@ type Props = {
   traveled: [number, number][];
   remaining: [number, number][];
   highlight: [number, number][] | null;
+  flagsPos: {lat: number; lng: number} | null;
+  flagsToken: string | null;
+  flagsKey: number;
+  flagsUid: string | null;
+  flagsVoted: Set<string>;
+  flagsDenied: Set<string>;
+  flagsSuppressAuto: boolean;
+  flagsArrived: boolean;
+  onPickFlag: (flag: Flag) => void;
+  onAutoFlag: (flag: Flag | null) => void;
   onRegionChanging: (e: unknown) => void;
   onRegionDid: () => void;
 };
@@ -25,52 +37,55 @@ export default function NavMapView(props: Props) {
   const a = coords.length > 0 ? coords[0] : null;
   const b = coords.length > 0 ? coords[coords.length - 1] : null;
   return (
-    <MapView
+    <Map
       style={StyleSheet.absoluteFill}
-      mapStyle={maptilerStyleUrl}
-      logoEnabled={false}
-      attributionEnabled={false}
+      mapStyle={maptilerStyleUrl ?? "https://demotiles.maplibre.org/style.json"}
+      logo={false}
+      attribution={false}
+      androidView="texture"
       onRegionIsChanging={(e: unknown) => props.onRegionChanging(e)}
       onRegionDidChange={() => props.onRegionDid()}
     >
-      <Camera ref={props.cameraRef} centerCoordinate={NAV_HOME} zoomLevel={13} />
-      <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "a-dot": require("../../../assets/map/a-dot.png"), "b-dot": require("../../../assets/map/b-dot.png")}} />
+      <Camera ref={props.cameraRef} initialViewState={{center: NAV_HOME, zoom: 13}} />
+        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "a-dot": require("../../../assets/map/a-dot.png"), "b-dot": require("../../../assets/map/b-dot.png"), "flag-0": require("../../../assets/map/flag-0.png"), "flag-1": require("../../../assets/map/flag-1.png"), "flag-2": require("../../../assets/map/flag-2.png"), "flag-3": require("../../../assets/map/flag-3.png")}} />
       {props.pos ? (
-        <ShapeSource id="nav-puck" shape={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
-          <SymbolLayer
+        <GeoJSONSource id="nav-puck" data={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
+          <Layer
+            type="symbol"
             id="nav-puck-arrow"
             style={{iconImage: "nav-arrow", iconSize: 0.42, iconAnchor: "center", iconRotate: props.arrowRotate, iconRotationAlignment: "map", iconAllowOverlap: true, iconIgnorePlacement: true}}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       ) : null}
-        <ShapeSource id="nav-route-casing" shape={{type: "Feature", geometry: props.route.geometry, properties: {}}}>
-          <LineLayer id="nav-route-line-casing" belowLayerID="Ferry labels" style={{lineColor: theme.primary, lineWidth: 11, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
-        </ShapeSource>
+        <GeoJSONSource id="nav-route-casing" data={{type: "Feature", geometry: props.route.geometry, properties: {}}}>
+          <Layer type="line" id="nav-route-line-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 11, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
+        </GeoJSONSource>
         {props.traveled.length > 1 ? (
-          <ShapeSource id="nav-traveled" shape={{type: "Feature", geometry: {type: "LineString", coordinates: props.traveled}, properties: {}}}>
-            <LineLayer id="nav-traveled-line" belowLayerID="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 5, lineOpacity: 0.7, lineCap: "round", lineJoin: "round"}} />
-          </ShapeSource>
+          <GeoJSONSource id="nav-traveled" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.traveled}, properties: {}}}>
+            <Layer type="line" id="nav-traveled-line" beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 5, lineOpacity: 0.7, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
         ) : null}
         {props.remaining.length > 1 ? (
-          <ShapeSource id="nav-route" shape={{type: "Feature", geometry: {type: "LineString", coordinates: props.remaining}, properties: {}}}>
-            <LineLayer id="nav-route-line" belowLayerID="Ferry labels" style={{lineColor: theme.primary, lineWidth: 5, lineOpacity: 0.9, lineCap: "round", lineJoin: "round"}} />
-          </ShapeSource>
+          <GeoJSONSource id="nav-route" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.remaining}, properties: {}}}>
+            <Layer type="line" id="nav-route-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 5, lineOpacity: 0.9, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
         ) : null}
         {props.highlight && props.highlight.length > 1 ? (
-          <ShapeSource id="nav-highlight" shape={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
-            <LineLayer id="nav-highlight-line" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.45, lineCap: "round", lineJoin: "round"}} />
-          </ShapeSource>
+          <GeoJSONSource id="nav-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
+            <Layer type="line" id="nav-highlight-line" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.45, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
         ) : null}
       {a ? (
-        <ShapeSource id="nav-a" shape={{type: "Feature", geometry: {type: "Point", coordinates: [a[0], a[1]]}, properties: {}}}>
-          <SymbolLayer id="nav-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
-        </ShapeSource>
+        <GeoJSONSource id="nav-a" data={{type: "Feature", geometry: {type: "Point", coordinates: [a[0], a[1]]}, properties: {}}}>
+          <Layer type="symbol" id="nav-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
+        </GeoJSONSource>
       ) : null}
       {b ? (
-        <ShapeSource id="nav-b" shape={{type: "Feature", geometry: {type: "Point", coordinates: [b[0], b[1]]}, properties: {}}}>
-          <SymbolLayer id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
-        </ShapeSource>
+        <GeoJSONSource id="nav-b" data={{type: "Feature", geometry: {type: "Point", coordinates: [b[0], b[1]]}, properties: {}}}>
+          <Layer type="symbol" id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
+        </GeoJSONSource>
       ) : null}
-    </MapView>
+        <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />
+    </Map>
   );
 }

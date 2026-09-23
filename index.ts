@@ -1,5 +1,5 @@
 import {registerRootComponent} from "expo";
-import {Logger} from "@maplibre/maplibre-react-native";
+import {LogManager} from "@maplibre/maplibre-react-native";
 import App from "./App";
-Logger.setLogLevel("error");
+LogManager.setLogLevel("error");
 registerRootComponent(App);

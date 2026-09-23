@@ -31,24 +31,25 @@ type MaptilerFeature = {
 };
 
 type CategoryLexicon = {
+  key: string;
   words: string[];
   categories: string[];
   tags: {key: string; values: string[]}[];
 };
 
 const CATEGORY_LEXICON: CategoryLexicon[] = [
-  {words: ["park", "parks", "garden", "công viên"], categories: ["park"], tags: [{key: "leisure", values: ["park", "garden", "nature_reserve"]}, {key: "landuse", values: ["recreation_ground"]}]},
-  {words: ["landmark", "monument", "attraction", "thắng cảnh", "di tích"], categories: ["landmark", "tourism"], tags: [{key: "tourism", values: ["attraction", "viewpoint", "museum"]}, {key: "historic", values: ["monument", "memorial", "building", "castle"]}]},
-  {words: ["fuel", "gas", "petrol", "xăng", "trạm xăng"], categories: ["fuel", "filling station"], tags: [{key: "amenity", values: ["fuel"]}]},
-  {words: ["repair", "garage", "sửa xe", "tiệm sửa"], categories: ["vehicle repair"], tags: [{key: "amenity", values: ["vehicle_repair"]}, {key: "shop", values: ["motorcycle_repair", "car_repair", "bicycle"]}, {key: "craft", values: ["motorcycle_repair", "car_repair"]}]},
-  {words: ["hospital", "clinic", "bệnh viện", "phòng khám"], categories: ["hospital", "clinic"], tags: [{key: "amenity", values: ["hospital", "clinic", "doctors"]}]},
-  {words: ["school", "university", "trường", "đại học"], categories: ["school", "university", "education"], tags: [{key: "amenity", values: ["school", "university", "college", "kindergarten"]}]},
-  {words: ["cafe", "coffee", "cà phê", "quán cà phê"], categories: ["cafe", "coffee"], tags: [{key: "amenity", values: ["cafe"]}]},
-  {words: ["restaurant", "food", "eat", "nhà hàng", "quán ăn"], categories: ["restaurant", "food"], tags: [{key: "amenity", values: ["restaurant", "fast_food", "food_court"]}]},
-  {words: ["market", "chợ", "siêu thị", "supermarket"], categories: ["market", "supermarket"], tags: [{key: "amenity", values: ["marketplace"]}, {key: "shop", values: ["supermarket", "convenience", "mall"]}]},
-  {words: ["hotel", "hostel", "khách sạn", "nhà nghỉ"], categories: ["hotel", "lodging"], tags: [{key: "tourism", values: ["hotel", "hostel", "guest_house"]}]},
-  {words: ["bank", "atm", "ngân hàng"], categories: ["bank", "atm"], tags: [{key: "amenity", values: ["bank", "atm"]}]},
-  {words: ["pharmacy", "drugstore", "nhà thuốc", "hiệu thuốc"], categories: ["pharmacy"], tags: [{key: "amenity", values: ["pharmacy"]}]},
+  {key: "park", words: ["park", "parks", "garden", "công viên"], categories: ["park"], tags: [{key: "leisure", values: ["park", "garden", "nature_reserve"]}, {key: "landuse", values: ["recreation_ground"]}]},
+  {key: "landmark", words: ["landmark", "monument", "attraction", "thắng cảnh", "di tích"], categories: ["landmark", "tourism"], tags: [{key: "tourism", values: ["attraction", "viewpoint", "museum"]}, {key: "historic", values: ["monument", "memorial", "building", "castle"]}]},
+  {key: "fuel", words: ["fuel", "gas", "petrol", "xăng", "trạm xăng"], categories: ["fuel", "filling station"], tags: [{key: "amenity", values: ["fuel"]}]},
+  {key: "repair", words: ["repair", "garage", "sửa xe", "tiệm sửa"], categories: ["vehicle repair"], tags: [{key: "amenity", values: ["vehicle_repair"]}, {key: "shop", values: ["motorcycle_repair", "car_repair", "bicycle"]}, {key: "craft", values: ["motorcycle_repair", "car_repair"]}]},
+  {key: "hospital", words: ["hospital", "clinic", "bệnh viện", "phòng khám"], categories: ["hospital", "clinic"], tags: [{key: "amenity", values: ["hospital", "clinic", "doctors"]}]},
+  {key: "school", words: ["school", "university", "trường", "đại học"], categories: ["school", "university", "education"], tags: [{key: "amenity", values: ["school", "university", "college", "kindergarten"]}]},
+  {key: "cafe", words: ["cafe", "coffee", "cà phê", "quán cà phê"], categories: ["cafe", "coffee"], tags: [{key: "amenity", values: ["cafe"]}]},
+  {key: "restaurant", words: ["restaurant", "food", "eat", "nhà hàng", "quán ăn"], categories: ["restaurant", "food"], tags: [{key: "amenity", values: ["restaurant", "fast_food", "food_court"]}]},
+  {key: "market", words: ["market", "chợ", "siêu thị", "supermarket"], categories: ["market", "supermarket"], tags: [{key: "amenity", values: ["marketplace"]}, {key: "shop", values: ["supermarket", "convenience", "mall"]}]},
+  {key: "hotel", words: ["hotel", "hostel", "khách sạn", "nhà nghỉ"], categories: ["hotel", "lodging"], tags: [{key: "tourism", values: ["hotel", "hostel", "guest_house"]}]},
+  {key: "bank", words: ["bank", "atm", "ngân hàng"], categories: ["bank", "atm"], tags: [{key: "amenity", values: ["bank", "atm"]}]},
+  {key: "pharmacy", words: ["pharmacy", "drugstore", "nhà thuốc", "hiệu thuốc"], categories: ["pharmacy"], tags: [{key: "amenity", values: ["pharmacy"]}]},
 ];
 
 function detectCategories(query: string): CategoryLexicon[] {
@@ -97,8 +98,21 @@ async function maptilerForwardRaw(query: string, lang: string, limit: number, ty
   return body.features ?? [];
 }
 
-async function maptilerForward(query: string, lang: string): Promise<Place[]> {
-  const [named, pois] = await Promise.all([maptilerForwardRaw(query, lang, 5), maptilerForwardRaw(query, lang, 8, "poi")]);
+function matchFeatureCategory(feature: MaptilerFeature): string | null {
+  const featureCategories = (feature.properties?.categories ?? []).map((c) => c.toLowerCase());
+  const tags = feature.properties?.["osm:tags"] ?? {};
+  for (const entry of CATEGORY_LEXICON) {
+    if (entry.categories.some((c) => featureCategories.includes(c))) return entry.key;
+    const tagHit = entry.tags.some((tg) => typeof tags[tg.key] === "string" && tg.values.includes(String(tags[tg.key]).toLowerCase()));
+    if (tagHit) return entry.key;
+  }
+  return null;
+}
+
+async function maptilerForward(query: string, lang: string, limit = 12): Promise<Place[]> {
+  const namedLimit = Math.max(3, Math.round(limit / 2));
+  const poiLimit = limit - namedLimit + 2;
+  const [named, pois] = await Promise.all([maptilerForwardRaw(query, lang, namedLimit), maptilerForwardRaw(query, lang, poiLimit, "poi")]);
   const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
   const categories = detectCategories(query);
   const seen = new Set<string>();
@@ -112,7 +126,7 @@ async function maptilerForward(query: string, lang: string): Promise<Place[]> {
       if (seen.has(key)) return;
       seen.add(key);
       hits.push({
-        place: {label: f.place_name, lat, lng, source: "map" as const, tags: f.properties?.["osm:tags"]},
+        place: {label: f.place_name, lat, lng, source: "map" as const, tags: f.properties?.["osm:tags"], category: matchFeatureCategory(f) || undefined},
         score: featureScore(f, tokens, categories),
         index,
       });
@@ -132,10 +146,10 @@ export function placeKey(p: {lat: number; lng: number}): string {
   return `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
 }
 
-export async function searchMapPlaces(query: string, lang: string): Promise<Place[]> {
+export async function searchMapPlaces(query: string, lang: string, limit = 12): Promise<Place[]> {
   if (query.trim().length < MIN_QUERY) return [];
   try {
-    return await maptilerForward(query.trim(), lang);
+    return await maptilerForward(query.trim(), lang, limit);
   } catch {
     return [];
   }
@@ -168,6 +182,7 @@ export async function searchDirectory(query: string, token: string, limit = 5): 
       lng: h.lng,
       source: "directory" as const,
       id: h.id,
+      category: h.kind === "shop" ? "store" : "landmark",
     }));
   } catch {
     return [];

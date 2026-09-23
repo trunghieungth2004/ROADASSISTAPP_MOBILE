@@ -52,6 +52,8 @@ export function useNavTracking(opts: NavTrackingOpts): {
   onRegionChanging: (e: unknown) => void;
   onRegionDid: () => void;
   onRecenter: () => void;
+  requestRerouteNow: () => void;
+  rerouteForConfirm: () => Promise<boolean>;
   previewStep: (idx: number) => void;
   preview: {at: [number, number]; highlight: [number, number][]; bearing: number} | null;
   traveled: [number, number][];
@@ -116,7 +118,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
     noticeTimer.current = setTimeout(() => setNotice(null), 6000);
   };
 
-  async function reroute(lat: number, lng: number): Promise<void> {
+  async function reroute(lat: number, lng: number): Promise<boolean> {
     const id = (seqRef.current += 1);
     reroutingRef.current = true;
     setRerouting(true);
@@ -126,9 +128,10 @@ export function useNavTracking(opts: NavTrackingOpts): {
         {originLat: lat, originLng: lng, destLat: dest.lat, destLng: dest.lng, stops, width, vehicleType},
         token,
       );
-      if (seqRef.current !== id) return;
+      if (seqRef.current !== id) return false;
       const nr = res.routes?.[0];
       if (!nr) throw new Error(t.route.noResults);
+      const changed = JSON.stringify(nr.geometry.coordinates) !== JSON.stringify(routeRef.current.geometry.coordinates);
       routeRef.current = nr;
       setRoute(nr);
       setPreview(null);
@@ -139,8 +142,10 @@ export function useNavTracking(opts: NavTrackingOpts): {
       streetsRef.current = {};
       setStreets({});
       setNextIdx(-1);
+      return changed;
     } catch (err) {
       if (seqRef.current === id) setError(toMessage(err));
+      return false;
     } finally {
       if (seqRef.current === id) {
         reroutingRef.current = false;
@@ -148,6 +153,12 @@ export function useNavTracking(opts: NavTrackingOpts): {
       }
     }
   }
+
+  const rerouteForConfirm = async (): Promise<boolean> => {
+    const p = lastFixRef.current;
+    if (!p || reroutingRef.current || arrivedRef.current) return false;
+    return reroute(p.lat, p.lng);
+  };
 
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;
@@ -166,12 +177,12 @@ export function useNavTracking(opts: NavTrackingOpts): {
           if (followingRef.current && lastFixRef.current) {
             const p = lastFixRef.current;
             lastCmdRef.current = Date.now();
-            cameraRef.current?.setCamera({
-              centerCoordinate: [p.lng, p.lat],
-              zoomLevel: FOLLOW_ZOOM,
-              heading: v,
+            void cameraRef.current?.setStop({
+              center: [p.lng, p.lat],
+              zoom: FOLLOW_ZOOM,
+              bearing: v,
               pitch: FOLLOW_PITCH,
-              animationDuration: 300,
+              duration: 300,
             });
           }
         });
@@ -206,11 +217,11 @@ export function useNavTracking(opts: NavTrackingOpts): {
               lastCmdRef.current = Date.now();
               const first = firstFixRef.current;
               firstFixRef.current = false;
-              cameraRef.current?.setCamera({
-                centerCoordinate: [lng, lat],
-                ...(first ? {zoomLevel: FOLLOW_ZOOM, pitch: FOLLOW_PITCH} : {}),
-                heading: bearing,
-                animationDuration: first ? 0 : 300,
+              void cameraRef.current?.setStop({
+                center: [lng, lat],
+                ...(first ? {zoom: FOLLOW_ZOOM, pitch: FOLLOW_PITCH} : {}),
+                bearing,
+                duration: first ? 0 : 300,
               });
             }
             if (!arrivedRef.current && p.remainingMeters <= ARRIVAL_METERS) {
@@ -304,9 +315,9 @@ export function useNavTracking(opts: NavTrackingOpts): {
   }, []);
 
   const onRegionChanging = (e: unknown): void => {
-    const props = (e as {properties?: {isUserInteraction?: boolean; zoomLevel?: number}}).properties;
-    if (typeof props?.zoomLevel === "number") zoomRef.current = props.zoomLevel;
-    if (props?.isUserInteraction && Date.now() - lastCmdRef.current > 350) {
+    const props = (e as {nativeEvent?: {userInteraction?: boolean; zoom?: number}}).nativeEvent;
+    if (typeof props?.zoom === "number") zoomRef.current = props.zoom;
+    if (props?.userInteraction && Date.now() - lastCmdRef.current > 350) {
       setFollowing(false);
       followingRef.current = false;
     }
@@ -337,25 +348,29 @@ export function useNavTracking(opts: NavTrackingOpts): {
     setFollowing(false);
     followingRef.current = false;
     lastCmdRef.current = Date.now();
-    cameraRef.current?.setCamera({
-      centerCoordinate: [at[0], at[1]],
-      heading: bearing,
-      animationDuration: 500,
+    void cameraRef.current?.setStop({
+      center: [at[0], at[1]],
+      bearing,
+      duration: 500,
     });
   };
-  const onRecenter = (): void => {
-    setFollowing(true);
+  const requestRerouteNow = (): void => {
+    const p = lastFixRef.current;
+    if (p && !reroutingRef.current && !arrivedRef.current) void reroute(p.lat, p.lng);
+  };
+
+  const onRecenter = (): void => {    setFollowing(true);
     followingRef.current = true;
     setPreview(null);
     const p = lastFixRef.current;
     if (p) {
       lastCmdRef.current = Date.now();
-      cameraRef.current?.setCamera({
-        centerCoordinate: [p.lng, p.lat],
-        zoomLevel: FOLLOW_ZOOM,
-        heading: pickBearing(),
+      void cameraRef.current?.setStop({
+        center: [p.lng, p.lat],
+        zoom: FOLLOW_ZOOM,
+        bearing: pickBearing(),
         pitch: FOLLOW_PITCH,
-        animationDuration: 500,
+        duration: 500,
       });
     }
   };
@@ -385,6 +400,8 @@ export function useNavTracking(opts: NavTrackingOpts): {
   onRegionChanging,
   onRegionDid,
   onRecenter,
+  requestRerouteNow,
+  rerouteForConfirm,
   previewStep,
   preview,
   traveled: split.traveled,

@@ -1,7 +1,7 @@
 # RoadAssist Mobile — Architecture
 
 Expo (SDK 57) + React Native, New Architecture. Maps via
-`@maplibre/maplibre-react-native` v10 (MapTiler `streets-v4` style),
+`@maplibre/maplibre-react-native` v11 (MapTiler `streets-v4` style),
 backend over HTTPS (`src/api/*`), Firebase Auth, i18n `en`/`vi`
 (`src/i18n`), Roboto bundled via `expo-font` + `@expo-google-fonts/roboto`
 (applied globally through `src/components/AppText.tsx`).

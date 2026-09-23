@@ -13,6 +13,7 @@ export type DragContext = {
   selectedIndex: number;
   busy: boolean;
   pickingFor: SearchField | null;
+  flagMode: boolean;
   requestRoute: (o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean) => void;
   setOrigin: (p: Point) => void;
   setOriginText: (s: string) => void;
@@ -20,6 +21,7 @@ export type DragContext = {
   setDestText: (s: string) => void;
   setStops: (s: Stop[]) => void;
   onPickMapPoint: (lat: number, lng: number) => void;
+  onFlagMapPoint: (lat: number, lng: number) => void;
 };
 
 export function useRouteDrag(ctx: DragContext): {
@@ -28,6 +30,7 @@ export function useRouteDrag(ctx: DragContext): {
   dragPan: PanResponderInstance;
   camRef: MutableRefObject<CamState>;
   mapZoom: number;
+  subscribeRegionDid: (cb: () => void) => () => void;
   onRegionChange: (e: unknown) => void;
   onRegionDid: (e: unknown) => void;
   onMapPress: (e: unknown) => void;
@@ -40,18 +43,27 @@ export function useRouteDrag(ctx: DragContext): {
   const camRef = useRef<CamState>(null);
   const grantRef = useRef<{target: DragTarget; base: Point} | null>(null);
   const dragTargetRef = useRef<DragTarget | null>(null);
+  const regionListeners = useRef(new Set<() => void>());
   dragTargetRef.current = dragging;
+  const subscribeRegionDid = (cb: () => void): (() => void) => {
+    regionListeners.current.add(cb);
+    return () => {
+      regionListeners.current.delete(cb);
+    };
+  };
   function onRegionChange(e: unknown) {
-    const f = e as {geometry?: {coordinates?: [number, number]}; properties?: {zoomLevel?: number; visibleBounds?: [[number, number], [number, number]]}};
-    const c = f.geometry?.coordinates;
-    const b = f.properties?.visibleBounds;
-    if (!c || !b || !b[0] || !b[1]) return;
+    const p = (e as {nativeEvent?: {center?: [number, number]; zoom?: number; bounds?: [number, number, number, number]}}).nativeEvent;
+    const c = p?.center;
+    const b = p?.bounds;
+    if (!c || !b || b.length < 4) return;
     const prev = camRef.current;
-    const zoom = f.properties?.zoomLevel ?? 13;
-    camRef.current = {center: [c[0], c[1]], zoom, ne: [b[0][0], b[0][1]], sw: [b[1][0], b[1][1]], w: prev?.w ?? 0, h: prev?.h ?? 0};
+    const zoom = p?.zoom ?? 13;
+    camRef.current = {center: [c[0], c[1]], zoom, ne: [b[2], b[3]], sw: [b[0], b[1]], w: prev?.w ?? 0, h: prev?.h ?? 0};
   }
   function onRegionDid(e: unknown) {
     onRegionChange(e);
+    const cam = camRef.current;
+    if (__DEV__ && cam) console.log("[TRACE] camera settled", cam.center[1].toFixed(5), cam.center[0].toFixed(5), "z", cam.zoom.toFixed(2));
   }
   function project(lng: number, lat: number): {x: number; y: number} | null {
     const cam = camRef.current;
@@ -90,10 +102,14 @@ export function useRouteDrag(ctx: DragContext): {
   function onMapPress(e: unknown) {
     const live = ctxRef.current;
     if (live.busy || dragging) return;
-    const coords = (e as {geometry?: {coordinates?: [number, number]}}).geometry?.coordinates;
+    const coords = (e as {nativeEvent?: {lngLat?: [number, number]}}).nativeEvent?.lngLat;
     if (!coords) return;
     if (live.pickingFor) {
       live.onPickMapPoint(coords[1], coords[0]);
+      return;
+    }
+    if (live.flagMode) {
+      live.onFlagMapPoint(coords[1], coords[0]);
       return;
     }
     const hit = nearestMarker(coords[0], coords[1], ARM_RADIUS);
@@ -172,5 +188,5 @@ export function useRouteDrag(ctx: DragContext): {
       setDragPos(null);
     },
   })).current;
-  return {dragging, dragPos, dragPan, camRef, mapZoom, onRegionChange, onRegionDid, onMapPress};
+  return {dragging, dragPos, dragPan, camRef, mapZoom, subscribeRegionDid, onRegionChange, onRegionDid, onMapPress};
 }

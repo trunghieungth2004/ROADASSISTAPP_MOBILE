@@ -1,8 +1,11 @@
 # Route map gestures & camera — known issues and findings
 
-History of the pinch/pan snap-back investigation (mlrn 10.1.3, Android,
+History of the pinch/pan snap-back investigation (mlrn v10/v11, Android,
 new architecture, MapTiler `streets-v4`). Nothing below is a code comment;
 this file is the record.
+
+Migrated to mlrn v11 (new-arch-native Camera rewrite) as the structural
+fix; mitigations below remain valid operating rules regardless of version.
 
 ## Symptom cluster (all reported on-device at various times)
 
@@ -41,10 +44,13 @@ Current permanent structure (do not regress):
 - Camera moves only via explicit ref calls: one-shot `fitBounds` on
   Find / search-pick reroute / swap / open-saved / alt-tap, the pre-route
   pick jump, and drag math. No render-phase or effect-driven camera code.
-- `<Camera>` props are module constants (never inline literals — an
-  inline `centerCoordinate` array re-commands the camera every render).
+- `<Camera>` uses `initialViewState` once (never declarative stop props —
+  an inline `center` array would re-command the camera every render).
 - Tap-to-arm marker drag is guarded against multitouch (pinch can never
   arm mid-gesture); sub-8px releases disarm without committing.
+- Region payloads are read from `nativeEvent` (`center`/`zoom`/`bounds`
+  as `[w,s,e,n]`, `userInteraction`); source-press features from
+  `nativeEvent.features`.
 
 ### 3. Glyph range timeout (transient, non-fatal)
 
@@ -77,9 +83,11 @@ and key quota, not rendering.
 - Waydroid has no GPS/compass: navigation follow, heading rotation, and
   TTS voices require a physical device.
 
-## Real fix (deferred)
+## v11 follow-ups (migration landed)
 
-Migrate `@maplibre/maplibre-react-native` v10 → v11 (new-arch-native
-Camera rewrite; #950 is milestoned there). Breaking surface includes at
-least `MapView` → `Map` rename and Camera prop renames — scope as its
-own migration. Until then, keep gesture paths render-free.
+- `iconTextFit` via the deprecated `style` path is verify-on-device; if it
+  misbehaves, rewrite pill/stop layers to `paint`/`layout`.
+- `androidView="texture"` is held explicitly to preserve overlay
+  compositing; drop it only after verifying overlays on GLSurfaceView.
+- Event shapes: region `nativeEvent.center/zoom/bounds/userInteraction`,
+  source-press `nativeEvent.features`.
