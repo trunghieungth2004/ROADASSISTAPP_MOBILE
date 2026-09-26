@@ -28,6 +28,28 @@ export function routeLengths(coords: [number, number][]): {cum: number[]; total:
   return {cum, total: cum[cum.length - 1] ?? 0};
 }
 
+export function windowAround(coords: [number, number][], centerM: number, halfM: number): [number, number][] {
+  if (coords.length < 2 || halfM <= 0) return [];
+  const {cum, total} = routeLengths(coords);
+  const startM = Math.max(0, centerM - halfM);
+  const endM = Math.min(total, centerM + halfM);
+  const at = (m: number): [number, number] => {
+    let i = 0;
+    while (i + 1 < cum.length - 1 && cum[i + 1] < m) i++;
+    const segLen = cum[i + 1] - cum[i];
+    const t = segLen <= 0 ? 0 : Math.min(1, Math.max(0, (m - cum[i]) / segLen));
+    const a = coords[i];
+    const b = coords[i + 1];
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  };
+  const out: [number, number][] = [at(startM)];
+  for (let i = 0; i < coords.length; i++) {
+    if (cum[i] > startM && cum[i] < endM) out.push(coords[i]);
+  }
+  out.push(at(endM));
+  return out;
+}
+
 export function projectOntoRoute(lat: number, lng: number, coords: [number, number][]): RouteProgress {
   const {cum, total} = routeLengths(coords);
   if (coords.length < 2) {

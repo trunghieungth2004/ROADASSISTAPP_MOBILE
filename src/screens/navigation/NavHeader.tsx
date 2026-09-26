@@ -13,8 +13,6 @@ type Props = {
   arrived: boolean;
   rerouting: boolean;
   hasPos: boolean;
-  error: string | null;
-  notice: string | null;
   onExit: () => void;
   onOpenList: () => void;
 };
@@ -40,6 +38,9 @@ export default function NavHeader(props: Props) {
             <View style={[styles.banner, {backgroundColor: theme.primary}]}>
               <MaterialIcons name="flag" size={28} color="#fff" />
               <Text style={styles.bannerText}>{t.nav.arrived}</Text>
+              <Pressable style={styles.endBtn} onPress={props.onExit} accessibilityRole="button" accessibilityLabel={t.nav.endTrip}>
+                <Text style={styles.endText}>{t.nav.endTrip}</Text>
+              </Pressable>
             </View>
           ) : null}
         </View>
@@ -53,14 +54,12 @@ export default function NavHeader(props: Props) {
           <Text style={{color: theme.text}}>{t.nav.rerouting}</Text>
         </View>
       ) : null}
-      {!props.hasPos && !props.error ? (
+      {!props.hasPos ? (
         <View style={styles.statusRow}>
           <ActivityIndicator size="small" color={theme.primary} />
           <Text style={{color: theme.text}}>{t.nav.locating}</Text>
         </View>
       ) : null}
-      {props.error ? <Text style={{color: theme.danger}}>{props.error}</Text> : null}
-      {props.notice ? <Text style={{color: theme.text}}>{props.notice}</Text> : null}
     </View>
   );
 }
@@ -70,8 +69,10 @@ const styles = StyleSheet.create({
   headerRow: {flexDirection: "row", alignItems: "center", gap: 8},
   circleBtn: {width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   bannerWrap: {flex: 1, minWidth: 0},
-  banner: {flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, padding: 10},
-  bannerCol: {flex: 1, gap: 2, minWidth: 0},
-  bannerText: {color: "#fff", fontSize: 17, fontWeight: "700"},
+  banner: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 12, padding: 10},
+  bannerCol: {flex: 1, gap: 2, minWidth: 0, alignItems: "center", justifyContent: "center"},
+  bannerText: {color: "#fff", fontSize: 17, fontWeight: "700", textAlign: "center"},
+  endBtn: {borderRadius: 14, backgroundColor: "rgba(255,255,255,0.22)", paddingVertical: 8, paddingHorizontal: 14, alignItems: "center"},
+  endText: {color: "#fff", fontSize: 14, fontWeight: "700"},
   statusRow: {flexDirection: "row", alignItems: "center", gap: 8},
 });

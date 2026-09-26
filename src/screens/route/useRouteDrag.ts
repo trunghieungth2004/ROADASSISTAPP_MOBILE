@@ -64,6 +64,11 @@ export function useRouteDrag(ctx: DragContext): {
     onRegionChange(e);
     const cam = camRef.current;
     if (__DEV__ && cam) console.log("[TRACE] camera settled", cam.center[1].toFixed(5), cam.center[0].toFixed(5), "z", cam.zoom.toFixed(2));
+    for (const cb of [...regionListeners.current]) {
+      try {
+        cb();
+      } catch {}
+    }
   }
   function project(lng: number, lat: number): {x: number; y: number} | null {
     const cam = camRef.current;

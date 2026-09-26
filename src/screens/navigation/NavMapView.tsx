@@ -5,13 +5,13 @@ import {maptilerStyleUrl} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
 import type {Flag} from "../../api/flags";
-import {NAV_HOME} from "./navUtils";
 import NavFlags from "./NavFlags";
 
 type Props = {
   theme: AppTheme;
   route: RouteOption;
   pos: {lat: number; lng: number} | null;
+  initialCenter: [number, number];
   arrowRotate: number;
   cameraRef: RefObject<CameraRef | null>;
   traveled: [number, number][];
@@ -34,7 +34,6 @@ type Props = {
 export default function NavMapView(props: Props) {
   const {theme} = props;
   const coords = props.route.geometry.coordinates;
-  const a = coords.length > 0 ? coords[0] : null;
   const b = coords.length > 0 ? coords[coords.length - 1] : null;
   return (
     <Map
@@ -46,8 +45,8 @@ export default function NavMapView(props: Props) {
       onRegionIsChanging={(e: unknown) => props.onRegionChanging(e)}
       onRegionDidChange={() => props.onRegionDid()}
     >
-      <Camera ref={props.cameraRef} initialViewState={{center: NAV_HOME, zoom: 13}} />
-        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "a-dot": require("../../../assets/map/a-dot.png"), "b-dot": require("../../../assets/map/b-dot.png"), "flag-0": require("../../../assets/map/flag-0.png"), "flag-1": require("../../../assets/map/flag-1.png"), "flag-2": require("../../../assets/map/flag-2.png"), "flag-3": require("../../../assets/map/flag-3.png")}} />
+      <Camera ref={props.cameraRef} initialViewState={{center: props.initialCenter, zoom: 13}} />
+        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "b-dot": require("../../../assets/map/b-dot.png"), "flag-0": require("../../../assets/map/flag-0.png"), "flag-1": require("../../../assets/map/flag-1.png"), "flag-2": require("../../../assets/map/flag-2.png"), "flag-3": require("../../../assets/map/flag-3.png")}} />
       {props.pos ? (
         <GeoJSONSource id="nav-puck" data={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
           <Layer
@@ -71,15 +70,15 @@ export default function NavMapView(props: Props) {
           </GeoJSONSource>
         ) : null}
         {props.highlight && props.highlight.length > 1 ? (
-          <GeoJSONSource id="nav-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
-            <Layer type="line" id="nav-highlight-line" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.45, lineCap: "round", lineJoin: "round"}} />
+          <GeoJSONSource id="nav-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
+            <Layer type="line" id="nav-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
-      {a ? (
-        <GeoJSONSource id="nav-a" data={{type: "Feature", geometry: {type: "Point", coordinates: [a[0], a[1]]}, properties: {}}}>
-          <Layer type="symbol" id="nav-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
-        </GeoJSONSource>
-      ) : null}
+        {props.highlight && props.highlight.length > 1 ? (
+          <GeoJSONSource id="nav-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
+            <Layer type="line" id="nav-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
       {b ? (
         <GeoJSONSource id="nav-b" data={{type: "Feature", geometry: {type: "Point", coordinates: [b[0], b[1]]}, properties: {}}}>
           <Layer type="symbol" id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />

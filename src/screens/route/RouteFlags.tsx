@@ -14,7 +14,7 @@ type Props = {
 
 const RADIUS = 3000;
 const REFETCH_MOVE_METERS = 500;
-const REFETCH_INTERVAL_MS = 10000;
+const REFETCH_HEARTBEAT_MS = 60000;
 
 const distMeters = (aLat: number, aLng: number, bLat: number, bLng: number): number => {
   const x = ((bLng - aLng) * Math.PI) / 180 * Math.cos(((aLat + bLat) / 2 * Math.PI) / 180);
@@ -27,19 +27,15 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
   const handlePick = useCallback((f: Flag) => pickRef.current(f), []);
-  const lastFetchRef = useRef<{lat: number; lng: number; at: number} | null>(null);
+  const lastFetchRef = useRef<{lat: number; lng: number} | null>(null);
   const fetchAt = useCallback(async (c: [number, number], key: string, alive: () => boolean): Promise<void> => {
-    const started = Date.now();
-    console.log("[hazard] fetch start", c[1].toFixed(4), c[0].toFixed(4));
     try {
       const list = await flagsNear(c[1], c[0], RADIUS, key);
-      console.log("[hazard] fetch done", Date.now() - started, "ms, count", list.length);
       if (alive()) {
-        lastFetchRef.current = {lat: c[1], lng: c[0], at: Date.now()};
+        lastFetchRef.current = {lat: c[1], lng: c[0]};
         setFlags(list.slice(0, 150));
       }
-    } catch (err) {
-      console.log("[hazard] fetch failed", Date.now() - started, "ms", err instanceof Error ? err.message : err);
+    } catch {
       return;
     }
   }, []);
@@ -52,14 +48,15 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
     const key = token;
     const isAlive = (): boolean => alive;
     const load = (): void => {
-      const c = camRef.current?.center ?? HCMC_CENTER;
-      lastFetchRef.current = {lat: c[1], lng: c[0], at: Date.now()};
+      const c = camRef.current?.center;
+      if (!c) return;
+      lastFetchRef.current = {lat: c[1], lng: c[0]};
       void fetchAt(c, key, isAlive);
     };
     void load();
     const timer = setInterval(() => {
       load();
-    }, 30000);
+    }, REFETCH_HEARTBEAT_MS);
     return () => {
       alive = false;
       clearInterval(timer);
@@ -71,12 +68,11 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
       if (!mounted || !token) return;
       const c = camRef.current?.center ?? HCMC_CENTER;
       const last = lastFetchRef.current;
-      const now = Date.now();
       if (last) {
         const moved = distMeters(last.lat, last.lng, c[1], c[0]);
-        if (moved < REFETCH_MOVE_METERS && now - last.at < REFETCH_INTERVAL_MS) return;
+        if (moved < REFETCH_MOVE_METERS) return;
       }
-      lastFetchRef.current = {lat: c[1], lng: c[0], at: now};
+      lastFetchRef.current = {lat: c[1], lng: c[0]};
       void fetchAt(c, token, () => mounted);
     });
     return () => {

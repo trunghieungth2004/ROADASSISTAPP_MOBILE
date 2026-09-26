@@ -122,3 +122,18 @@ export function isHazardZone(e: unknown): e is HazardZone {
 export function isWidthBlock(e: unknown): e is WidthBlock {
   return !!e && typeof e === "object" && "segmentId" in (e as Record<string, unknown>) && "baseWidth" in (e as Record<string, unknown>);
 }
+
+export type FlagWarning = {
+  flagId: string;
+  type?: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  note?: string | null;
+  distanceMeters: number;
+};
+
+export function isFlagWarning(e: unknown): e is FlagWarning {
+  const r = e as Record<string, unknown>;
+  return !!e && typeof e === "object" && typeof r.flagId === "string" && typeof r.distanceMeters === "number" && typeof r.lat === "number" && typeof r.lng === "number" && !("segmentId" in r);
+}

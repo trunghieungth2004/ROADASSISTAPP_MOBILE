@@ -2,13 +2,23 @@ import {StatusBar} from "expo-status-bar";
 import {NavigationContainer, DarkTheme, DefaultTheme} from "@react-navigation/native";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 import {useFonts} from "expo-font";
-import {AuthProvider} from "./src/context/AuthContext";
+import {AuthProvider, useAuth} from "./src/context/AuthContext";
 import {LanguageProvider} from "./src/context/LanguageContext";
 import {ProfileProvider} from "./src/context/ProfileContext";
 import {ThemeProvider, useThemeMode} from "./src/context/ThemeContext";
 import {APP_FONTS} from "./src/components/AppText";
 import {darkTheme, lightTheme} from "./src/theme";
 import Tabs from "./src/navigation/Tabs";
+import {useEffect} from "react";
+import {ensurePushConfigured, syncPushToken} from "./src/services/push";
+function PushSync() {
+  const {token, uid} = useAuth();
+  useEffect(() => {
+    ensurePushConfigured();
+    void syncPushToken(token, uid);
+  }, [token, uid]);
+  return null;
+}
 export default function App() {
   const [fontsLoaded] = useFonts(APP_FONTS);
   if (!fontsLoaded) return null;
@@ -24,6 +34,7 @@ function ThemedApp() {
       <LanguageProvider>
         <AuthProvider>
           <ProfileProvider>
+            <PushSync />
             <NavigationContainer theme={{...navTheme, colors: {...navTheme.colors, background: theme.background, card: theme.paper, text: theme.text, primary: theme.primary, border: theme.border}}}>
               <Tabs />
             </NavigationContainer>

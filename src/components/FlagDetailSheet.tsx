@@ -4,6 +4,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import type {Flag} from "../api/flags";
 import {flagStatusColor, flagStatusLabel} from "./flagStatus";
+import {hazardKind} from "./hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
@@ -27,9 +28,11 @@ export default function FlagDetailSheet({t, flag, isOwn, busy, voted, denied, ce
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   if (!flag) return null;
+  const kind = hazardKind(flag.type);
   return (
     <View style={[centered ? styles.card : styles.sheet, {backgroundColor: theme.paper, borderColor: theme.border, paddingBottom: insets.bottom + 12}]}>
       <View style={styles.headRow}>
+        <MaterialIcons name={kind.icon} size={22} color={kind.color} />
         <Text style={[styles.title, {color: theme.text}]}>{flagTypeLabel(flag.type, t)}</Text>
         <View style={[styles.statusChip, {backgroundColor: flagStatusColor(flag.status)}]}>
           <Text style={styles.statusText}>{flagStatusLabel(flag.status, t)}</Text>
@@ -73,7 +76,7 @@ const styles = StyleSheet.create({
   closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
   meta: {fontSize: 13},
   actionRow: {flexDirection: "row", gap: 8},
-  actionBtn: {flex: 1, borderRadius: 8, padding: 12, alignItems: "center"},
+  actionBtn: {flex: 1, borderRadius: 14, padding: 13, alignItems: "center"},
   actionBtnOutline: {borderWidth: 1, backgroundColor: "transparent"},
   actionBtnText: {color: "#fff", fontWeight: "700"},
   disabled: {opacity: 0.6},

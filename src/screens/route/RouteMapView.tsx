@@ -7,8 +7,8 @@ import {maptilerStyleUrl} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {RouteOption} from "../../api/routes";
-import {HCMC_CENTER, PILL_LIFT_PX, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
-import {fmtDist, midOf, pillPointAbove, pointFeature} from "./routeGeo";
+import {HCMC_CENTER, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
+import {pointFeature} from "./routeGeo";
 import RouteFlags from "./RouteFlags";
 import type {Flag} from "../../api/flags";
 
@@ -25,8 +25,7 @@ type Props = {
   stops: Stop[];
   dragPos: Point | null;
   selectedMid: [number, number] | null;
-  mapZoom: number;
-  pillBgActive: string;
+  hazardHighlight: [number, number][] | null;
   dragging: DragTarget | null;
   dragPan: PanResponderInstance;
   pickingFor: SearchField | null;
@@ -70,9 +69,6 @@ export default function RouteMapView(props: Props) {
           "a-dot": require("../../../assets/map/a-dot.png"),
           "b-dot": require("../../../assets/map/b-dot.png"),
           "stop-dot": require("../../../assets/map/stop-dot.png"),
-          "pill-active-light": require("../../../assets/map/pill-active-light.png"),
-          "pill-active-dark": require("../../../assets/map/pill-active-dark.png"),
-          "pill-idle": require("../../../assets/map/pill-idle.png"),
           "handle2-dot": require("../../../assets/map/handle2-dot.png"),
           "flag-0": require("../../../assets/map/flag-0.png"),
           "flag-1": require("../../../assets/map/flag-1.png"),
@@ -84,6 +80,16 @@ export default function RouteMapView(props: Props) {
         ))}
         {props.result ? <GeoJSONSource id="route-casing" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><Layer type="line" id="routeLine-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
         {props.result ? <GeoJSONSource id="route" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><Layer type="line" id="routeLine" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
+          <GeoJSONSource id="route-hazard-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
+            <Layer type="line" id="route-hazard-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
+        {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
+          <GeoJSONSource id="route-hazard-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
+            <Layer type="line" id="route-hazard-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
         {props.origin ? <GeoJSONSource id="marker-a" data={pointFeature(props.origin.lng, props.origin.lat)}><Layer type="symbol" id="marker-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
         {props.dest ? <GeoJSONSource id="marker-b" data={pointFeature(props.dest.lng, props.dest.lat)}><Layer type="symbol" id="marker-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
         {props.gps ? (
@@ -97,17 +103,6 @@ export default function RouteMapView(props: Props) {
             <Layer type="symbol" id={`stop-label-${s.lat},${s.lng},${i}`} style={{textField: String(i + 1), textSize: 12, textColor: "#ffffff", textAnchor: "center", textAllowOverlap: true, textIgnorePlacement: true}} />
           </GeoJSONSource>
         ))}
-        {props.result ? (() => {
-          const mid = midOf(props.result.geometry.coordinates);
-          if (!mid) return null;
-          const label = `${fmtDist(props.result.distanceMeters / 1000)} ${t.route.km} · ${fmtDist(props.result.durationSeconds / 60)} ${t.route.min}`;
-          const pp = pillPointAbove(mid, props.mapZoom, PILL_LIFT_PX);
-          return (
-            <GeoJSONSource key="pill-selected" id="pill-selected" data={pointFeature(pp[0], pp[1])}>
-              <Layer type="symbol" id="pill-selected" style={{iconImage: props.pillBgActive, iconSize: 1, iconAnchor: "center", iconTextFit: "both", iconTextFitPadding: [9, 18, 9, 18], textField: label, textSize: 15, textColor: "#ffffff", textAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true, textAllowOverlap: true, textIgnorePlacement: true}} />
-            </GeoJSONSource>
-          );
-        })() : null}
         {props.result && (props.dragPos ?? props.selectedMid) ? (
           <GeoJSONSource id="reshape-handle" data={pointFeature((props.dragPos ? props.dragPos.lng : props.selectedMid![0]), (props.dragPos ? props.dragPos.lat : props.selectedMid![1]))}>
             <Layer type="symbol" id="reshape-handle-icon" style={{iconImage: "handle2-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />

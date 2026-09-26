@@ -1,7 +1,8 @@
-import {useState} from "react";
+import {useCallback, useState} from "react";
 import {Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
+import {useFocusEffect} from "@react-navigation/native";
 import {updateProfile} from "../api/users";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
@@ -10,7 +11,10 @@ import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 import OnboardingScreen from "./OnboardingScreen";
+import DiagnosticsScreen from "./DiagnosticsScreen";
 import {useThemeMode} from "../context/ThemeContext";
+import {getPermissionStates, openAppSettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import {syncPushToken} from "../services/push";
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -21,7 +25,7 @@ export default function MoreScreen() {
   const {t, lang, toggle} = useStrings();
   const {signOut} = useAuth();
   const {user, refresh, markOnboarded} = useProfile();
-  const {token} = useAuth();
+  const {token, uid} = useAuth();
   const {mode, toggle: toggleTheme} = useThemeMode();
   const scheme = mode;
   const theme = scheme === "dark" ? darkTheme : lightTheme;
@@ -32,6 +36,40 @@ export default function MoreScreen() {
   const [servicesOpen, setServicesOpen] = useState(false);
   const [servicesBusy, setServicesBusy] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  const [perms, setPerms] = useState<AppPermissionStates>({notifications: {granted: false, canAskAgain: true}, backgroundLocation: {granted: false, canAskAgain: true}});
+  const [permsBusy, setPermsBusy] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
+  useFocusEffect(useCallback(() => {
+    void getPermissionStates().then(setPerms).catch(() => undefined);
+  }, []));
+  async function onEnableNotifications() {
+    if (permsBusy) return;
+    setPermsBusy(true);
+    try {
+      if (perms.notifications.canAskAgain) {
+        const next = await requestNotificationPermission();
+        setPerms({...perms, notifications: next});
+        if (next.granted) await syncPushToken(token, uid);
+      } else {
+        openAppSettings();
+      }
+    } finally {
+      setPermsBusy(false);
+    }
+  }
+  async function onEnableBackground() {
+    if (permsBusy) return;
+    setPermsBusy(true);
+    try {
+      if (perms.backgroundLocation.canAskAgain) {
+        setPerms({...perms, backgroundLocation: await requestBackgroundLocationPermission()});
+      } else {
+        openAppSettings();
+      }
+    } finally {
+      setPermsBusy(false);
+    }
+  }
   const displayName = user?.displayName || user?.email || "—";
   const services = user?.services ?? [];
   const isAdmin = user?.role === "1";
@@ -84,6 +122,41 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <View style={styles.listRow}>
+            <MaterialIcons name="notifications" size={20} color={theme.primary} />
+            <View style={styles.permText}>
+              <Text style={[styles.listText, {color: theme.text}]}>{t.more.permNotifications}</Text>
+              <Text style={[styles.permHint, {color: theme.muted}]}>{t.more.permNotificationsHint}</Text>
+            </View>
+            <View style={[styles.permPill, {backgroundColor: perms.notifications.granted ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{perms.notifications.granted ? t.more.permOn : t.more.permOff}</Text></View>
+            {!perms.notifications.granted ? (
+              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} disabled={permsBusy} onPress={() => void onEnableNotifications()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{perms.notifications.canAskAgain ? t.more.permEnable : t.more.permOpenSettings}</Text></Pressable>
+            ) : null}
+          </View>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <View style={styles.listRow}>
+            <MaterialIcons name="location-on" size={20} color={theme.primary} />
+            <View style={styles.permText}>
+              <Text style={[styles.listText, {color: theme.text}]}>{t.more.permBackground}</Text>
+              <Text style={[styles.permHint, {color: theme.muted}]}>{t.more.permBackgroundHint}</Text>
+            </View>
+            <View style={[styles.permPill, {backgroundColor: perms.backgroundLocation.granted ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{perms.backgroundLocation.granted ? t.more.permOn : t.more.permOff}</Text></View>
+            {!perms.backgroundLocation.granted ? (
+              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} disabled={permsBusy} onPress={() => void onEnableBackground()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{perms.backgroundLocation.canAskAgain ? t.more.permEnable : t.more.permOpenSettings}</Text></Pressable>
+            ) : null}
+          </View>
+        </View>
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={() => setDiagOpen(true)}>
+            <MaterialIcons name="bug-report" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.more.diagnostics}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+        </View>
+        <Modal visible={diagOpen} animationType="slide" onRequestClose={() => setDiagOpen(false)}>
+          <DiagnosticsScreen t={t} authToken={token} onClose={() => setDiagOpen(false)} />
+        </Modal>
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => void signOut()}><MaterialIcons name="logout" size={20} color={theme.danger} /><Text style={[styles.listText, {color: theme.danger}]}>{t.more.signOut}</Text></Pressable>
         </View>
       </ScrollView>
@@ -117,6 +190,12 @@ const styles = StyleSheet.create({
   card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
   listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},
+  permText: {flex: 1, minWidth: 0, gap: 2},
+  permHint: {fontSize: 12},
+  permPill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10},
+  permPillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
+  permBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10},
+  permBtnText: {fontSize: 13, fontWeight: "700"},
   listSecondary: {fontSize: 13},
   divider: {height: 1, marginHorizontal: 16},
   primary: {borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center"},

@@ -42,6 +42,10 @@ export function flagsNear(lat: number, lng: number, radiusMeters: number, token:
   return api.post<Flag[]>("/flags/near", {lat, lng, radiusMeters}, token);
 }
 
+export function getFlag(flagId: string, token: string): Promise<Flag> {
+  return api.post<Flag>("/flags/get", {flagId}, token);
+}
+
 export function myFlags(token: string): Promise<Flag[]> {
   return api.post<Flag[]>("/flags/mine", {}, token);
 }

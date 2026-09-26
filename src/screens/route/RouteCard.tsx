@@ -20,7 +20,6 @@ type Props = {
   activeVehicle: MeVehicle | null;
   busy: boolean;
   starting: boolean;
-  error: string | null;
   hazardZones: HazardZone[];
   widthBlocks: WidthBlock[];
   onOpenSearch: (field: SearchField) => void;
@@ -67,7 +66,6 @@ export default function RouteCard(props: Props) {
           <MaterialIcons name="expand-more" size={20} color={theme.muted} />
         </View>
       </Pressable>
-      {props.error ? <Text style={[styles.error, {color: theme.danger}]}>{props.error}</Text> : null}
       {props.result ? (
         <View style={styles.actionRow}>
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (props.busy || props.starting) && styles.disabled]} disabled={props.busy || props.starting} onPress={props.onStart}>{props.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.nav.start}</Text>}</Pressable>
@@ -76,24 +74,14 @@ export default function RouteCard(props: Props) {
       ) : props.origin && props.dest && props.activeVehicle ? (
         <Pressable style={[styles.primary, {backgroundColor: theme.primary}, props.busy && styles.disabled]} disabled={props.busy} onPress={props.onFind}>{props.busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.route.find}</Text>}</Pressable>
       ) : null}
-      {props.hazardZones.length > 0 || props.widthBlocks.length > 0 ? (
+      {props.widthBlocks.length > 0 ? (
         <View style={[styles.resultCard, {borderColor: theme.border}]}>
-          {props.hazardZones.length > 0 ? (
-            <View style={styles.warnBox}>
-              <Text style={[styles.warnTitle, {color: theme.danger}]}>{t.route.suggestedTitle}</Text>
-              {props.hazardZones.map((h) => (
-                <Text key={h.flagId} style={{color: theme.text}}>{h.type ?? "?"} ({h.radiusMeters}m{h.note ? ` · ${h.note}` : ""})</Text>
-              ))}
-            </View>
-          ) : null}
-          {props.widthBlocks.length > 0 ? (
-            <View style={styles.warnBox}>
-              <Text style={[styles.warnTitle, {color: theme.danger}]}>{t.route.widthBlocked}</Text>
-              {props.widthBlocks.map((w) => (
-                <Text key={w.segmentId} style={{color: theme.text}}>{w.segmentId} ({w.baseWidth}m)</Text>
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.warnBox}>
+            <Text style={[styles.warnTitle, {color: theme.danger}]}>{t.route.widthBlocked}</Text>
+            {props.widthBlocks.map((w) => (
+              <Text key={w.segmentId} style={{color: theme.text}}>{w.segmentId} ({w.baseWidth}m)</Text>
+            ))}
+          </View>
         </View>
       ) : null}
       <Text style={[styles.attribution, {color: theme.muted}]}>{t.route.geoAttribution}</Text>

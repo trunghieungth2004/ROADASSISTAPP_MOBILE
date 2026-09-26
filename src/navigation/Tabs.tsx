@@ -1,5 +1,6 @@
-import {useState, type ReactNode} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {useEffect, useState, type ReactNode} from "react";
+import {ActivityIndicator, AppState, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {AppText as Text} from "../components/AppText";
 import {createBottomTabNavigator, type BottomTabBarProps} from "@react-navigation/bottom-tabs";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
@@ -11,6 +12,9 @@ import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
+import PermissionGateScreen from "../screens/PermissionGateScreen";
+import {getPermissionStates, openAppSettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import {syncPushToken} from "../services/push";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
 import AssistScreen from "../screens/AssistScreen";
@@ -49,6 +53,55 @@ function UnsupportedRole() {
   const {signOut} = useAuth();
   return <View style={styles.center}><Text>Role not supported on mobile yet.</Text><Pressable style={styles.primary} onPress={() => void signOut()}><Text style={styles.primaryText}>Sign out</Text></Pressable></View>;
 }
+function PermissionGate({onDone}: {onDone: () => void}) {
+  const {t} = useStrings();
+  const {token, uid} = useAuth();
+  const [states, setStates] = useState<AppPermissionStates | null>(null);
+  const [busy, setBusy] = useState(false);
+  const showBackground = Platform.OS === "android";
+  const refresh = (): void => {
+    void getPermissionStates().then(setStates).catch(() => undefined);
+  };
+  useEffect(refresh, []);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => sub.remove();
+  }, []);
+  const canDone = !!states && states.notifications.granted && (!showBackground || states.backgroundLocation.granted);
+  const finish = (): void => {
+    void AsyncStorage.setItem("roadassist.permGate", "done").catch(() => undefined);
+    onDone();
+  };
+  const grant = (fn: () => Promise<{granted: boolean; canAskAgain: boolean}>, register: boolean): void => {
+    if (busy) return;
+    setBusy(true);
+    void (async () => {
+      try {
+        const next = await fn();
+        if (!next.granted && !next.canAskAgain) openAppSettings();
+        await getPermissionStates().then(setStates).catch(() => undefined);
+        if (next.granted && register) await syncPushToken(token, uid);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+  return (
+    <PermissionGateScreen
+      t={t}
+      states={states}
+      busy={busy}
+      showBackground={showBackground}
+      canDone={canDone}
+      onGrantNotifications={() => grant(requestNotificationPermission, true)}
+      onGrantBackground={() => grant(requestBackgroundLocationPermission, false)}
+      onSkip={finish}
+      onDone={finish}
+    />
+  );
+}
 function OnboardingGate() {
   const {t} = useStrings();
   const {markOnboarded, refresh} = useProfile();
@@ -65,12 +118,23 @@ export default function Tabs() {
   const {t} = useStrings();
   const {token, loaded} = useAuth();
   const {loading, roleChosen, isRider, bundle} = useProfile();
+  const [permsDone, setPermsDone] = useState(false);
+  useEffect(() => {
+    if (!token) {
+      setPermsDone(false);
+      return;
+    }
+    void AsyncStorage.getItem("roadassist.permGate").then((v) => {
+      if (v === "done") setPermsDone(true);
+    }).catch(() => undefined);
+  }, [token]);
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   if (!loaded || (token && loading && !bundle)) return <View style={styles.center}><ActivityIndicator /></View>;
   if (!token) return <LoginScreen />;
   if (!roleChosen) return <OnboardingGate />;
   if (!isRider) return <UnsupportedRole />;
+  if (!permsDone) return <PermissionGate onDone={() => setPermsDone(true)} />;
   return (
     <Tab.Navigator initialRouteName="Route" tabBar={(props) => <TabBar {...props} />} screenOptions={{headerShown: true, headerStyle: {backgroundColor: theme.paper}, headerTintColor: theme.text}}>
       <Tab.Screen name="Route" component={RouteScreen} options={{title: t.tabs.route}} />

@@ -1,11 +1,13 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, BackHandler, Keyboard, Modal, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, BackHandler, Keyboard, Modal, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {useNavigation} from "@react-navigation/native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
-import {findRoute, getSavedRoute, saveRoute, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
+import {findRoute, getSavedRoute, saveRoute, isFlagWarning, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
+import {windowAround} from "../services/navigation";
+import {ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {formatPoint, reverseLabel} from "../api/places";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search";
@@ -36,6 +38,7 @@ export default function RouteScreen() {
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const cameraRef = useRef<CameraRef | null>(null);
   const seqRef = useRef(0);
+  const centeredRef = useRef(false);
   const [origin, setOrigin] = useState<Point | null>(null);
   const [dest, setDest] = useState<Point | null>(null);
   const [originText, setOriginText] = useState("");
@@ -52,7 +55,7 @@ export default function RouteScreen() {
   const [saveBusy, setSaveBusy] = useState(false);
   const [searchingFor, setSearchingFor] = useState<SearchField | null>(null);
   const [starting, setStarting] = useState(false);
-  const [navInitial, setNavInitial] = useState<{route: RouteOption; dest: Point; stops: Stop[]} | null>(null);
+  const [navInitial, setNavInitial] = useState<{route: RouteOption; dest: Point; stops: Stop[]; seed: {lat: number; lng: number}} | null>(null);
   const [pickingFor, setPickingFor] = useState<SearchField | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
   const [flagMode, setFlagMode] = useState(false);
@@ -69,8 +72,12 @@ export default function RouteScreen() {
   const selectedMid = result ? midOf(result.geometry.coordinates) : null;
   const hazardZones = (result?.hazards ?? []).filter(isHazardZone);
   const widthBlocks = (result?.warnings ?? []).filter(isWidthBlock);
+  const flagWarnings = (result?.warnings ?? []).filter(isFlagWarning);
+  const [hazardFocusIdx, setHazardFocusIdx] = useState(-1);
+  const [hazardHighlight, setHazardHighlight] = useState<[number, number][] | null>(null);
+  const [cardH, setCardH] = useState(0);
+  const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
-  const pillBgActive = scheme === "dark" ? "pill-active-dark" : "pill-active-light";
   function fitRouteGeometry(coords: [number, number][]) {
     if (__DEV__) console.log("[TRACE] fitRouteGeometry", coords.length);
     const b = boundsOf(coords);
@@ -87,6 +94,8 @@ export default function RouteScreen() {
       const next = res.routes ?? [];
       setRoutes(next);
       setSelectedIndex(0);
+      setHazardFocusIdx(-1);
+      setHazardHighlight(null);
       if (fit && next[0]) fitRouteGeometry(next[0].geometry.coordinates);
       return next;
     } catch (err) {
@@ -99,6 +108,29 @@ export default function RouteScreen() {
   async function onFind() {
     await requestRoute(origin, dest, stops, undefined, undefined, true);
   }
+  async function refreshRoutesQuiet(): Promise<void> {
+    if (!token || !origin || !dest || routes.length === 0) return;
+    const id = (seqRef.current += 1);
+    const before = JSON.stringify((routes[selectedIndex] ?? routes[0]).geometry.coordinates);
+    try {
+      const res = await findRoute({originLat: origin.lat, originLng: origin.lng, destLat: dest.lat, destLng: dest.lng, stops: stops.map((s) => ({lat: s.lat, lng: s.lng})), width: activeVehicle?.baseWidth, vehicleType: activeVehicle?.type}, token);
+      if (seqRef.current !== id) return;
+      const next = res.routes ?? [];
+      setRoutes(next);
+      setSelectedIndex(0);
+      setHazardFocusIdx(-1);
+      setHazardHighlight(null);
+      const after = next[0] ? JSON.stringify(next[0].geometry.coordinates) : before;
+      console.log(`[push] route refreshed changed=${after !== before}`);
+      setSnack(after !== before ? t.flag.rerouted : t.route.hazardUpdated);
+    } catch {
+      return;
+    }
+  }
+  function onNavExit() {
+    setNavInitial(null);
+    if (!centeredRef.current) void centerOnLocal();
+  }
   async function onStart() {
     if (!token || !dest || starting) return;
     setStarting(true);
@@ -106,8 +138,11 @@ export default function RouteScreen() {
     try {
       const {status} = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error("Location denied");
-      const fix = await Location.getCurrentPositionAsync({accuracy: Location.Accuracy.Balanced});
-      const live = {lat: fix.coords.latitude, lng: fix.coords.longitude};
+      if (Platform.OS === "android") {
+        const bg = await Location.requestBackgroundPermissionsAsync().catch(() => null);
+        if (bg && bg.status !== "granted") setSnack(t.more.bgTrackingOff);
+      }
+      const live = await freshFix();
       const res = await findRoute(
         {originLat: live.lat, originLng: live.lng, destLat: dest.lat, destLng: dest.lng, stops: stops.map((s) => ({lat: s.lat, lng: s.lng})), width: activeVehicle?.baseWidth, vehicleType: activeVehicle?.type},
         token,
@@ -116,7 +151,9 @@ export default function RouteScreen() {
       if (!first) throw new Error(t.route.noResults);
       setRoutes(res.routes ?? []);
       setSelectedIndex(0);
-      setNavInitial({route: first, dest, stops});
+      setHazardFocusIdx(-1);
+      setHazardHighlight(null);
+      setNavInitial({route: first, dest, stops, seed: live});
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -194,6 +231,64 @@ export default function RouteScreen() {
     onPickMapPoint,
     onFlagMapPoint,
   });
+  const LOCATION_TIMEOUT_MS = 8000;
+  const CENTER_RETRIES = 3;
+  const CENTER_RETRY_MS = 4000;
+  async function freshFix(): Promise<{lat: number; lng: number}> {
+    const raced = await Promise.race([
+      Location.getCurrentPositionAsync({accuracy: Location.Accuracy.BestForNavigation}),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCATION_TIMEOUT_MS)),
+    ]);
+    if (raced) return {lat: raced.coords.latitude, lng: raced.coords.longitude};
+    const last = await Location.getLastKnownPositionAsync();
+    if (last) return {lat: last.coords.latitude, lng: last.coords.longitude};
+    throw new Error("Location unavailable");
+  }
+  async function centerOnLocal(): Promise<void> {
+    for (let attempt = 0; attempt < CENTER_RETRIES && !centeredRef.current; attempt++) {
+      if (attempt > 0) await new Promise<void>((resolve) => setTimeout(resolve, CENTER_RETRY_MS));
+      try {
+        const {status} = await Location.getForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        const apply = (lat: number, lng: number): void => {
+          centeredRef.current = true;
+          cameraRef.current?.setStop({center: [lng, lat], zoom: 15, duration: 800});
+        };
+        try {
+          const last = await Location.getLastKnownPositionAsync();
+          if (last) {
+            apply(last.coords.latitude, last.coords.longitude);
+            return;
+          }
+        } catch {}
+        const live = await freshFix();
+        apply(live.lat, live.lng);
+        return;
+      } catch {}
+    }
+    if (!centeredRef.current) setSnack(t.route.locationUnavailable);
+  }
+  useEffect(() => {
+    if (centeredRef.current) return;
+    void centerOnLocal();
+  }, []);
+  const navOpenRef = useRef(navInitial !== null);
+  navOpenRef.current = navInitial !== null;
+  const quietRef = useRef(refreshRoutesQuiet);
+  quietRef.current = refreshRoutesQuiet;
+  useEffect(() => {
+    ensurePushConfigured();
+    return subscribeHazardPush((data: HazardPushData) => {
+      console.log(`[push] route handle ${data.flagId.slice(0, 8)}`);
+      setFlagsKey((k) => k + 1);
+      if (navOpenRef.current) return;
+      if (data.removed) {
+        setSelectedFlag((cur) => (cur?.id === data.flagId ? null : cur));
+        setSnack(t.flag.clearedMsg);
+      }
+      void quietRef.current();
+    }, "route");
+  }, []);
   useEffect(() => {
     navigation.setOptions({
       tabBarStyle: {display: searchingFor ? "none" : "flex"},
@@ -325,6 +420,8 @@ export default function RouteScreen() {
   }
   function onSelectRoute(i: number) {
     setSelectedIndex(i);
+    setHazardFocusIdx(-1);
+    setHazardHighlight(null);
     const r = routes[i];
     if (r) fitRouteGeometry(r.geometry.coordinates);
   }
@@ -353,7 +450,26 @@ export default function RouteScreen() {
     setStops([]);
     setRoutes([]);
     setSelectedIndex(0);
+    setHazardFocusIdx(-1);
+    setHazardHighlight(null);
     setError(null);
+  }
+  function cycleHazard(): void {
+    const res = routes[selectedIndex] ?? null;
+    const list = (res?.warnings ?? []).filter(isFlagWarning);
+    if (!res || list.length === 0) return;
+    const next = hazardFocusIdx + 1;
+    if (next >= list.length) {
+      setHazardFocusIdx(-1);
+      setHazardHighlight(null);
+      fitRouteGeometry(res.geometry.coordinates);
+      return;
+    }
+    const h = list[next];
+    setHazardFocusIdx(next);
+    setHazardHighlight(windowAround(res.geometry.coordinates, h.distanceMeters, HAZARD_HIGHLIGHT_HALF));
+    const zoom = drag.camRef.current?.zoom ?? 13;
+    void cameraRef.current?.setStop({center: [h.lng, h.lat], zoom: Math.max(zoom, 16), duration: 500});
   }
   async function onVehiclePress(id: string) {
     setVehicleOpen(false);
@@ -401,6 +517,8 @@ export default function RouteScreen() {
       setStops((saved.stops ?? []).map((s) => ({label: formatPoint(s.lat, s.lng), lat: s.lat, lng: s.lng})));
       setRoutes([{source: saved.source ?? "saved", geometry: saved.geometry, distanceMeters: saved.distanceMeters ?? 0, durationSeconds: saved.durationSeconds ?? 0}]);
       setSelectedIndex(0);
+      setHazardFocusIdx(-1);
+      setHazardHighlight(null);
       fitRouteGeometry(saved.geometry.coordinates);
       setSavedOpen(false);
     } catch (err) {
@@ -428,8 +546,7 @@ export default function RouteScreen() {
         gps={gpsPos}
         dragPos={drag.dragPos}
         selectedMid={selectedMid}
-        mapZoom={drag.mapZoom}
-        pillBgActive={pillBgActive}
+        hazardHighlight={hazardHighlight}
         dragging={drag.dragging}
         dragPan={drag.dragPan}
         pickingFor={pickingFor}
@@ -467,6 +584,13 @@ export default function RouteScreen() {
             <MaterialIcons name="bookmark-border" size={22} color={token ? theme.primary : theme.muted} />
           </Pressable>
           <View style={styles.fabSpacer} />
+        </View>
+        <View style={[styles.sideCol, {bottom: cardH + 24}]}>
+          {result && flagWarnings.length > 0 ? (
+            <Pressable style={[styles.gpsFab, {backgroundColor: hazardFocusIdx >= 0 ? theme.primary : theme.paper, borderColor: hazardFocusIdx >= 0 ? theme.primary : theme.border}]} onPress={cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
+              <Text style={[styles.hazardNumber, {color: hazardFocusIdx >= 0 ? "#fff" : theme.primary}]}>{flagWarnings.length}</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={[styles.gpsFab, {backgroundColor: theme.paper, borderColor: theme.border}, gpsBusy && styles.disabled]} disabled={gpsBusy} onPress={() => void onLocate()} accessibilityRole="button" accessibilityLabel={t.common.currentLocation}>
             {gpsBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="my-location" size={22} color={theme.primary} />}
           </Pressable>
@@ -476,6 +600,7 @@ export default function RouteScreen() {
             </Pressable>
           ) : null}
         </View>
+        <View onLayout={(e) => setCardH(e.nativeEvent.layout.height)}>
         <RouteCard
           t={t}
           theme={theme}
@@ -488,7 +613,6 @@ export default function RouteScreen() {
           activeVehicle={activeVehicle}
           busy={busy}
           starting={starting}
-          error={error}
           hazardZones={hazardZones}
           widthBlocks={widthBlocks}
           onOpenSearch={(f) => { setPickingFor(null); setFlagMode(false); setSearchingFor(f); }}
@@ -499,6 +623,7 @@ export default function RouteScreen() {
           onStart={() => void onStart()}
           onSave={() => void onSave()}
         />
+        </View>
       </View>
       ) : null}
       <Modal visible={vehicleOpen} transparent animationType="fade" onRequestClose={() => setVehicleOpen(false)}>
@@ -559,7 +684,11 @@ export default function RouteScreen() {
           </View>
         </View>
       </Modal>
-      <Snack message={snack} onHide={() => setSnack(null)} />
+      {error ? (
+        <Snack message={error} severity="error" sticky bottom={cardH + 24} dangerColor={theme.danger} onHide={() => setError(null)} />
+      ) : (
+        <Snack message={snack} bottom={cardH + 24} onHide={() => setSnack(null)} />
+      )}
       {flagPoint ? (
         <View style={styles.centerRoot}>
           <Pressable style={StyleSheet.absoluteFill} onPress={cancelFlagReport} accessibilityRole="button" accessibilityLabel={t.common.close} />
@@ -588,7 +717,7 @@ export default function RouteScreen() {
           </View>
         </View>
       ) : null}
-      <Modal visible={navInitial !== null} animationType="slide" onRequestClose={() => setNavInitial(null)}>
+      <Modal visible={navInitial !== null} animationType="slide" onRequestClose={onNavExit}>
         {navInitial && token ? (
           <NavigationScreen
             t={t}
@@ -596,10 +725,11 @@ export default function RouteScreen() {
             token={token}
             initialRoute={navInitial.route}
             dest={navInitial.dest}
+            seed={navInitial.seed}
             stops={navInitial.stops.map((s) => ({lat: s.lat, lng: s.lng}))}
             width={activeVehicle?.baseWidth}
             vehicleType={activeVehicle?.type}
-            onExit={() => setNavInitial(null)}
+            onExit={onNavExit}
           />
         ) : null}
       </Modal>
@@ -619,6 +749,8 @@ const styles = StyleSheet.create({
   bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12, gap: 8},
   fabRow: {flexDirection: "row", alignItems: "center", gap: 8},
   fabSpacer: {flex: 1},
+  sideCol: {position: "absolute", right: 0, gap: 8, alignItems: "center"},
+  hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
   savedFab: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   gpsFab: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   clearFab: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},

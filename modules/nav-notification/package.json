@@ -1,0 +1,11 @@
+{
+  "name": "nav-notification",
+  "version": "0.1.0",
+  "description": "Live navigation shade notification",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}

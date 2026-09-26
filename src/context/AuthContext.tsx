@@ -3,6 +3,7 @@ import {onIdTokenChanged, signOut as firebaseSignOut} from "firebase/auth";
 import * as SecureStore from "expo-secure-store";
 import {auth} from "../auth/firebase";
 import {setTokenRefresher, setUnauthorizedHandler} from "../api/client";
+import {unsyncPushToken} from "../services/push";
 
 type Session = {uid: string; token: string};
 type AuthState = {uid: string | null; token: string | null; loaded: boolean; signIn: (uid: string, token: string) => Promise<void>; signOut: () => Promise<void>; refreshToken: () => Promise<string | null>};
@@ -34,10 +35,12 @@ export function AuthProvider({children}: {children: ReactNode}) {
     await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next)).catch(() => undefined);
   }, []);
   const signOut = useCallback(async () => {
+    const prev = session;
     setSession(null);
     await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined);
+    if (prev) await unsyncPushToken(prev.token).catch(() => undefined);
     await firebaseSignOut(auth).catch(() => undefined);
-  }, []);
+  }, [session]);
   const refreshToken = useCallback(async (): Promise<string | null> => {
     const user = auth.currentUser;
     if (!user) return null;

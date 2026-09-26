@@ -18,7 +18,7 @@ type Props = {
 
 const RADIUS = 3000;
 const MIN_MOVE = 500;
-const INTERVAL = 60000;
+const HEARTBEAT_MS = 60000;
 const POPUP_METERS = 150;
 const POPUP_EXIT_METERS = 225;
 
@@ -44,7 +44,7 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
     const moved = last
       ? Math.hypot((p.lat - last.lat) * 111320, (p.lng - last.lng) * 111320 * Math.cos((p.lat * Math.PI) / 180))
       : Number.POSITIVE_INFINITY;
-    if (moved < MIN_MOVE && last && Date.now() - last.at < INTERVAL) return;
+    if (moved < MIN_MOVE && last && Date.now() - last.at < HEARTBEAT_MS) return;
     lastRef.current = {lat: p.lat, lng: p.lng, at: Date.now()};
     void (async () => {
       try {
@@ -59,7 +59,17 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
     };
   }, [pos, token, refreshKey]);
   useEffect(() => {
-    if (!pos || suppressAuto || arrived) return;
+    if (!pos) return;
+    if (openIdRef.current) {
+      const open = flags.find((f) => f.id === openIdRef.current);
+      const d = open ? distBetween(pos, {lat: open.lat, lng: open.lng}) : Number.POSITIVE_INFINITY;
+      if (!open || d > POPUP_EXIT_METERS || open.status !== "1") {
+        openIdRef.current = null;
+        autoRef.current(null);
+        return;
+      }
+    }
+    if (suppressAuto || arrived) return;
     const eligible = (f: Flag): boolean =>
       f.status === "1" &&
       (uid == null || f.reporterId !== uid) &&
@@ -80,15 +90,6 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
       shownRef.current.add(best.id);
       openIdRef.current = best.id;
       autoRef.current(best);
-      return;
-    }
-    if (openIdRef.current) {
-      const open = flags.find((f) => f.id === openIdRef.current);
-      const d = open ? distBetween(pos, {lat: open.lat, lng: open.lng}) : Number.POSITIVE_INFINITY;
-      if (!open || d > POPUP_EXIT_METERS || open.status !== "1") {
-        openIdRef.current = null;
-        autoRef.current(null);
-      }
     }
   }, [flags, pos, uid, votedIds, deniedIds, suppressAuto, arrived]);
   if (!token) return null;
