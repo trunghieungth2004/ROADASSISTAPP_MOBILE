@@ -22,7 +22,6 @@ export function useNavVoice(lang: string, onError?: () => void): {
   };
   const speak = (text: string): void => {
     if (mutedRef.current) return;
-    if (__DEV__) console.log("[voice] speak", text);
     try {
       void Speech.stop();
     } catch {}
@@ -37,19 +36,15 @@ export function useNavVoice(lang: string, onError?: () => void): {
     const attempt = (withVoice: boolean): void => {
       try {
         const opts = withVoice && voiceRef.current ? {...base, voice: voiceRef.current} : base;
-        if (__DEV__) console.log("[voice] attempt", withVoice ? "voice" : "bare");
         const result = Speech.speak(text, {
           ...opts,
           onDone: () => {
-            if (__DEV__) console.log("[voice] done");
             endDuck();
           },
           onStopped: () => {
-            if (__DEV__) console.log("[voice] stopped");
             endDuck();
           },
           onError: () => {
-            if (__DEV__) console.log("[voice] error, retry-bare:", withVoice);
             if (withVoice) {
               voiceRef.current = undefined;
               attempt(false);

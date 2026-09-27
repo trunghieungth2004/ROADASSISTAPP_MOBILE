@@ -1,11 +1,12 @@
 import {createAudioPlayer, setAudioModeAsync, type AudioPlayer} from "expo-audio";
 
-export type EventSound = "hazard" | "reroute" | "arrived";
+export type EventSound = "hazard" | "reroute" | "arrived" | "confirm";
 
 const SOURCES = {
   hazard: require("../../assets/sound/hazard.wav"),
   reroute: require("../../assets/sound/reroute.wav"),
   arrived: require("../../assets/sound/arrived.wav"),
+  confirm: require("../../assets/sound/confirm.wav"),
 } as const;
 
 const SILENCE_SOURCE = require("../../assets/sound/silence.wav");

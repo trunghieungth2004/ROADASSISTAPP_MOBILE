@@ -13,7 +13,7 @@ import {darkTheme, lightTheme} from "../theme";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import PermissionGateScreen from "../screens/PermissionGateScreen";
-import {getPermissionStates, openAppSettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
@@ -97,6 +97,7 @@ function PermissionGate({onDone}: {onDone: () => void}) {
       canDone={canDone}
       onGrantNotifications={() => grant(requestNotificationPermission, true)}
       onGrantBackground={() => grant(requestBackgroundLocationPermission, false)}
+      onOpenBattery={() => openBatterySettings()}
       onSkip={finish}
       onDone={finish}
     />

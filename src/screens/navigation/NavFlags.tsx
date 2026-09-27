@@ -50,7 +50,7 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
       try {
         const list = await flagsNear(p.lat, p.lng, RADIUS, key);
         if (alive) setFlags(list.slice(0, 150));
-      } catch {
+      } catch (err) {
         return;
       }
     })();

@@ -60,7 +60,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   onRecenter: () => void;
   requestRerouteNow: () => void;
   rerouteForConfirm: () => Promise<boolean>;
-  refreshRouteQuiet: () => Promise<boolean>;
+  refreshRouteQuiet: () => Promise<{changed: boolean; warnings: FlagWarning[]} | null>;
   previewStep: (idx: number) => void;
   preview: {at: [number, number]; highlight: [number, number][]; bearing: number} | null;
   hazardFocus: {at: [number, number]; highlight: [number, number][]; idx: number} | null;
@@ -210,18 +210,18 @@ export function useNavTracking(opts: NavTrackingOpts): {
     return reroute(p.lat, p.lng, true);
   };
 
-  const refreshRouteQuiet = async (): Promise<boolean> => {
+  const refreshRouteQuiet = async (): Promise<{changed: boolean; warnings: FlagWarning[]} | null> => {
     const p = lastFixRef.current;
-    if (!p || reroutingRef.current || arrivedRef.current) return false;
+    if (!p || reroutingRef.current || arrivedRef.current) return null;
     const id = (seqRef.current += 1);
     try {
       const res = await findRoute(
         {originLat: p.lat, originLng: p.lng, destLat: dest.lat, destLng: dest.lng, stops, width, vehicleType},
         token,
       );
-      if (seqRef.current !== id) return false;
+      if (seqRef.current !== id) return null;
       const nr = res.routes?.[0];
-      if (!nr) return false;
+      if (!nr) return null;
       const changed = JSON.stringify(nr.geometry.coordinates) !== JSON.stringify(routeRef.current.geometry.coordinates);
       routeRef.current = nr;
       setRoute(nr);
@@ -229,9 +229,9 @@ export function useNavTracking(opts: NavTrackingOpts): {
       hazardFocusRef.current = null;
       setHazardFocus(null);
       offRef.current = 0;
-      return changed;
+      return {changed, warnings: (nr.warnings ?? []).filter(isFlagWarning)};
     } catch {
-      return false;
+      return null;
     }
   };
 
@@ -252,7 +252,6 @@ export function useNavTracking(opts: NavTrackingOpts): {
       lastCmdRef.current = now;
       const b = pickBearing();
       lastBearingRef.current = b;
-      if (__DEV__) console.log("[nav] seed-frame");
       void cameraRef.current.setStop({
         center: [seed.lng, seed.lat],
         zoom: FOLLOW_ZOOM,

@@ -115,7 +115,6 @@ export function subscribeHazardPush(onPush: (data: HazardPushData) => void, owne
     if (!n) return;
     const parsed = parseHazardPush(n.request.content.data);
     if (parsed && claimPush(`${owner}:${parsed.flagId}`)) {
-      console.log(`[push] received ${parsed.flagId.slice(0, 8)} removed=${parsed.removed === true}`);
       void AsyncStorage.setItem(LAST_PUSH_KEY, JSON.stringify({flagId: parsed.flagId, at: Date.now()})).catch(() => undefined);
       onPush(parsed);
     }

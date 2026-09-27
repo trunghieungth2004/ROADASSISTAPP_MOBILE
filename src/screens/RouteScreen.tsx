@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {ActivityIndicator, BackHandler, Keyboard, Modal, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation} from "@react-navigation/native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
@@ -36,6 +37,7 @@ export default function RouteScreen() {
   const {vehicles, activeVehicle, activateVehicle} = useProfile();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef | null>(null);
   const seqRef = useRef(0);
   const centeredRef = useRef(false);
@@ -79,7 +81,6 @@ export default function RouteScreen() {
   const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   function fitRouteGeometry(coords: [number, number][]) {
-    if (__DEV__) console.log("[TRACE] fitRouteGeometry", coords.length);
     const b = boundsOf(coords);
     if (b) cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
   }
@@ -121,7 +122,6 @@ export default function RouteScreen() {
       setHazardFocusIdx(-1);
       setHazardHighlight(null);
       const after = next[0] ? JSON.stringify(next[0].geometry.coordinates) : before;
-      console.log(`[push] route refreshed changed=${after !== before}`);
       setSnack(after !== before ? t.flag.rerouted : t.route.hazardUpdated);
     } catch {
       return;
@@ -186,7 +186,6 @@ export default function RouteScreen() {
       if (routes.length > 0 && origin && dest) void requestRoute(origin, dest, next);
     }
     if (routes.length === 0) {
-      if (__DEV__) console.log("[TRACE] pick jump", place.lat.toFixed(5), place.lng.toFixed(5));
       void cameraRef.current?.setStop({center: [place.lng, place.lat], zoom: 15, duration: 500});
     }
     setSearchingFor(null);
@@ -240,7 +239,7 @@ export default function RouteScreen() {
       new Promise<null>((resolve) => setTimeout(() => resolve(null), LOCATION_TIMEOUT_MS)),
     ]);
     if (raced) return {lat: raced.coords.latitude, lng: raced.coords.longitude};
-    const last = await Location.getLastKnownPositionAsync();
+    const last = await Location.getLastKnownPositionAsync({maxAge: 60000, requiredAccuracy: 100});
     if (last) return {lat: last.coords.latitude, lng: last.coords.longitude};
     throw new Error("Location unavailable");
   }
@@ -255,7 +254,7 @@ export default function RouteScreen() {
           cameraRef.current?.setStop({center: [lng, lat], zoom: 15, duration: 800});
         };
         try {
-          const last = await Location.getLastKnownPositionAsync();
+          const last = await Location.getLastKnownPositionAsync({maxAge: 60000, requiredAccuracy: 100});
           if (last) {
             apply(last.coords.latitude, last.coords.longitude);
             return;
@@ -272,16 +271,12 @@ export default function RouteScreen() {
     if (centeredRef.current) return;
     void centerOnLocal();
   }, []);
-  const navOpenRef = useRef(navInitial !== null);
-  navOpenRef.current = navInitial !== null;
   const quietRef = useRef(refreshRoutesQuiet);
   quietRef.current = refreshRoutesQuiet;
   useEffect(() => {
     ensurePushConfigured();
     return subscribeHazardPush((data: HazardPushData) => {
-      console.log(`[push] route handle ${data.flagId.slice(0, 8)}`);
       setFlagsKey((k) => k + 1);
-      if (navOpenRef.current) return;
       if (data.removed) {
         setSelectedFlag((cur) => (cur?.id === data.flagId ? null : cur));
         setSnack(t.flag.clearedMsg);
@@ -292,7 +287,7 @@ export default function RouteScreen() {
   useEffect(() => {
     navigation.setOptions({
       tabBarStyle: {display: searchingFor ? "none" : "flex"},
-      headerShown: !searchingFor,
+      headerShown: false,
     });
     return () => {
       navigation.setOptions({tabBarStyle: {display: "flex"}, headerShown: true});
@@ -432,10 +427,8 @@ export default function RouteScreen() {
     try {
       const {status} = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error("Location denied");
-      const fix = await Location.getCurrentPositionAsync({accuracy: Location.Accuracy.Balanced});
-      const next = {lat: fix.coords.latitude, lng: fix.coords.longitude};
+      const next = await freshFix();
       setGpsPos(next);
-      if (__DEV__) console.log("[TRACE] gps center", next.lat.toFixed(5), next.lng.toFixed(5));
       void cameraRef.current?.setStop({center: [next.lng, next.lat], duration: 500});
     } catch (err) {
       setError(toMessage(err));
@@ -564,7 +557,7 @@ export default function RouteScreen() {
       />
       {!pickingFor && !flagPoint && !selectedFlag ? (
         <Pressable
-          style={[styles.flagFab, {backgroundColor: flagMode ? theme.primary : theme.paper, borderColor: flagMode ? theme.primary : theme.border, top: routes.length > 1 ? 64 : 12}]}
+          style={[styles.flagFab, {backgroundColor: flagMode ? theme.primary : theme.paper, borderColor: flagMode ? theme.primary : theme.border, top: insets.top + 12}]}
           onPress={toggleFlagMode}
           accessibilityRole="button"
           accessibilityLabel={t.route.flagMode}
@@ -584,19 +577,19 @@ export default function RouteScreen() {
             <MaterialIcons name="bookmark-border" size={22} color={token ? theme.primary : theme.muted} />
           </Pressable>
           <View style={styles.fabSpacer} />
-        </View>
-        <View style={[styles.sideCol, {bottom: cardH + 24}]}>
-          {result && flagWarnings.length > 0 ? (
-            <Pressable style={[styles.gpsFab, {backgroundColor: hazardFocusIdx >= 0 ? theme.primary : theme.paper, borderColor: hazardFocusIdx >= 0 ? theme.primary : theme.border}]} onPress={cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
-              <Text style={[styles.hazardNumber, {color: hazardFocusIdx >= 0 ? "#fff" : theme.primary}]}>{flagWarnings.length}</Text>
-            </Pressable>
-          ) : null}
           <Pressable style={[styles.gpsFab, {backgroundColor: theme.paper, borderColor: theme.border}, gpsBusy && styles.disabled]} disabled={gpsBusy} onPress={() => void onLocate()} accessibilityRole="button" accessibilityLabel={t.common.currentLocation}>
             {gpsBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="my-location" size={22} color={theme.primary} />}
           </Pressable>
+        </View>
+        <View style={[styles.sideCol, {bottom: cardH + 80}]}>
           {canClear ? (
             <Pressable style={[styles.clearFab, {backgroundColor: theme.danger}]} onPress={onClear} accessibilityRole="button" accessibilityLabel={t.route.clear}>
               <MaterialIcons name="close" size={20} color="#fff" />
+            </Pressable>
+          ) : null}
+          {result && flagWarnings.length > 0 ? (
+            <Pressable style={[styles.gpsFab, {backgroundColor: hazardFocusIdx >= 0 ? theme.primary : theme.paper, borderColor: hazardFocusIdx >= 0 ? theme.primary : theme.border}]} onPress={cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
+              <Text style={[styles.hazardNumber, {color: hazardFocusIdx >= 0 ? "#fff" : theme.primary}]}>{flagWarnings.length}</Text>
             </Pressable>
           ) : null}
         </View>

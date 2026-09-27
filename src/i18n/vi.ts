@@ -37,6 +37,8 @@ export const vi: Strings = {
     permNotificationsHint: "Cảnh báo mối nguy trên tuyến đường",
     permBackground: "Vị trí nền",
     permBackgroundHint: "Chọn Luôn luôn để giữ điều hướng khi app ở nền",
+    permBattery: "Pin không giới hạn",
+    permBatteryHint: "Đặt Không giới hạn để GPS chạy suốt chuyến đi",
     permOn: "Bật",
     permOff: "Tắt",
     permEnable: "Bật",

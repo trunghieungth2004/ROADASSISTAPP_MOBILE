@@ -163,15 +163,12 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   }
   async function showAlertForFlag(flagId: string): Promise<void> {
     const key = tokenRef.current;
-    console.log(`[push] nav handle ${flagId.slice(0, 8)}`);
     if (!key) {
-      console.log("[push] nav skipped no-key");
       return;
     }
     let flag: Flag;
     try {
       flag = await getFlag(flagId, key);
-      console.log(`[push] nav fetched ${flag.status}`);
     } catch (err) {
       setFetchError(toMessage(err));
       if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
@@ -181,25 +178,27 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     const me = uidRef.current;
     setFlagsKey((k) => k + 1);
     if (me != null && flag.reporterId === me) {
-      console.log("[push] nav skipped own");
       return;
     }
     if (votedRef.current.has(flag.id) || deniedRef.current.has(flag.id)) {
-      console.log("[push] nav skipped voted");
       return;
     }
     const confirmedPush = flag.status === "2" || flag.status === "3";
+    const progM = nav.progress?.progressMeters ?? 0;
+    let routeToGo: number | null = null;
     if (!confirmedPush) {
-      const changed = await nav.refreshRouteQuiet();
-      console.log(`[push] nav refreshed changed=${changed}`);
+      const res = await nav.refreshRouteQuiet();
+      const match = res?.warnings.find((w) => w.flagId === flag.id) ?? null;
+      if (match) routeToGo = Math.max(0, match.distanceMeters - progM);
     }
     let rerouted = false;
     if (confirmedPush) rerouted = await nav.rerouteForConfirm();
     const p = posRef.current;
-    const dist = p ? formatDist(distBetween(p, {lat: flag.lat, lng: flag.lng}), t.route.km, t.nav.m) : null;
+    const straightToGo = p ? distBetween(p, {lat: flag.lat, lng: flag.lng}) : null;
+    const useToGo = routeToGo ?? straightToGo;
+    const dist = useToGo !== null ? formatDist(useToGo, t.route.km, t.nav.m) : null;
     const now = Date.now();
     setTopCards((prev) => [{flag, addedAt: now}, ...prev.filter((c) => c.flag.id !== flag.id)].slice(0, MAX_TOP_CARDS));
-    console.log("[push] nav card shown");
     if (confirmedPush) {
       voice.speak(t.nav.hazardSpotted);
       voice.speak(rerouted ? t.nav.hazardConfirmedRerouted : t.flag.confirmedMsg);
@@ -240,6 +239,11 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     !votedIds.has(nearestWarning.flagId) &&
     !deniedIds.has(nearestWarning.flagId) &&
     cardToGo <= 300;
+  const votesShownRef = useRef(false);
+  useEffect(() => {
+    if (showVotes && !votesShownRef.current) void playEventSound("confirm");
+    votesShownRef.current = showVotes;
+  }, [showVotes]);
   const etaMin = Math.max(1, Math.round((remaining * pace) / 60));
   const frac = nav.route.distanceMeters > 0 ? Math.min(1, (nav.progress?.progressMeters ?? 0) / nav.route.distanceMeters) : 0;
   const shadeRef = useRef({at: 0, frac: -1, turn: ""});
@@ -263,7 +267,6 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     setNavForeground(true);
     const unsub = subscribeHazardPush((data: HazardPushData) => {
       if (data.removed) {
-        console.log(`[push] nav cleared ${data.flagId.slice(0, 8)}`);
         onRemovedPush(data.flagId);
         return;
       }
@@ -343,8 +346,11 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
         <View style={[styles.topStack, {top: headerH + 8}]} pointerEvents="box-none">
           {topCards.map((c) => {
             const kind = hazardKind(c.flag.type);
+            const matched = nav.flagWarnings.find((w) => w.flagId === c.flag.id) ?? null;
             const p = nav.pos;
-            const toGo = p ? distBetween(p, {lat: c.flag.lat, lng: c.flag.lng}) : null;
+            const toGo = matched
+              ? Math.max(0, matched.distanceMeters - progressM)
+              : p ? distBetween(p, {lat: c.flag.lat, lng: c.flag.lng}) : null;
             const remain = Math.max(0, CARD_TTL_MS - (nowTs - c.addedAt)) / CARD_TTL_MS;
             return (
               <Pressable key={c.flag.id} style={[styles.topCard, {backgroundColor: theme.paper, borderColor: kind.color}]} onPress={() => nav.focusAt(c.flag.lat, c.flag.lng)} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
@@ -369,19 +375,22 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       <View style={[styles.bottomStack, {bottom: insets.bottom + 12}]}>
         {nearestWarning ? (
           <View style={[styles.hazardCard, {backgroundColor: theme.paper, borderColor: cardKind.color}]}>
-            <Pressable style={styles.hazardMain} onPress={nav.cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
-              <MaterialIcons name={cardKind.icon} size={24} color={cardKind.color} />
-              <View style={styles.hazardText}>
-                <Text style={[styles.hazardTitle, {color: theme.text}]}>{flagTypeLabel(nearestWarning.type ?? "", t)} · {formatDist(cardToGo, t.route.km, t.nav.m)}</Text>
-                {nearestWarning.note ? <Text style={[styles.hazardNote, {color: theme.muted}]} numberOfLines={1}>{nearestWarning.note}</Text> : null}
-              </View>
-            </Pressable>
-            <View style={[styles.voteRow, {opacity: showVotes ? 1 : 0}]}>
-              <Pressable style={[styles.voteBtn, {backgroundColor: theme.primary}]} disabled={!showVotes || flagBusy} onPress={() => nearestWarning && void onConfirmFlag(nearestWarning.flagId)} accessibilityRole="button" accessibilityLabel={t.flag.confirm}>
-                <MaterialIcons name="check" size={20} color="#fff" />
+            <View style={[styles.voteSide, {opacity: showVotes ? 1 : 0}]}>
+              <Pressable style={[styles.voteMini, {backgroundColor: theme.primary}]} disabled={!showVotes || flagBusy} onPress={() => nearestWarning && void onConfirmFlag(nearestWarning.flagId)} accessibilityRole="button" accessibilityLabel={t.flag.confirm}>
+                <MaterialIcons name="check" size={18} color="#fff" />
               </Pressable>
-              <Pressable style={[styles.voteBtn, {borderColor: theme.danger, borderWidth: 1}]} disabled={!showVotes || flagBusy} onPress={() => nearestWarning && void onDenyFlag(nearestWarning.flagId)} accessibilityRole="button" accessibilityLabel={t.flag.deny}>
-                <MaterialIcons name="close" size={20} color={theme.danger} />
+            </View>
+            <Pressable style={styles.hazardCenter} onPress={nav.cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
+              <View style={styles.hazardTypeRow}>
+                <MaterialIcons name={cardKind.icon} size={22} color={cardKind.color} />
+                <Text style={[styles.hazardTitle, {color: theme.text}]}>{flagTypeLabel(nearestWarning.type ?? "", t)}</Text>
+              </View>
+              <Text style={[styles.hazardDist, {color: theme.muted}]}>{formatDist(cardToGo, t.route.km, t.nav.m)}</Text>
+              {nearestWarning.note ? <Text style={[styles.hazardNote, {color: theme.muted}]} numberOfLines={1}>{nearestWarning.note}</Text> : null}
+            </Pressable>
+            <View style={[styles.voteSide, {opacity: showVotes ? 1 : 0}]}>
+              <Pressable style={[styles.voteMini, {borderColor: theme.danger, borderWidth: 1}]} disabled={!showVotes || flagBusy} onPress={() => nearestWarning && void onDenyFlag(nearestWarning.flagId)} accessibilityRole="button" accessibilityLabel={t.flag.deny}>
+                <MaterialIcons name="close" size={18} color={theme.danger} />
               </Pressable>
             </View>
           </View>
@@ -476,11 +485,13 @@ const styles = StyleSheet.create({
   sheetWrap: {width: "100%"},
   bottomStack: {position: "absolute", left: 88, right: 76, gap: 8},
   bottomBar: {borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 4, alignItems: "center"},
-  hazardCard: {borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 8},
-  hazardMain: {flexDirection: "row", alignItems: "center", gap: 10},
-  voteRow: {flexDirection: "row", gap: 8, height: 40, alignItems: "center", justifyContent: "center"},
-  voteBtn: {width: 64, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center"},
-  topStack: {position: "absolute", left: 12, right: 12, gap: 8},
+  hazardCard: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12},
+  hazardCenter: {flex: 1, alignItems: "center", gap: 2, minWidth: 0},
+  hazardTypeRow: {flexDirection: "row", alignItems: "center", gap: 6},
+  hazardDist: {fontSize: 14, textAlign: "center"},
+  voteSide: {width: 36, alignItems: "center", justifyContent: "center"},
+  voteMini: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
+  topStack: {position: "absolute", left: 88, right: 76, gap: 8},
   topCard: {flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16},
   ttlTrack: {height: 4, borderRadius: 2, overflow: "hidden", marginTop: 6},
   ttlFill: {height: 4, borderRadius: 2},

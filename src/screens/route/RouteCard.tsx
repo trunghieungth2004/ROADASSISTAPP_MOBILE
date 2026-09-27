@@ -46,26 +46,25 @@ export default function RouteCard(props: Props) {
           <Pressable style={[styles.input, styles.selectBtn, {borderColor: theme.border}]} onPress={() => props.onOpenSearch("destination")}><Text style={{color: props.destText ? theme.text : theme.muted}} numberOfLines={1}>{props.destText || t.route.selectDestination}</Text></Pressable>
         </View>
       </View>
-      {props.stops.length > 0 ? (
-        <View style={styles.stopRow}>
+      <View style={styles.stopVehicleRow}>
+        <View style={styles.stopGroup}>
+          {props.stops.length < MAX_STOPS ? (
+            <Pressable style={[styles.plusBtn, {borderColor: theme.primary}]} onPress={() => props.onOpenSearch("stop")} accessibilityRole="button" accessibilityLabel={t.route.addStop}>
+              <MaterialIcons name="add" size={20} color={theme.primary} />
+            </Pressable>
+          ) : null}
           {props.stops.map((s, i) => (
             <Pressable key={`${s.lat},${s.lng},${i}`} style={[styles.chip, {borderColor: theme.primary}]} onPress={() => props.onDeleteStop(i)}><Text style={{color: theme.primary}}>{i + 1} · ×</Text></Pressable>
           ))}
         </View>
-      ) : null}
-      {props.stops.length < MAX_STOPS ? (
-        <Pressable style={[styles.addStopBtn, {borderColor: theme.primary}]} onPress={() => props.onOpenSearch("stop")}>
-          <MaterialIcons name="add" size={18} color={theme.primary} />
-          <Text style={{color: theme.primary, fontWeight: "600"}}>{t.route.addStop}</Text>
+        <Pressable style={[styles.input, styles.vehicleBtn, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
+          <View style={styles.vehicleBtnRow}>
+            <MaterialCommunityIcons name={vehicleIcon(props.activeVehicle?.type)} size={20} color={theme.primary} />
+            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? `${t.vehicle.types[props.activeVehicle.type as keyof typeof t.vehicle.types] ?? props.activeVehicle.type} · ${props.activeVehicle.baseWidth}m` : t.route.selectVehicle}</Text>
+            <MaterialIcons name="expand-more" size={20} color={theme.muted} />
+          </View>
         </Pressable>
-      ) : null}
-      <Pressable style={[styles.input, styles.selectBtn, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
-        <View style={styles.vehicleBtnRow}>
-          <MaterialCommunityIcons name={vehicleIcon(props.activeVehicle?.type)} size={20} color={theme.primary} />
-          <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? `${t.vehicle.types[props.activeVehicle.type as keyof typeof t.vehicle.types] ?? props.activeVehicle.type} · ${props.activeVehicle.baseWidth}m` : t.route.selectVehicle}</Text>
-          <MaterialIcons name="expand-more" size={20} color={theme.muted} />
-        </View>
-      </Pressable>
+      </View>
       {props.result ? (
         <View style={styles.actionRow}>
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (props.busy || props.starting) && styles.disabled]} disabled={props.busy || props.starting} onPress={props.onStart}>{props.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.nav.start}</Text>}</Pressable>
@@ -92,14 +91,16 @@ export default function RouteCard(props: Props) {
 const styles = StyleSheet.create({
   card: {width: "100%", borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
   row: {flexDirection: "row", gap: 8, alignItems: "center"},
+  stopVehicleRow: {flexDirection: "row", gap: 8, alignItems: "center"},
+  stopGroup: {flexDirection: "row", flexWrap: "wrap", gap: 8, flex: 1, alignItems: "center"},
+  plusBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
+  vehicleBtn: {flex: 1, justifyContent: "center", minHeight: 42},
   fieldCol: {flex: 1, gap: 8, minWidth: 0},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
   selectBtn: {justifyContent: "center", minHeight: 42},
   swapBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  stopRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
-  addStopBtn: {flexDirection: "row", alignSelf: "flex-start", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   vehicleBtnRow: {flexDirection: "row", alignItems: "center", gap: 8},
-  vehicleBtnText: {flex: 1, fontSize: 14},
+  vehicleBtnText: {flex: 1, fontSize: 14, textAlign: "center"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   actionRow: {flexDirection: "row", gap: 8},
   primary: {flex: 1, borderRadius: 8, padding: 12, alignItems: "center"},

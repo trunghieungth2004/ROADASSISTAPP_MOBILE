@@ -1,4 +1,4 @@
-import {Pressable, StyleSheet, View} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {AppTheme} from "../../theme";
@@ -32,6 +32,7 @@ export default function TurnListSheet(props: Props) {
             <MaterialIcons name="close" size={22} color={theme.text} />
           </Pressable>
         </View>
+        <ScrollView style={styles.turnList} showsVerticalScrollIndicator={false}>
         {props.steps.map((s, i) => {
           const street = s.street ?? props.streets[i];
           const behind = props.progress !== null && props.stepProg[i] <= props.progress.progressMeters + 5;
@@ -48,6 +49,7 @@ export default function TurnListSheet(props: Props) {
             </Pressable>
           );
         })}
+        </ScrollView>
       </View>
     </View>
   );
@@ -56,6 +58,7 @@ export default function TurnListSheet(props: Props) {
 const styles = StyleSheet.create({
   sheetRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
   sheet: {borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 12, gap: 8, maxHeight: "70%"},
+  turnList: {flexGrow: 0},
   sheetHead: {flexDirection: "row", alignItems: "center", gap: 8},
   sheetTitle: {flex: 1, fontSize: 18, fontWeight: "700"},
   turnRow: {flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8},

@@ -1,5 +1,6 @@
 import {Platform} from "react-native";
 import * as Linking from "expo-linking";
+import * as IntentLauncher from "expo-intent-launcher";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 
@@ -57,4 +58,9 @@ export async function requestBackgroundLocationPermission(): Promise<PermissionS
 
 export function openAppSettings(): void {
   void Linking.openSettings().catch(() => undefined);
+}
+
+export function openBatterySettings(): void {
+  if (Platform.OS !== "android") return;
+  void IntentLauncher.startActivityAsync("android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS").catch(() => undefined);
 }

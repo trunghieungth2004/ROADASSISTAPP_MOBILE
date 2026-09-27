@@ -13,7 +13,7 @@ import ScreenContainer from "../components/ScreenContainer";
 import OnboardingScreen from "./OnboardingScreen";
 import DiagnosticsScreen from "./DiagnosticsScreen";
 import {useThemeMode} from "../context/ThemeContext";
-import {getPermissionStates, openAppSettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -144,6 +144,15 @@ export default function MoreScreen() {
             {!perms.backgroundLocation.granted ? (
               <Pressable style={[styles.permBtn, {borderColor: theme.border}]} disabled={permsBusy} onPress={() => void onEnableBackground()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{perms.backgroundLocation.canAskAgain ? t.more.permEnable : t.more.permOpenSettings}</Text></Pressable>
             ) : null}
+          </View>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <View style={styles.listRow}>
+            <MaterialIcons name="battery-charging-full" size={20} color={theme.primary} />
+            <View style={styles.permText}>
+              <Text style={[styles.listText, {color: theme.text}]}>{t.more.permBattery}</Text>
+              <Text style={[styles.permHint, {color: theme.muted}]}>{t.more.permBatteryHint}</Text>
+            </View>
+            <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => openBatterySettings()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{t.more.permOpenSettings}</Text></Pressable>
           </View>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>

@@ -14,6 +14,7 @@ type Props = {
   canDone: boolean;
   onGrantNotifications: () => void;
   onGrantBackground: () => void;
+  onOpenBattery: () => void;
   onSkip: () => void;
   onDone: () => void;
 };
@@ -47,7 +48,7 @@ function Row({t, theme, icon, title, desc, state, busy, onGrant}: {
   );
 }
 
-export default function PermissionGateScreen({t, states, busy, showBackground, canDone, onGrantNotifications, onGrantBackground, onSkip, onDone}: Props) {
+export default function PermissionGateScreen({t, states, busy, showBackground, canDone, onGrantNotifications, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -77,6 +78,18 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
             busy={busy}
             onGrant={onGrantBackground}
           />
+        ) : null}
+        {showBackground ? (
+          <View style={[styles.row, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+            <MaterialIcons name="battery-charging-full" size={26} color={theme.primary} />
+            <View style={styles.rowText}>
+              <Text style={[styles.rowTitle, {color: theme.text}]}>{t.more.permBattery}</Text>
+              <Text style={[styles.rowDesc, {color: theme.muted}]}>{t.more.permBatteryHint}</Text>
+            </View>
+            <Pressable style={[styles.grantBtn, {backgroundColor: theme.primary}]} onPress={onOpenBattery} accessibilityRole="button" accessibilityLabel={t.more.permOpenSettings}>
+              <Text style={styles.grantText}>{t.more.permOpenSettings}</Text>
+            </Pressable>
+          </View>
         ) : null}
         <Pressable style={styles.skipBtn} disabled={busy} onPress={onSkip} accessibilityRole="button" accessibilityLabel={t.more.gateSkip}>
           <Text style={[styles.skipText, {color: theme.muted}]}>{t.more.gateSkip}</Text>

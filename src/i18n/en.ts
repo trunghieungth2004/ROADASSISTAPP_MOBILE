@@ -36,6 +36,8 @@ export const en = {
     permNotificationsHint: "Hazard alerts on your routes",
     permBackground: "Background location",
     permBackgroundHint: "Choose Always to keep navigation alive in background",
+    permBattery: "Battery unrestricted",
+    permBatteryHint: "Set to Unrestricted so GPS keeps running mid-trip",
     permOn: "On",
     permOff: "Off",
     permEnable: "Enable",

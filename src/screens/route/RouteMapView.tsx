@@ -1,6 +1,7 @@
 import type {RefObject} from "react";
-import {useEffect, useRef, type MutableRefObject} from "react";
+import {useRef, type MutableRefObject} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/AppText";
 import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import {maptilerStyleUrl} from "../../map/style";
@@ -44,13 +45,8 @@ type Props = {
 
 export default function RouteMapView(props: Props) {
   const {t, theme} = props;
+  const insets = useSafeAreaInsets();
   const touchRef = useRef({stamp: 0});
-  useEffect(() => {
-    console.log("[TRACE] RouteMapView mount");
-    return () => {
-      console.log("[TRACE] RouteMapView unmount");
-    };
-  }, []);
   const guardedPress = (e: unknown): void => {
     if (Date.now() - touchRef.current.stamp < 600) return;
     props.onMapPress(e);
@@ -112,7 +108,7 @@ export default function RouteMapView(props: Props) {
       </Map>
       </View>
       {props.routes.length > 1 ? (
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, {top: insets.top + 12}]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topBarContent}>
             {props.routes.map((r, i) => (
               <Pressable key={i} style={[styles.pill, {backgroundColor: i === props.selectedIndex ? theme.primary : theme.paper, borderColor: theme.border}]} onPress={() => props.onSelectIndex(i)}>
@@ -124,12 +120,12 @@ export default function RouteMapView(props: Props) {
       ) : null}
       {props.dragging ? <View style={StyleSheet.absoluteFill} {...props.dragPan.panHandlers} /> : null}
       {props.dragging ? (
-        <View style={styles.dragHint} pointerEvents="none">
+        <View style={[styles.dragHint, {top: insets.top + 64}]} pointerEvents="none">
           <Text style={styles.dragHintText}>{t.route.dragHint}</Text>
         </View>
       ) : null}
       {props.pickingFor ? (
-        <Pressable style={[styles.pickChipTop, {backgroundColor: theme.paper, borderColor: theme.primary, top: props.routes.length > 1 ? 64 : 12}]} onPress={props.onCancelPick}>
+        <Pressable style={[styles.pickChipTop, {backgroundColor: theme.paper, borderColor: theme.primary, top: insets.top + 12}]} onPress={props.onCancelPick}>
           {props.pickBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight: "700"}}>{t.route.pickOnMap} · {props.pickingFor === "origin" ? "A" : props.pickingFor === "destination" ? "B" : "+"}</Text>}
         </Pressable>
       ) : null}
@@ -138,10 +134,10 @@ export default function RouteMapView(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  topBar: {position: "absolute", top: 12, left: 0, right: 0, alignItems: "center"},
+  topBar: {position: "absolute", left: 72, right: 72, alignItems: "center"},
   topBarContent: {paddingHorizontal: 12, gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
-  dragHint: {position: "absolute", top: 64, left: 0, right: 0, alignItems: "center"},
+  dragHint: {position: "absolute", left: 0, right: 0, alignItems: "center"},
   dragHintText: {backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 12, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, overflow: "hidden"},
   pickChipTop: {position: "absolute", left: 12, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, zIndex: 10, elevation: 4},
 });
