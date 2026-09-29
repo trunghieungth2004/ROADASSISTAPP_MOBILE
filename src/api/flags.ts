@@ -12,7 +12,61 @@ export type Flag = {
   status: string;
   voteCount?: number;
   reporterId?: string;
+  createdAt?: string;
+  ttlExpiresAtMs?: number | null;
 };
+
+export const FLAG_CONSENSUS_THRESHOLD = 3;
+
+type FlagWire = {
+  id: string;
+  type: string;
+  lat: number;
+  lng: number;
+  radiusMeters?: number;
+  note?: string | null;
+  status: string;
+  voteCount?: number;
+  reporterId?: string;
+  reporterUid?: string;
+  createdAt?: string;
+  ttlExpiresAt?: {_seconds?: number; _nanoseconds?: number} | string | number | null;
+};
+
+function ttlMsOf(value: FlagWire["ttlExpiresAt"]): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const at = Date.parse(value);
+    return Number.isNaN(at) ? null : at;
+  }
+  if (typeof value === "object") {
+    const s = value._seconds;
+    if (typeof s !== "number" || !Number.isFinite(s)) return null;
+    const ns = typeof value._nanoseconds === "number" ? value._nanoseconds : 0;
+    return s * 1000 + Math.floor(ns / 1e6);
+  }
+  return null;
+}
+
+export function toFlag(raw: FlagWire): Flag {  return {
+    id: raw.id,
+    type: raw.type,
+    lat: raw.lat,
+    lng: raw.lng,
+    radiusMeters: raw.radiusMeters,
+    note: raw.note,
+    status: raw.status,
+    voteCount: raw.voteCount,
+    reporterId: raw.reporterId ?? raw.reporterUid,
+    createdAt: raw.createdAt,
+    ttlExpiresAtMs: ttlMsOf(raw.ttlExpiresAt),
+  };
+}
+
+export function isExpired(flag: Pick<Flag, "ttlExpiresAtMs">, nowMs: number): boolean {
+  return flag.ttlExpiresAtMs !== undefined && flag.ttlExpiresAtMs !== null && flag.ttlExpiresAtMs <= nowMs;
+}
 
 export type SubmitFlagPayload = {
   type: FlagType;
@@ -38,14 +92,19 @@ export function unflag(flagId: string, token: string): Promise<{unflagged: numbe
   return api.post<{unflagged: number}>("/flags/unflag", {flagId}, token);
 }
 
-export function flagsNear(lat: number, lng: number, radiusMeters: number, token: string): Promise<Flag[]> {
-  return api.post<Flag[]>("/flags/near", {lat, lng, radiusMeters}, token);
+export async function flagsNear(lat: number, lng: number, radiusMeters: number, token: string): Promise<Flag[]> {
+  const list = await api.post<FlagWire[]>("/flags/near", {lat, lng, radiusMeters}, token);
+  const now = Date.now();
+  return list.map(toFlag).filter((flag) => !isExpired(flag, now));
 }
 
-export function getFlag(flagId: string, token: string): Promise<Flag> {
-  return api.post<Flag>("/flags/get", {flagId}, token);
+export async function getFlag(flagId: string, token: string): Promise<Flag | null> {
+  const flag = toFlag(await api.post<FlagWire>("/flags/get", {flagId}, token));
+  return isExpired(flag, Date.now()) ? null : flag;
 }
 
-export function myFlags(token: string): Promise<Flag[]> {
-  return api.post<Flag[]>("/flags/mine", {}, token);
+export async function myFlags(token: string): Promise<Flag[]> {
+  const list = await api.post<FlagWire[]>("/flags/mine", {}, token);
+  const now = Date.now();
+  return list.map(toFlag).filter((flag) => !isExpired(flag, now));
 }

@@ -3,7 +3,7 @@ import {ActivityIndicator, BackHandler, Keyboard, Modal, Platform, Pressable, St
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation} from "@react-navigation/native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
-import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
+import {MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
 import {findRoute, getSavedRoute, saveRoute, isFlagWarning, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
@@ -25,10 +25,15 @@ import FlagDetailSheet from "../components/FlagDetailSheet";
 import {confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {markDenied, markVoted} from "../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./route/types";
-import {boundsOf, midOf, vehicleIcon} from "./route/routeGeo";
+import {boundsOf, midOf} from "./route/routeGeo";
 import {useRouteDrag} from "./route/useRouteDrag";
+import {createTaskEpoch, type TaskEpoch} from "./route/taskEpoch";
+import {shouldRetryCenter} from "./route/cameraIntent";
 import RouteMapView from "./route/RouteMapView";
 import RouteCard from "./route/RouteCard";
+import VehiclePickerSheet from "../components/VehiclePickerSheet";
+import {Fab, FabColumn} from "../components/Fab";
+import {snackAbove} from "../components/snackOffset";
 
 export default function RouteScreen() {
   const {t, lang} = useStrings();
@@ -41,6 +46,7 @@ export default function RouteScreen() {
   const cameraRef = useRef<CameraRef | null>(null);
   const seqRef = useRef(0);
   const centeredRef = useRef(false);
+  const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
   const [origin, setOrigin] = useState<Point | null>(null);
   const [dest, setDest] = useState<Point | null>(null);
   const [originText, setOriginText] = useState("");
@@ -60,6 +66,8 @@ export default function RouteScreen() {
   const [navInitial, setNavInitial] = useState<{route: RouteOption; dest: Point; stops: Stop[]; seed: {lat: number; lng: number}} | null>(null);
   const [pickingFor, setPickingFor] = useState<SearchField | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
+  const [pickEpoch] = useState<TaskEpoch>(createTaskEpoch);
+  const pickAbortRef = useRef<AbortController | null>(null);
   const [flagMode, setFlagMode] = useState(false);
   const [flagPoint, setFlagPoint] = useState<Point | null>(null);
   const [selectedFlag, setSelectedFlag] = useState<Flag | null>(null);
@@ -78,6 +86,7 @@ export default function RouteScreen() {
   const [hazardFocusIdx, setHazardFocusIdx] = useState(-1);
   const [hazardHighlight, setHazardHighlight] = useState<[number, number][] | null>(null);
   const [cardH, setCardH] = useState(0);
+  const snackBottom = searchingFor || flagMode || pickingFor ? insets.bottom + 24 : snackAbove(12, cardH);
   const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   function fitRouteGeometry(coords: [number, number][]) {
@@ -106,9 +115,21 @@ export default function RouteScreen() {
       if (seqRef.current === id) setBusy(false);
     }
   }
-  async function onFind() {
-    await requestRoute(origin, dest, stops, undefined, undefined, true);
-  }
+  const autoFindRef = useRef("");
+  const autoFailAtRef = useRef(0);
+  useEffect(() => {
+    const key = origin && dest ? `${origin.lat},${origin.lng}|${dest.lat},${dest.lng}|${stops.length}` : "";
+    if (!origin || !dest || routes.length > 0 || busy || starting || searchingFor || pickingFor || !token) return;
+    if (autoFindRef.current === key && (autoFailAtRef.current === 0 || Date.now() - autoFailAtRef.current < 30000)) return;
+    const timer = setTimeout(() => {
+      autoFindRef.current = key;
+      autoFailAtRef.current = 0;
+      void requestRoute(origin, dest, stops, undefined, undefined, true).then((r) => {
+        if (!r) autoFailAtRef.current = Date.now();
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  });
   async function refreshRoutesQuiet(): Promise<void> {
     if (!token || !origin || !dest || routes.length === 0) return;
     const id = (seqRef.current += 1);
@@ -190,23 +211,38 @@ export default function RouteScreen() {
     }
     setSearchingFor(null);
   }
+  function cancelPick(): void {
+    pickEpoch.invalidate();
+    pickAbortRef.current?.abort();
+    pickAbortRef.current = null;
+    setPickBusy(false);
+    setPickingFor(null);
+  }
   async function onPickMapPoint(lat: number, lng: number) {
     const field = pickingFor;
-    if (!field || pickBusy || busy) return;
+    if (!field || busy || pickAbortRef.current) return;
     Keyboard.dismiss();
     if (field === "stop" && stops.length >= MAX_STOPS) {
       setPickingFor(null);
       return;
     }
+    const ctrl = new AbortController();
+    pickAbortRef.current = ctrl;
+    const id = pickEpoch.claim();
     setPickBusy(true);
     try {
-      const label = await reverseLabel(lat, lng, lang);
+      const label = await reverseLabel(lat, lng, lang, ctrl.signal);
+      if (!pickEpoch.current(id)) return;
       onPickPlace({label, lat, lng, source: "map"}, field);
     } catch (err) {
+      if (!pickEpoch.current(id)) return;
       setError(toMessage(err));
     } finally {
-      setPickBusy(false);
-      setPickingFor(null);
+      if (pickAbortRef.current === ctrl) pickAbortRef.current = null;
+      if (pickEpoch.current(id)) {
+        setPickBusy(false);
+        setPickingFor(null);
+      }
     }
   }
   async function onFlagMapPoint(lat: number, lng: number) {
@@ -243,29 +279,35 @@ export default function RouteScreen() {
     if (last) return {lat: last.coords.latitude, lng: last.coords.longitude};
     throw new Error("Location unavailable");
   }
+  function applyCenter(): boolean {
+    const pending = pendingCenterRef.current;
+    const cam = cameraRef.current;
+    if (!pending || !cam) return false;
+    pendingCenterRef.current = null;
+    centeredRef.current = true;
+    void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800});
+    return true;
+  }
   async function centerOnLocal(): Promise<void> {
-    for (let attempt = 0; attempt < CENTER_RETRIES && !centeredRef.current; attempt++) {
+    for (let attempt = 0; shouldRetryCenter(centeredRef.current, attempt, CENTER_RETRIES); attempt++) {
       if (attempt > 0) await new Promise<void>((resolve) => setTimeout(resolve, CENTER_RETRY_MS));
       try {
         const {status} = await Location.getForegroundPermissionsAsync();
         if (status !== "granted") return;
-        const apply = (lat: number, lng: number): void => {
-          centeredRef.current = true;
-          cameraRef.current?.setStop({center: [lng, lat], zoom: 15, duration: 800});
-        };
-        try {
-          const last = await Location.getLastKnownPositionAsync({maxAge: 60000, requiredAccuracy: 100});
-          if (last) {
-            apply(last.coords.latitude, last.coords.longitude);
-            return;
+        if (!pendingCenterRef.current) {
+          try {
+            const last = await Location.getLastKnownPositionAsync({maxAge: 60000, requiredAccuracy: 100});
+            if (last) pendingCenterRef.current = {lat: last.coords.latitude, lng: last.coords.longitude};
+          } catch {}
+          if (!pendingCenterRef.current) {
+            const live = await freshFix();
+            pendingCenterRef.current = {lat: live.lat, lng: live.lng};
           }
-        } catch {}
-        const live = await freshFix();
-        apply(live.lat, live.lng);
-        return;
+        }
+        if (applyCenter()) return;
       } catch {}
     }
-    if (!centeredRef.current) setSnack(t.route.locationUnavailable);
+    if (!centeredRef.current && !pendingCenterRef.current) setSnack(t.route.locationUnavailable);
   }
   useEffect(() => {
     if (centeredRef.current) return;
@@ -304,6 +346,7 @@ export default function RouteScreen() {
         return true;
       }
       if (savedOpen) {
+        Keyboard.dismiss();
         setSavedOpen(false);
         return true;
       }
@@ -312,7 +355,7 @@ export default function RouteScreen() {
         return true;
       }
       if (pickingFor) {
-        setPickingFor(null);
+        cancelPick();
         return true;
       }
       return false;
@@ -321,11 +364,12 @@ export default function RouteScreen() {
   }, [savedOpen, searchingFor, pickingFor, selectedFlag, flagPoint]);
   function toggleFlagMode() {
     setFlagMode((v) => !v);
-    setPickingFor(null);
+    cancelPick();
   }
   function cancelFlagReport() {
     setFlagPoint(null);
     setFlagMode(false);
+    cancelPick();
   }
   async function onSubmitFlag(report: FlagReport) {
     if (!token || !flagPoint) return;
@@ -336,6 +380,7 @@ export default function RouteScreen() {
       setFlagMode(false);
       setFlagsKey((k) => k + 1);
       setSnack(t.flag.reported);
+      void refreshRoutesQuiet();
     } catch (err) {
       setSnack(toMessage(err));
     } finally {
@@ -345,6 +390,7 @@ export default function RouteScreen() {
   async function onConfirmFlag(flagId: string) {
     if (!token) return;
     setFlagBusy(true);
+    setSnack(t.flag.checkingRoute);
     try {
       const res = await confirmFlag(flagId, token);
       void markVoted(flagId);
@@ -383,6 +429,10 @@ export default function RouteScreen() {
   }
   async function onRemoveFlag(flagId: string) {
     if (!token) return;
+    if (selectedFlag?.id === flagId && selectedFlag.status === "3") {
+      setSnack(t.flag.lockedRemoveDenied);
+      return;
+    }
     setFlagBusy(true);
     try {
       await unflag(flagId, token);
@@ -468,6 +518,7 @@ export default function RouteScreen() {
     setVehicleOpen(false);
     try {
       await activateVehicle(id);
+      setSnack(t.vehicle.activeSaved);
       const next = vehicles.find((v) => v.id === id) ?? null;
       if (routes.length > 0 && origin && dest && next) await requestRoute(origin, dest, stops, next.baseWidth, next.type);
     } catch (err) {
@@ -481,6 +532,7 @@ export default function RouteScreen() {
   }
   async function onSaveRoute() {
     if (!token || !origin || !dest || !result) return;
+    Keyboard.dismiss();
     setSaveBusy(true);
     setError(null);
     try {
@@ -528,6 +580,7 @@ export default function RouteScreen() {
     }}>
       <RouteMapView
         t={t}
+        lang={lang}
         theme={theme}
         cameraRef={cameraRef}
         routes={routes}
@@ -537,6 +590,7 @@ export default function RouteScreen() {
         dest={dest}
         stops={stops}
         gps={gpsPos}
+        flagPoint={flagPoint}
         dragPos={drag.dragPos}
         selectedMid={selectedMid}
         hazardHighlight={hazardHighlight}
@@ -548,7 +602,8 @@ export default function RouteScreen() {
         onRegionChange={drag.onRegionChange}
         onRegionDid={drag.onRegionDid}
         onSelectIndex={onSelectRoute}
-        onCancelPick={() => setPickingFor(null)}
+        onCancelPick={cancelPick}
+        onMapReady={() => applyCenter()}
         flagCamRef={drag.camRef}
         flagsToken={token}
         flagsKey={flagsKey}
@@ -556,42 +611,39 @@ export default function RouteScreen() {
         subscribeRegionDid={drag.subscribeRegionDid}
       />
       {!pickingFor && !flagPoint && !selectedFlag ? (
-        <Pressable
-          style={[styles.flagFab, {backgroundColor: flagMode ? theme.primary : theme.paper, borderColor: flagMode ? theme.primary : theme.border, top: insets.top + 12}]}
-          onPress={toggleFlagMode}
-          accessibilityRole="button"
-          accessibilityLabel={t.route.flagMode}
-        >
-          <MaterialIcons name="add-alert" size={22} color={flagMode ? "#fff" : theme.primary} />
-        </Pressable>
+        flagMode ? (
+          <Fab theme={theme} variant="danger" size={36} label={t.common.close} onPress={toggleFlagMode} style={{position: "absolute", top: insets.top + 12, left: 12, zIndex: 10, elevation: 4}}>
+            <MaterialIcons name="close" size={20} color="#fff" />
+          </Fab>
+        ) : (
+          <Fab theme={theme} label={t.route.flagMode} onPress={toggleFlagMode} style={{position: "absolute", top: insets.top + 12, left: 12, zIndex: 10, elevation: 4}}>
+            <MaterialIcons name="add-alert" size={22} color={theme.primary} />
+          </Fab>
+        )
       ) : null}
-      {flagMode && !flagPoint && !selectedFlag ? (
-        <View style={[styles.flagHint, {top: routes.length > 1 ? 120 : 68}]} pointerEvents="none">
-          <Text style={styles.flagHintText}>{t.route.flagHint}</Text>
-        </View>
-      ) : null}
-      {!pickingFor ? (
+      {!pickingFor && !flagMode && !selectedFlag ? (
+      <>
+      <FabColumn bottom={cardH + 92}>
+        {canClear ? (
+          <Fab theme={theme} variant="danger" size={36} label={t.route.clear} onPress={onClear}>
+            <MaterialIcons name="close" size={20} color="#fff" />
+          </Fab>
+        ) : null}
+        {result && flagWarnings.length > 0 ? (
+          <Fab theme={theme} variant={hazardFocusIdx >= 0 ? "primary" : "paper"} label={t.nav.hazardFocus} onPress={cycleHazard}>
+            <Text style={[styles.hazardNumber, {color: hazardFocusIdx >= 0 ? "#fff" : theme.primary}]}>{flagWarnings.length}</Text>
+          </Fab>
+        ) : null}
+      </FabColumn>
       <View style={styles.bottomContainer}>
         <View style={styles.fabRow}>
-          <Pressable style={[styles.savedFab, {backgroundColor: theme.paper, borderColor: theme.border}, !token && styles.disabled]} disabled={!token || busy} onPress={() => setSavedOpen(true)} accessibilityRole="button" accessibilityLabel={t.saved.title}>
+          <Fab theme={theme} label={t.saved.title} disabled={!token || busy} onPress={() => setSavedOpen(true)}>
             <MaterialIcons name="bookmark-border" size={22} color={token ? theme.primary : theme.muted} />
-          </Pressable>
+          </Fab>
           <View style={styles.fabSpacer} />
-          <Pressable style={[styles.gpsFab, {backgroundColor: theme.paper, borderColor: theme.border}, gpsBusy && styles.disabled]} disabled={gpsBusy} onPress={() => void onLocate()} accessibilityRole="button" accessibilityLabel={t.common.currentLocation}>
+          <Fab theme={theme} label={t.common.currentLocation} disabled={gpsBusy} onPress={() => void onLocate()}>
             {gpsBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="my-location" size={22} color={theme.primary} />}
-          </Pressable>
-        </View>
-        <View style={[styles.sideCol, {bottom: cardH + 80}]}>
-          {canClear ? (
-            <Pressable style={[styles.clearFab, {backgroundColor: theme.danger}]} onPress={onClear} accessibilityRole="button" accessibilityLabel={t.route.clear}>
-              <MaterialIcons name="close" size={20} color="#fff" />
-            </Pressable>
-          ) : null}
-          {result && flagWarnings.length > 0 ? (
-            <Pressable style={[styles.gpsFab, {backgroundColor: hazardFocusIdx >= 0 ? theme.primary : theme.paper, borderColor: hazardFocusIdx >= 0 ? theme.primary : theme.border}]} onPress={cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
-              <Text style={[styles.hazardNumber, {color: hazardFocusIdx >= 0 ? "#fff" : theme.primary}]}>{flagWarnings.length}</Text>
-            </Pressable>
-          ) : null}
+          </Fab>
         </View>
         <View onLayout={(e) => setCardH(e.nativeEvent.layout.height)}>
         <RouteCard
@@ -612,27 +664,20 @@ export default function RouteScreen() {
           onSwap={onSwap}
           onDeleteStop={onDeleteStop}
           onOpenVehicle={() => setVehicleOpen(true)}
-          onFind={() => void onFind()}
           onStart={() => void onStart()}
           onSave={() => void onSave()}
         />
         </View>
       </View>
+      </>
       ) : null}
-      <Modal visible={vehicleOpen} transparent animationType="fade" onRequestClose={() => setVehicleOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, {backgroundColor: theme.paper}]}>
-            {vehicles.length === 0 ? <Text style={{color: theme.muted}}>{t.route.vehicleCta}</Text> : vehicles.map((v) => (
-              <Pressable key={v.id} style={styles.vehicleRow} onPress={() => void onVehiclePress(v.id)}>
-                <MaterialIcons name={activeVehicle?.id === v.id ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={activeVehicle?.id === v.id ? theme.primary : theme.muted} />
-                <MaterialCommunityIcons name={vehicleIcon(v.type)} size={20} color={theme.primary} />
-                <Text style={[styles.vehicleRowText, {color: theme.text}]}>{t.vehicle.types[v.type as keyof typeof t.vehicle.types] ?? v.type} · {v.baseWidth}m</Text>
-              </Pressable>
-            ))}
-            <Pressable style={[styles.chip, styles.modalClose, {borderColor: theme.border}]} onPress={() => setVehicleOpen(false)}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable>
+      {vehicleOpen ? (
+        <View style={styles.sheetRoot} pointerEvents="box-none">
+          <View style={styles.sheetWrap}>
+            <VehiclePickerSheet t={t} theme={theme} token={token} activeId={activeVehicle?.id ?? null} onPick={(id) => void onVehiclePress(id)} onClose={() => setVehicleOpen(false)} />
           </View>
         </View>
-      </Modal>
+      ) : null}
       {searchingFor ? (
         <View style={styles.fullScreen}>
           <PlaceSearchScreen
@@ -654,20 +699,20 @@ export default function RouteScreen() {
         </View>
       ) : null}
       {savedOpen ? (
-        <View style={styles.savedRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSavedOpen(false)} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.sheetWrap}>
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); setSavedOpen(false); }} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
             <SavedRoutesSheet t={t} token={token} onOpen={(id) => void onOpenSaved(id)} onClose={() => setSavedOpen(false)} />
           </View>
         </View>
       ) : null}
-      <Modal visible={saveOpen} transparent animationType="fade" onRequestClose={() => setSaveOpen(false)}>
+      <Modal visible={saveOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setSaveOpen(false); }}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, {backgroundColor: theme.paper}]}>
             <Text style={[styles.modalTitle, {color: theme.text}]}>{t.route.saveRoute}</Text>
             <TextInput style={[styles.modalInput, {borderColor: theme.border, color: theme.text}]} value={saveName} onChangeText={setSaveName} maxLength={120} autoFocus placeholder={t.route.routeName} placeholderTextColor={theme.muted} />
             <View style={styles.modalActions}>
-              <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => setSaveOpen(false)}>
+              <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { Keyboard.dismiss(); setSaveOpen(false); }}>
                 <Text style={{color: theme.text}}>{t.common.close}</Text>
               </Pressable>
               <Pressable style={[styles.chip, {backgroundColor: theme.primary, borderColor: theme.primary}, saveBusy && styles.disabled]} disabled={saveBusy} onPress={() => void onSaveRoute()}>
@@ -678,9 +723,24 @@ export default function RouteScreen() {
         </View>
       </Modal>
       {error ? (
-        <Snack message={error} severity="error" sticky bottom={cardH + 24} dangerColor={theme.danger} onHide={() => setError(null)} />
+        <Snack message={error} severity="error" sticky bottom={snackBottom} dangerColor={theme.danger} onHide={() => setError(null)} />
+      ) : snack ? (
+        <Snack message={snack} severity="confirm" bottom={snackBottom} accentColor={theme.primary} onHide={() => setSnack(null)} />
       ) : (
-        <Snack message={snack} bottom={cardH + 24} onHide={() => setSnack(null)} />
+        <Snack
+          message={
+            drag.dragging
+              ? t.route.dragHint
+              : pickingFor
+                ? t.route.pickOnMap
+                : flagMode && !flagPoint
+                  ? t.route.flagHint
+                  : null
+          }
+          sticky
+          bottom={snackBottom}
+          onHide={() => {}}
+        />
       )}
       {flagPoint ? (
         <View style={styles.centerRoot}>
@@ -691,9 +751,8 @@ export default function RouteScreen() {
         </View>
       ) : null}
       {selectedFlag ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFlag(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
+        <View style={[styles.sheetRoot, {bottom: insets.bottom + 12}]} pointerEvents="box-none">
+          <View style={styles.sheetWrap}>
             <FlagDetailSheet
               t={t}
               flag={selectedFlag}
@@ -701,7 +760,6 @@ export default function RouteScreen() {
               busy={flagBusy}
               voted={votedIds.has(selectedFlag.id)}
               denied={deniedIds.has(selectedFlag.id)}
-              centered
               onClose={() => setSelectedFlag(null)}
               onConfirm={(id) => void onConfirmFlag(id)}
               onDeny={(id) => void onDenyFlag(id)}
@@ -732,21 +790,15 @@ export default function RouteScreen() {
 const styles = StyleSheet.create({
   root: {flex: 1},
   fullScreen: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, elevation: 6},
-  flagFab: {position: "absolute", left: 12, width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center", zIndex: 10, elevation: 4},
-  flagHint: {position: "absolute", left: 12, alignItems: "flex-start"},
-  flagHintText: {backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 12, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, overflow: "hidden"},
   savedRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
   centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
   centerWrap: {width: "100%", paddingHorizontal: 24},
   sheetWrap: {width: "100%"},
+  sheetRoot: {position: "absolute", left: 12, right: 12, bottom: 12},
   bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12, gap: 8},
   fabRow: {flexDirection: "row", alignItems: "center", gap: 8},
   fabSpacer: {flex: 1},
-  sideCol: {position: "absolute", right: 0, gap: 8, alignItems: "center"},
   hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
-  savedFab: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  gpsFab: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  clearFab: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   disabled: {opacity: 0.6},
   modalOverlay: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24},
@@ -754,7 +806,4 @@ const styles = StyleSheet.create({
   modalTitle: {fontSize: 16, fontWeight: "700"},
   modalInput: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
   modalActions: {flexDirection: "row", justifyContent: "flex-end", gap: 8},
-  vehicleRow: {flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 8},
-  vehicleRowText: {flex: 1, fontSize: 15},
-  modalClose: {alignItems: "center", marginTop: 8},
 });

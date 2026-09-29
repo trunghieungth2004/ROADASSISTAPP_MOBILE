@@ -1,4 +1,4 @@
-import {api} from "./client";
+import {api, fetchWithTimeout} from "./client";
 import {config} from "../config";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 
@@ -92,7 +92,7 @@ async function maptilerForwardRaw(query: string, lang: string, limit: number, ty
     autocomplete: "true",
   });
   if (types) params.set("types", types);
-  const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params}`);
+  const res = await fetchWithTimeout(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${params}`);
   if (!res.ok) return [];
   const body = (await res.json()) as {features?: MaptilerFeature[]};
   return body.features ?? [];
@@ -155,7 +155,7 @@ export async function searchMapPlaces(query: string, lang: string, limit = 12): 
   }
 }
 
-export async function reverseLabel(lat: number, lng: number, lang: string): Promise<string> {
+export async function reverseLabel(lat: number, lng: number, lang: string, signal?: AbortSignal): Promise<string> {
   if (!config.maptilerKey) return formatPoint(lat, lng);
   try {
     const params = new URLSearchParams({
@@ -163,7 +163,7 @@ export async function reverseLabel(lat: number, lng: number, lang: string): Prom
       language: lang === "vi" ? "vi" : "en",
       limit: "1",
     });
-    const res = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?${params}`);
+    const res = await fetchWithTimeout(`https://api.maptiler.com/geocoding/${lng},${lat}.json?${params}`, signal ? {signal} : {});
     if (!res.ok) return formatPoint(lat, lng);
     const body = (await res.json()) as {features?: MaptilerFeature[]};
     return body.features?.[0]?.place_name ?? formatPoint(lat, lng);

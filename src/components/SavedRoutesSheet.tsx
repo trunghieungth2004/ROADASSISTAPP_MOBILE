@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "./AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -18,6 +18,14 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
   const [busy, setBusy] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
+  const visible = routes
+    .filter((r) => {
+      const q = query.trim().toLowerCase();
+      if (q === "") return true;
+      return (r.name ?? "").toLowerCase().includes(q);
+    })
+    .slice(0, 6);
   useEffect(() => {
     if (!token) return;
     let alive = true;
@@ -39,6 +47,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
   }, [token]);
   async function onRename(routeId: string) {
     if (!token || name.trim().length === 0) return;
+    Keyboard.dismiss();
     setBusy(true);
     setError(null);
     try {
@@ -68,19 +77,23 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
     <View style={[styles.sheet, {backgroundColor: theme.paper, borderColor: theme.border, paddingBottom: insets.bottom + 12}]}>
       <View style={styles.headRow}>
         <Text style={[styles.title, {color: theme.text}]}>{t.saved.title}</Text>
-        <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.common.close}>
+        <Pressable style={styles.closeBtn} onPress={() => { Keyboard.dismiss(); onClose(); }} accessibilityRole="button" accessibilityLabel={t.common.close}>
           <MaterialIcons name="close" size={22} color={theme.text} />
         </Pressable>
       </View>
       {error ? <Text style={{color: theme.danger}}>{error}</Text> : null}
       {loading ? <Text style={{color: theme.muted}}>{t.route.searching}</Text> : null}
       {!loading && routes.length === 0 && !error ? <Text style={{color: theme.muted}}>{t.saved.empty}</Text> : null}
-      <FlatList
-        style={styles.list}
-        data={routes}
-        keyExtractor={(r) => r.id}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({item: r}) => (
+      {routes.length > 0 ? (
+        <TextInput
+          style={[styles.searchInput, {borderColor: theme.border, color: theme.text}]}
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t.common.searchPlaceholder}
+          placeholderTextColor={theme.muted}
+        />
+      ) : null}
+      {visible.map((r) => (
           <View style={styles.rowWrap}>
             {renamingId === r.id ? (
               <View style={styles.renameRow}>
@@ -88,7 +101,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
                 <Pressable disabled={busy || name.trim().length === 0} onPress={() => void onRename(r.id)} accessibilityRole="button" accessibilityLabel={t.common.save}>
                   <MaterialIcons name="check" size={22} color={theme.primary} />
                 </Pressable>
-                <Pressable disabled={busy} onPress={() => setRenamingId(null)} accessibilityRole="button" accessibilityLabel={t.common.close}>
+                <Pressable disabled={busy} onPress={() => { Keyboard.dismiss(); setRenamingId(null); }} accessibilityRole="button" accessibilityLabel={t.common.close}>
                   <MaterialIcons name="close" size={22} color={theme.muted} />
                 </Pressable>
               </View>
@@ -104,7 +117,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
                   </Text>
                 </View>
                 {busy ? <ActivityIndicator size="small" color={theme.primary} /> : null}
-                <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}]} disabled={busy} onPress={() => onOpen(r.id)}>
+                <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}]} disabled={busy} onPress={() => { Keyboard.dismiss(); onOpen(r.id); }}>
                   <Text style={styles.actionBtnText}>{t.saved.load}</Text>
                 </Pressable>
                 <Pressable style={[styles.actionBtn, styles.actionBtnOutline, {borderColor: theme.border}]} disabled={busy} onPress={() => { setRenamingId(r.id); setName(r.name ?? ""); }}>
@@ -116,13 +129,13 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
               </View>
             )}
           </View>
-        )}
-      />
+        ))}
     </View>
   );
 }
 const styles = StyleSheet.create({
-  sheet: {borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 12, gap: 8, maxHeight: "85%"},
+  sheet: {borderRadius: 20, borderWidth: 1, padding: 12, gap: 8, maxHeight: "85%"},
+  searchInput: {borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 14},
   headRow: {flexDirection: "row", alignItems: "center", gap: 8},
   title: {flex: 1, fontSize: 16, fontWeight: "700"},
   closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},

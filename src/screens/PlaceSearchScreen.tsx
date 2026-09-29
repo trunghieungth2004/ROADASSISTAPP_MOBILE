@@ -65,7 +65,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
   return (
     <View style={[styles.screen, {backgroundColor: theme.background, paddingTop: insets.top + 12}]}>
       <View style={styles.searchRow}>
-        <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.common.close}><MaterialIcons name="close" size={22} color={theme.text} /></Pressable>
+        <Pressable style={[styles.closeBtn, {backgroundColor: theme.danger}]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.common.close}><MaterialIcons name="close" size={20} color="#fff" /></Pressable>
         <View style={styles.searchCol}>
           <Text style={[styles.title, {color: theme.text}]}>{title}</Text>
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={placeholder} placeholderTextColor={theme.muted} value={search.input} onChangeText={search.handleInput} autoFocus />

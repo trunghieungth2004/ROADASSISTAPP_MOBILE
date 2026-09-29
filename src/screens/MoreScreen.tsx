@@ -1,5 +1,5 @@
 import {useCallback, useState} from "react";
-import {Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {Keyboard, Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect} from "@react-navigation/native";
@@ -76,6 +76,7 @@ export default function MoreScreen() {
   function openEdit() { setNameDraft(user?.displayName ?? ""); setEditError(null); setEditOpen(true); }
   async function onSaveName() {
     if (!token || !nameDraft.trim()) return;
+    Keyboard.dismiss();
     setEditError(null);
     try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); }
   }
@@ -104,8 +105,8 @@ export default function MoreScreen() {
             <Pressable style={[styles.editBtn, {backgroundColor: theme.primary}]} onPress={openEdit}><Text style={styles.editBtnText}>{t.common.save}</Text></Pressable>
           </View>
         </View>
-        <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
-          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><Text style={[styles.modalTitle, {color: theme.text}]}>{t.more.displayName}</Text>{editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}<TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} /><View style={styles.modalActions}><Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => setEditOpen(false)}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable><Pressable style={[styles.primary, {backgroundColor: theme.primary, opacity: !nameDraft.trim() ? 0.5 : 1}]} disabled={!nameDraft.trim()} onPress={() => void onSaveName()}><Text style={styles.primaryText}>{t.common.save}</Text></Pressable></View></View></View>
+        <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setEditOpen(false); }}>
+          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><Text style={[styles.modalTitle, {color: theme.text}]}>{t.more.displayName}</Text>{editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}<TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} /><View style={styles.modalActions}><Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { Keyboard.dismiss(); setEditOpen(false); }}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable><Pressable style={[styles.primary, {backgroundColor: theme.primary, opacity: !nameDraft.trim() ? 0.5 : 1}]} disabled={!nameDraft.trim()} onPress={() => void onSaveName()}><Text style={styles.primaryText}>{t.common.save}</Text></Pressable></View></View></View>
         </Modal>
         <Modal visible={servicesOpen} animationType="slide" onRequestClose={() => setServicesOpen(false)}>
           <OnboardingScreen t={t} busy={servicesBusy} error={servicesError} onFinish={(selected) => void onServicesFinish(selected)} onSkip={() => void onServicesSkip()} />

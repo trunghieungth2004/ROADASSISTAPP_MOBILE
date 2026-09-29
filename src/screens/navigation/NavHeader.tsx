@@ -1,5 +1,6 @@
-import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/AppText";
+import StatusRow from "../../components/StatusRow";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
@@ -48,18 +49,8 @@ export default function NavHeader(props: Props) {
           <MaterialIcons name="list" size={22} color={theme.text} />
         </Pressable>
       </View>
-      {props.rerouting ? (
-        <View style={styles.statusRow}>
-          <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={{color: theme.text}}>{t.nav.rerouting}</Text>
-        </View>
-      ) : null}
-      {!props.hasPos ? (
-        <View style={styles.statusRow}>
-          <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={{color: theme.text}}>{t.nav.locating}</Text>
-        </View>
-      ) : null}
+      {props.rerouting ? <StatusRow theme={theme} text={t.nav.rerouting} /> : null}
+      {!props.hasPos ? <StatusRow theme={theme} text={t.nav.locating} /> : null}
     </View>
   );
 }
@@ -74,5 +65,4 @@ const styles = StyleSheet.create({
   bannerText: {color: "#fff", fontSize: 17, fontWeight: "700", textAlign: "center"},
   endBtn: {borderRadius: 14, backgroundColor: "rgba(255,255,255,0.22)", paddingVertical: 8, paddingHorizontal: 14, alignItems: "center"},
   endText: {color: "#fff", fontSize: 14, fontWeight: "700"},
-  statusRow: {flexDirection: "row", alignItems: "center", gap: 8},
 });

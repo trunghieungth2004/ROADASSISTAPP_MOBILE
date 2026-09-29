@@ -1,7 +1,8 @@
 import type {RefObject} from "react";
 import {StyleSheet} from "react-native";
 import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
-import {maptilerStyleUrl} from "../../map/style";
+import {maptilerStyleUrlFor} from "../../map/style";
+import FlagPinImages from "../../components/MapPinImages";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
 import type {Flag} from "../../api/flags";
@@ -9,6 +10,7 @@ import NavFlags from "./NavFlags";
 
 type Props = {
   theme: AppTheme;
+  lang: string;
   route: RouteOption;
   pos: {lat: number; lng: number} | null;
   initialCenter: [number, number];
@@ -38,7 +40,7 @@ export default function NavMapView(props: Props) {
   return (
     <Map
       style={StyleSheet.absoluteFill}
-      mapStyle={maptilerStyleUrl ?? "https://demotiles.maplibre.org/style.json"}
+      mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"}
       logo={false}
       attribution={false}
       androidView="texture"
@@ -46,7 +48,8 @@ export default function NavMapView(props: Props) {
       onRegionDidChange={() => props.onRegionDid()}
     >
       <Camera ref={props.cameraRef} initialViewState={{center: props.initialCenter, zoom: 13}} />
-        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "b-dot": require("../../../assets/map/b-dot.png"), "flag-0": require("../../../assets/map/flag-0.png"), "flag-1": require("../../../assets/map/flag-1.png"), "flag-2": require("../../../assets/map/flag-2.png"), "flag-3": require("../../../assets/map/flag-3.png")}} />
+        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "b-dot": require("../../../assets/map/b-dot.png")}} />
+        <FlagPinImages />
       {props.pos ? (
         <GeoJSONSource id="nav-puck" data={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
           <Layer

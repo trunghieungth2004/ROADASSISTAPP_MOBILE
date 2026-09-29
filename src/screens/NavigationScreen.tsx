@@ -18,6 +18,8 @@ import {clearNavShade, updateNavShade} from "../services/navShade";
 import NavMapView from "./navigation/NavMapView";
 import NavHeader from "./navigation/NavHeader";
 import TurnListSheet from "./navigation/TurnListSheet";
+import {Fab, FabColumn} from "../components/Fab";
+import {snackAbove} from "../components/snackOffset";
 import FlagDetailSheet from "../components/FlagDetailSheet";
 import {hazardKind} from "../components/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
@@ -53,6 +55,8 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const fetchErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmSnack, setConfirmSnack] = useState<string | null>(null);
+  const confirmSnackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nav = useNavTracking({token, lang, t, dest, stops, width, vehicleType, initialRoute, seed, speak: voice.speak, resolveVoice: voice.resolveVoice});
   const startCoord = initialRoute.geometry.coordinates[0];
   const initialCenter: [number, number] = startCoord ? [startCoord[0], startCoord[1]] : [seed.lng, seed.lat];
@@ -63,6 +67,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   const [topCards, setTopCards] = useState<{flag: Flag; addedAt: number}[]>([]);
   const [nowTs, setNowTs] = useState(Date.now());
   const [headerH, setHeaderH] = useState(0);
+  const [bottomH, setBottomH] = useState(0);
   const CARD_TTL_MS = 30000;
   const MAX_TOP_CARDS = 3;
   const {uid} = useAuth();
@@ -105,6 +110,8 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   };
   async function onConfirmFlag(flagId: string) {
     setFlagBusy(true);
+    setConfirmSnack(t.flag.checkingRoute);
+    if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
     try {
       const res = await confirmFlag(flagId, token);
       void markVoted(flagId);
@@ -112,9 +119,13 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       closeFlag();
       setFlagsKey((k) => k + 1);
       const changed = await nav.rerouteForConfirm();
-      voice.speak(changed ? t.flag.rerouted : res.alreadyVoted ? t.flag.alreadyVoted : t.flag.confirmedMsg);
+      setConfirmSnack(changed ? t.flag.rerouted : res.alreadyVoted ? t.flag.alreadyVoted : t.flag.confirmedMsg);
+      if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
+      confirmSnackTimer.current = setTimeout(() => setConfirmSnack(null), 6000);
     } catch (err) {
-      voice.speak(toMessage(err));
+      setConfirmSnack(toMessage(err));
+      if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
+      confirmSnackTimer.current = setTimeout(() => setConfirmSnack(null), 6000);
     } finally {
       setFlagBusy(false);
     }
@@ -142,6 +153,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       setReportAt(null);
       setFlagsKey((k) => k + 1);
       voice.speak(t.flag.reported);
+      void nav.refreshRouteQuiet();
     } catch (err) {
       voice.speak(toMessage(err));
     } finally {
@@ -149,6 +161,10 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     }
   }
   async function onRemoveFlag(flagId: string) {
+    if (selectedFlag?.id === flagId && selectedFlag.status === "3") {
+      voice.speak(t.flag.lockedRemoveDenied);
+      return;
+    }
     setFlagBusy(true);
     try {
       await unflag(flagId, token);
@@ -166,7 +182,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     if (!key) {
       return;
     }
-    let flag: Flag;
+    let flag: Flag | null;
     try {
       flag = await getFlag(flagId, key);
     } catch (err) {
@@ -177,6 +193,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     }
     const me = uidRef.current;
     setFlagsKey((k) => k + 1);
+    if (!flag) {
+      return;
+    }
     if (me != null && flag.reporterId === me) {
       return;
     }
@@ -308,6 +327,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     <View style={[styles.root, {backgroundColor: theme.background}]}>
       <NavMapView
         theme={theme}
+        lang={lang}
         route={nav.route}
         pos={nav.pos}
         initialCenter={initialCenter}
@@ -372,7 +392,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
           <Text style={[styles.speedUnit, {color: theme.muted}]}>{t.nav.kmh}</Text>
         </View>
       </View>
-      <View style={[styles.bottomStack, {bottom: insets.bottom + 12}]}>
+      <View style={[styles.bottomStack, {bottom: insets.bottom + 12}]} onLayout={(e) => setBottomH(e.nativeEvent.layout.height)}>
         {nearestWarning ? (
           <View style={[styles.hazardCard, {backgroundColor: theme.paper, borderColor: cardKind.color}]}>
             <View style={[styles.voteSide, {opacity: showVotes ? 1 : 0}]}>
@@ -403,32 +423,32 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
           </View>
         </View>
       </View>
-      <View style={[styles.fabCol, {bottom: insets.bottom + 16}]}>
+      <FabColumn bottom={insets.bottom + 16}>
         {nav.hazardCount > 0 ? (
-          <Pressable style={[styles.fab, {backgroundColor: nav.hazardFocus ? theme.primary : theme.paper, borderColor: nav.hazardFocus ? theme.primary : theme.border}]} onPress={nav.cycleHazard} accessibilityRole="button" accessibilityLabel={t.nav.hazardFocus}>
+          <Fab theme={theme} variant={nav.hazardFocus ? "primary" : "paper"} label={t.nav.hazardFocus} onPress={nav.cycleHazard}>
             <Text style={[styles.hazardNumber, {color: nav.hazardFocus ? "#fff" : theme.primary}]}>{nav.hazardCount}</Text>
-          </Pressable>
+          </Fab>
         ) : null}
         {!nav.following ? (
-          <Pressable style={[styles.fab, {backgroundColor: theme.paper, borderColor: theme.border}, nav.recentering && styles.disabled]} disabled={nav.recentering} onPress={nav.onRecenter} accessibilityRole="button" accessibilityLabel={t.nav.recenter}>
+          <Fab theme={theme} label={t.nav.recenter} disabled={nav.recentering} onPress={nav.onRecenter}>
             <MaterialIcons name="my-location" size={22} color={theme.primary} />
-          </Pressable>
+          </Fab>
         ) : (
-          <View style={[styles.fab, {borderColor: theme.border, opacity: 0.4}]}>
+          <Fab theme={theme} variant="muted" label={t.nav.recenter}>
             <MaterialIcons name="my-location" size={22} color={theme.muted} />
-          </View>
+          </Fab>
         )}
-        <Pressable style={[styles.fab, {backgroundColor: theme.paper, borderColor: theme.border}]} onPress={voice.toggleMute} accessibilityRole="button" accessibilityLabel={voice.muted ? t.nav.unmute : t.nav.mute}>
+        <Fab theme={theme} label={voice.muted ? t.nav.unmute : t.nav.mute} onPress={voice.toggleMute}>
           <MaterialIcons name={voice.muted ? "volume-off" : "volume-up"} size={22} color={theme.primary} />
-        </Pressable>
-      </View>
-      <Pressable style={[styles.fab, styles.reportFab, {backgroundColor: theme.paper, borderColor: theme.border, top: insets.top + 88}, !nav.pos && styles.disabled]} disabled={!nav.pos} onPress={() => nav.pos && setReportAt({lat: nav.pos.lat, lng: nav.pos.lng})} accessibilityRole="button" accessibilityLabel={t.flag.reportTitle}>
+        </Fab>
+      </FabColumn>
+      <Fab theme={theme} label={t.flag.reportTitle} disabled={!nav.pos} onPress={() => nav.pos && setReportAt({lat: nav.pos.lat, lng: nav.pos.lng})} style={{position: "absolute", left: 12, top: insets.top + 88}}>
         <MaterialIcons name="add-alert" size={22} color={nav.pos ? theme.primary : theme.muted} />
-      </Pressable>
+      </Fab>
       {nav.error ? (
-        <Snack message={nav.error} severity="error" sticky bottom={insets.bottom + 180} dangerColor={theme.danger} onHide={nav.clearError} />
+        <Snack message={nav.error} severity="error" sticky bottom={snackAbove(insets.bottom + 12, bottomH)} dangerColor={theme.danger} onHide={nav.clearError} />
       ) : (
-        <Snack message={voiceError ?? fetchError ?? nav.notice} bottom={insets.bottom + 180} onHide={() => {}} />
+        <Snack message={voiceError ?? fetchError ?? confirmSnack ?? nav.notice} bottom={snackAbove(insets.bottom + 12, bottomH)} onHide={() => {}} />
       )}
       {listOpen ? (
         <TurnListSheet
@@ -481,8 +501,8 @@ const styles = StyleSheet.create({
   sheetRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
   centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
   centerWrap: {width: "100%", paddingHorizontal: 24},
-  disabled: {opacity: 0.6},
   sheetWrap: {width: "100%"},
+  navSheetRoot: {position: "absolute", left: 12, right: 12, bottom: 12},
   bottomStack: {position: "absolute", left: 88, right: 76, gap: 8},
   bottomBar: {borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 4, alignItems: "center"},
   hazardCard: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12},
@@ -506,8 +526,5 @@ const styles = StyleSheet.create({
   eta: {fontSize: 13, textAlign: "center"},
   bar: {height: 6, borderRadius: 3, overflow: "hidden", alignSelf: "stretch"},
   barFill: {height: 6, borderRadius: 3},
-  fabCol: {position: "absolute", right: 12, gap: 8, alignItems: "center"},
-  fab: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  reportFab: {position: "absolute", left: 12},
   hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
 });

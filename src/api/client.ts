@@ -36,6 +36,21 @@ export function toMessage(err: unknown): string {
   return "Something went wrong";
 }
 
+export const REQUEST_TIMEOUT_MS = 12000;
+
+export async function fetchWithTimeout(input: string, init: RequestInit = {}, ms: number = REQUEST_TIMEOUT_MS): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  const onAbort = (): void => ctrl.abort();
+  init.signal?.addEventListener("abort", onAbort);
+  try {
+    return await fetch(input, {...init, signal: ctrl.signal});
+  } finally {
+    clearTimeout(timer);
+    init.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   let res = await send(path, init, token);
   if (res.status === 401 && tokenRefresher) {
@@ -54,7 +69,7 @@ async function request<T>(path: string, init: RequestInit, token?: string): Prom
 }
 
 function send(path: string, init: RequestInit, token?: string): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
+  return fetchWithTimeout(`${API_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

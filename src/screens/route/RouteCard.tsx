@@ -1,5 +1,6 @@
 import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/AppText";
+import StatusRow from "../../components/StatusRow";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
@@ -26,7 +27,6 @@ type Props = {
   onSwap: () => void;
   onDeleteStop: (index: number) => void;
   onOpenVehicle: () => void;
-  onFind: () => void;
   onStart: () => void;
   onSave: () => void;
 };
@@ -57,10 +57,10 @@ export default function RouteCard(props: Props) {
             <Pressable key={`${s.lat},${s.lng},${i}`} style={[styles.chip, {borderColor: theme.primary}]} onPress={() => props.onDeleteStop(i)}><Text style={{color: theme.primary}}>{i + 1} · ×</Text></Pressable>
           ))}
         </View>
-        <Pressable style={[styles.input, styles.vehicleBtn, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
+        <Pressable style={[styles.input, styles.vehicleCompact, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
           <View style={styles.vehicleBtnRow}>
             <MaterialCommunityIcons name={vehicleIcon(props.activeVehicle?.type)} size={20} color={theme.primary} />
-            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? `${t.vehicle.types[props.activeVehicle.type as keyof typeof t.vehicle.types] ?? props.activeVehicle.type} · ${props.activeVehicle.baseWidth}m` : t.route.selectVehicle}</Text>
+            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? `${props.activeVehicle.baseWidth}m` : t.route.selectVehicle}</Text>
             <MaterialIcons name="expand-more" size={20} color={theme.muted} />
           </View>
         </Pressable>
@@ -70,8 +70,8 @@ export default function RouteCard(props: Props) {
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (props.busy || props.starting) && styles.disabled]} disabled={props.busy || props.starting} onPress={props.onStart}>{props.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.nav.start}</Text>}</Pressable>
           <Pressable style={[styles.primary, styles.saveBtn, {borderColor: theme.primary}, props.busy && styles.disabled]} disabled={props.busy} onPress={props.onSave}><Text style={[styles.primaryText, {color: theme.primary}]}>{t.route.saveRoute}</Text></Pressable>
         </View>
-      ) : props.origin && props.dest && props.activeVehicle ? (
-        <Pressable style={[styles.primary, {backgroundColor: theme.primary}, props.busy && styles.disabled]} disabled={props.busy} onPress={props.onFind}>{props.busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.route.find}</Text>}</Pressable>
+      ) : props.busy ? (
+        <StatusRow theme={theme} text={t.route.findingRoute} />
       ) : null}
       {props.widthBlocks.length > 0 ? (
         <View style={[styles.resultCard, {borderColor: theme.border}]}>
@@ -91,10 +91,13 @@ export default function RouteCard(props: Props) {
 const styles = StyleSheet.create({
   card: {width: "100%", borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
   row: {flexDirection: "row", gap: 8, alignItems: "center"},
+  vehicleRow: {flexDirection: "row", gap: 8, alignItems: "center"},
+  vehicleHalf: {flex: 1, minWidth: 0},
+  vehicleSpacer: {flex: 1},
   stopVehicleRow: {flexDirection: "row", gap: 8, alignItems: "center"},
   stopGroup: {flexDirection: "row", flexWrap: "wrap", gap: 8, flex: 1, alignItems: "center"},
   plusBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  vehicleBtn: {flex: 1, justifyContent: "center", minHeight: 42},
+  vehicleCompact: {justifyContent: "center", minHeight: 42, maxWidth: "45%"},
   fieldCol: {flex: 1, gap: 8, minWidth: 0},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
   selectBtn: {justifyContent: "center", minHeight: 42},

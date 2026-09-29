@@ -11,6 +11,12 @@ export const maptilerStyleUrl = config.maptilerKey
   ? `https://api.maptiler.com/maps/streets-v4/style.json?key=${config.maptilerKey}`
   : undefined;
 
+export function maptilerStyleUrlFor(lang: string): string | undefined {
+  if (!config.maptilerKey) return undefined;
+  const code = lang === "vi" ? "vi" : "en";
+  return `https://api.maptiler.com/maps/streets-v4/style.json?key=${config.maptilerKey}&language=${code}`;
+}
+
 export function brandTileUrl(): string {
   const n = 2 ** TILE_ZOOM;
   const [lng, lat] = mapDefaults.center;

@@ -5,12 +5,20 @@ import {flagStatusColor} from "./flagStatus";
 
 type Props = {flags: Flag[]; onPick: (flag: Flag) => void};
 
-const GROUPS = [
-  {status: "1", icon: "flag-1"},
-  {status: "2", icon: "flag-2"},
-  {status: "3", icon: "flag-3"},
-  {status: "0", icon: "flag-0"},
-];
+const TYPES = ["accident", "flood", "obstruction"];
+
+function typeKey(type: string | undefined): string | null {
+  if (!type) return null;
+  const lower = type.toLowerCase();
+  return (TYPES as string[]).includes(lower) ? lower : null;
+}
+
+function pinIcon(flag: {type?: string; status: string}): string {
+  const t = typeKey(flag.type);
+  const s = bucket(flag.status);
+  if (t && s !== "0") return `pin-${t}-${s}`;
+  return s === "0" ? "flag-0" : `flag-${s}`;
+}
 
 function ring(lat: number, lng: number, radiusMeters: number): [number, number][] {
   const pts: [number, number][] = [];
@@ -47,8 +55,14 @@ function FlagMapLayers({flags, onPick}: Props) {
       const hit = byId.get(id);
       if (hit) onPick(hit);
     };
-    return GROUPS.map((g) => {
-      const list = flags.filter((f) => bucket(f.status) === g.status);
+    const byIcon = new Map<string, Flag[]>();
+    for (const f of flags) {
+      const icon = pinIcon(f);
+      const arr = byIcon.get(icon) ?? [];
+      arr.push(f);
+      byIcon.set(icon, arr);
+    }
+    return [...byIcon.entries()].map(([icon, list]) => {
       const fills: FillFC = {
         type: "FeatureCollection",
         features: list.map((f) => ({
@@ -65,20 +79,20 @@ function FlagMapLayers({flags, onPick}: Props) {
           properties: {id: f.id},
         })),
       };
-      return {status: g.status, icon: g.icon, fills, dots, ids: list.map((f) => f.id), pick};
+      return {status: bucket(list[0].status), icon, fills, dots, ids: list.map((f) => f.id), pick};
     });
   }, [flags, onPick]);
   return (
     <>
       {groups.map((g) => (
-          <GeoJSONSource key={`flag-fill-${g.status}`} id={`flag-fill-${g.status}`} data={g.fills}>
-            <Layer type="fill" id={`flag-fill-${g.status}`} style={{fillColor: flagStatusColor(g.status === "0" ? "x" : g.status), fillOpacity: 0.25}} />
+          <GeoJSONSource key={`flag-fill-${g.icon}`} id={`flag-fill-${g.icon}`} data={g.fills}>
+            <Layer type="fill" id={`flag-fill-${g.icon}`} style={{fillColor: flagStatusColor(g.status === "0" ? "x" : g.status), fillOpacity: 0.25}} />
           </GeoJSONSource>
       ))}
       {groups.map((g) => (
           <GeoJSONSource
-            key={`flag-dot-${g.status}`}
-            id={`flag-dot-${g.status}`}
+            key={`flag-dot-${g.icon}`}
+            id={`flag-dot-${g.icon}`}
             data={g.dots}
             onPress={(e: unknown) => {
               const features = (e as {nativeEvent?: {features?: {properties?: {id?: string}}[]}}).nativeEvent?.features;
@@ -87,7 +101,7 @@ function FlagMapLayers({flags, onPick}: Props) {
           >
             <Layer
               type="symbol"
-              id={`flag-dot-${g.status}`}
+              id={`flag-dot-${g.icon}`}
               style={{iconImage: g.icon, iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
             />
           </GeoJSONSource>

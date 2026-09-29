@@ -1,10 +1,13 @@
 import type {RefObject} from "react";
 import {useRef, type MutableRefObject} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
+import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/AppText";
 import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
-import {maptilerStyleUrl} from "../../map/style";
+import {maptilerStyleUrlFor} from "../../map/style";
+import FlagPinImages from "../../components/MapPinImages";
+import {Fab} from "../../components/Fab";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {RouteOption} from "../../api/routes";
@@ -15,6 +18,7 @@ import type {Flag} from "../../api/flags";
 
 type Props = {
   t: Strings;
+  lang: string;
   theme: AppTheme;
   cameraRef: RefObject<CameraRef | null>;
   routes: RouteOption[];
@@ -23,6 +27,7 @@ type Props = {
   origin: Point | null;
   dest: Point | null;
   gps: Point | null;
+  flagPoint: Point | null;
   stops: Stop[];
   dragPos: Point | null;
   selectedMid: [number, number] | null;
@@ -36,6 +41,7 @@ type Props = {
   onRegionDid: (e: unknown) => void;
   onSelectIndex: (i: number) => void;
   onCancelPick: () => void;
+  onMapReady: () => void;
   flagCamRef: MutableRefObject<CamState>;
   flagsToken: string | null;
   flagsKey: number;
@@ -59,18 +65,16 @@ export default function RouteMapView(props: Props) {
           if (e.nativeEvent.touches.length > 1) touchRef.current = {stamp: Date.now()};
         }}
       >
-      <Map style={StyleSheet.absoluteFill} mapStyle={maptilerStyleUrl ?? "https://demotiles.maplibre.org/style.json"} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)}>
+      <Map style={StyleSheet.absoluteFill} mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => props.onMapReady()}>
         <Camera ref={props.cameraRef} initialViewState={{center: HCMC_CENTER, zoom: 13}} />
         <Images images={{
           "a-dot": require("../../../assets/map/a-dot.png"),
           "b-dot": require("../../../assets/map/b-dot.png"),
           "stop-dot": require("../../../assets/map/stop-dot.png"),
           "handle2-dot": require("../../../assets/map/handle2-dot.png"),
-          "flag-0": require("../../../assets/map/flag-0.png"),
-          "flag-1": require("../../../assets/map/flag-1.png"),
-          "flag-2": require("../../../assets/map/flag-2.png"),
-          "flag-3": require("../../../assets/map/flag-3.png"),
+          "pin-preview": require("../../../assets/map/pin-preview.png"),
         }} />
+        <FlagPinImages />
         {props.routes.map((r, i) => i === props.selectedIndex ? null : (
           <GeoJSONSource key={`route-${i}`} id={`route-${i}`} data={{type: "Feature", geometry: r.geometry, properties: {}}}><Layer type="line" id={`routeLine-${i}`} beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource>
         ))}
@@ -91,6 +95,11 @@ export default function RouteMapView(props: Props) {
         {props.gps ? (
           <GeoJSONSource id="gps-dot" data={pointFeature(props.gps.lng, props.gps.lat)}>
             <Layer type="circle" id="gps-dot-circle" style={{circleRadius: 8, circleColor: "#0284c7", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}} />
+          </GeoJSONSource>
+        ) : null}
+        {props.flagPoint ? (
+          <GeoJSONSource id="flag-point" data={pointFeature(props.flagPoint.lng, props.flagPoint.lat)}>
+            <Layer type="symbol" id="flag-point-icon" style={{iconImage: "pin-preview", iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
         {props.stops.map((s, i) => (
@@ -119,15 +128,15 @@ export default function RouteMapView(props: Props) {
         </View>
       ) : null}
       {props.dragging ? <View style={StyleSheet.absoluteFill} {...props.dragPan.panHandlers} /> : null}
-      {props.dragging ? (
-        <View style={[styles.dragHint, {top: insets.top + 64}]} pointerEvents="none">
-          <Text style={styles.dragHintText}>{t.route.dragHint}</Text>
-        </View>
-      ) : null}
       {props.pickingFor ? (
-        <Pressable style={[styles.pickChipTop, {backgroundColor: theme.paper, borderColor: theme.primary, top: insets.top + 12}]} onPress={props.onCancelPick}>
-          {props.pickBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight: "700"}}>{t.route.pickOnMap} · {props.pickingFor === "origin" ? "A" : props.pickingFor === "destination" ? "B" : "+"}</Text>}
-        </Pressable>
+        <Fab theme={theme} variant="danger" size={36} label={t.common.close} onPress={props.onCancelPick} style={{position: "absolute", left: 12, top: insets.top + 12, zIndex: 10, elevation: 4}}>
+          <MaterialIcons name="close" size={20} color="#fff" />
+        </Fab>
+      ) : null}
+      {props.pickingFor && props.pickBusy ? (
+        <View style={[styles.pickResolving, {top: insets.top + 56}]} pointerEvents="none">
+          <ActivityIndicator size="small" color="#fff" />
+        </View>
       ) : null}
     </>
   );
@@ -137,7 +146,5 @@ const styles = StyleSheet.create({
   topBar: {position: "absolute", left: 72, right: 72, alignItems: "center"},
   topBarContent: {paddingHorizontal: 12, gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
-  dragHint: {position: "absolute", left: 0, right: 0, alignItems: "center"},
-  dragHintText: {backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", fontSize: 12, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, overflow: "hidden"},
-  pickChipTop: {position: "absolute", left: 12, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, zIndex: 10, elevation: 4},
+  pickResolving: {position: "absolute", left: 12, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", zIndex: 10, elevation: 4},
 });
