@@ -413,6 +413,11 @@ export const en = {
     phone: "Phone number",
     needAccount: "No account? Create one",
     haveAccount: "Have an account? Sign in",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    emailRequired: "Enter your email.",
+    passwordRequired: "Enter your password.",
+    passwordShort: "Password must be at least 6 characters.",
   },
 };
 export type Strings = typeof en;

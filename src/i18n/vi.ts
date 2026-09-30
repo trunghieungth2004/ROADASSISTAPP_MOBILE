@@ -414,5 +414,10 @@ export const vi: Strings = {
     phone: "Số điện thoại",
     needAccount: "Chưa có tài khoản? Tạo mới",
     haveAccount: "Đã có tài khoản? Đăng nhập",
+    showPassword: "Hiện mật khẩu",
+    hidePassword: "Ẩn mật khẩu",
+    emailRequired: "Hãy nhập email.",
+    passwordRequired: "Hãy nhập mật khẩu.",
+    passwordShort: "Mật khẩu phải có ít nhất 6 ký tự.",
   },
 };
