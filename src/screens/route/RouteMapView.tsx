@@ -1,5 +1,5 @@
 import type {RefObject} from "react";
-import {useRef, type MutableRefObject} from "react";
+import {useEffect, useRef, type MutableRefObject} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import type {Strings} from "../../i18n/en";
 import type {RouteOption} from "../../api/routes";
 import {HCMC_CENTER, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
 import {pointFeature} from "./routeGeo";
+import {pillMeta} from "./routeSummary";
 import RouteFlags from "./RouteFlags";
 import type {Flag} from "../../api/flags";
 
@@ -53,10 +54,15 @@ export default function RouteMapView(props: Props) {
   const {t, theme} = props;
   const insets = useSafeAreaInsets();
   const touchRef = useRef({stamp: 0});
+  const pillScrollRef = useRef<ScrollView | null>(null);
+  const pillX = useRef<number[]>([]);
   const guardedPress = (e: unknown): void => {
     if (Date.now() - touchRef.current.stamp < 600) return;
     props.onMapPress(e);
   };
+  useEffect(() => {
+    pillScrollRef.current?.scrollTo({x: Math.max(0, (pillX.current[props.selectedIndex] ?? 0) - 24), animated: true});
+  }, [props.selectedIndex]);
   return (
     <>
       <View
@@ -118,12 +124,30 @@ export default function RouteMapView(props: Props) {
       </View>
       {props.routes.length > 1 ? (
         <View style={[styles.topBar, {top: insets.top + 12}]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topBarContent}>
-            {props.routes.map((r, i) => (
-              <Pressable key={i} style={[styles.pill, {backgroundColor: i === props.selectedIndex ? theme.primary : theme.paper, borderColor: theme.border}]} onPress={() => props.onSelectIndex(i)}>
-                <Text style={{color: i === props.selectedIndex ? "#fff" : theme.text, fontWeight: "700"}}>{i + 1} · {(r.distanceMeters / 1000).toFixed(1)} {t.route.km} · {Math.round(r.durationSeconds / 60)} {t.route.min}</Text>
-              </Pressable>
-            ))}
+          <ScrollView ref={pillScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topBarContent}>
+            {props.routes.map((r, i) => {
+              const meta = pillMeta(props.routes, i);
+              const selected = i === props.selectedIndex;
+              return (
+                <Pressable
+                  key={i}
+                  style={[styles.pill, {backgroundColor: selected ? theme.primary : theme.paper, borderColor: theme.border}]}
+                  onPress={() => props.onSelectIndex(i)}
+                  onLayout={(e) => {
+                    pillX.current[i] = e.nativeEvent.layout.x;
+                  }}
+                >
+                  <View style={styles.pillInner}>
+                    {meta.hazards > 0 ? (
+                      <MaterialIcons name="warning-amber" size={16} color={selected ? "#fff" : "#f59e0b"} />
+                    ) : meta.best ? (
+                      <MaterialIcons name="check-circle" size={16} color={selected ? "#fff" : theme.primary} />
+                    ) : null}
+                    <Text style={{color: selected ? "#fff" : theme.text, fontWeight: "700"}}>{i + 1} · {(r.distanceMeters / 1000).toFixed(1)} {t.route.km} · {Math.round(r.durationSeconds / 60)} {t.route.min}{meta.hazards > 0 ? ` · ${meta.hazards}` : ""}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
       ) : null}
@@ -146,5 +170,6 @@ const styles = StyleSheet.create({
   topBar: {position: "absolute", left: 72, right: 72, alignItems: "center"},
   topBarContent: {paddingHorizontal: 12, gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
+  pillInner: {flexDirection: "row", alignItems: "center", gap: 4},
   pickResolving: {position: "absolute", left: 12, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", zIndex: 10, elevation: 4},
 });
