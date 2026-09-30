@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {filterFlags, timeAgoLabel, type AgoStrings} from "../../../../src/screens/hazards/hazardFilter";
+import {filterFlags, pruneFlag, timeAgoLabel, type AgoStrings} from "../../../../src/screens/hazards/hazardFilter";
 import type {Flag} from "../../../../src/api/flags";
 
 const ago: AgoStrings = {justNow: "Just now", minAgo: "{n} min ago", hourAgo: "{n} hr ago", dayAgo: "{n} days ago"};
@@ -21,6 +21,12 @@ test("type filter keeps only matching flags", () => {
 test("flags without a usable timestamp sort last", () => {
   const flags = [flag("a", "FLOOD"), flag("b", "FLOOD", "not-a-date"), flag("c", "FLOOD", "2026-09-28T10:00:00.000Z")];
   expect(filterFlags(flags, "ALL").map((f) => f.id)).toEqual(["c", "a", "b"]);
+});
+
+test("pruneFlag drops the removed report and keeps the rest", () => {
+  const flags = [flag("a", "FLOOD"), flag("b", "ACCIDENT")];
+  expect(pruneFlag(flags, "a").map((f) => f.id)).toEqual(["b"]);
+  expect(pruneFlag(flags, "zzz")).toBe(flags);
 });
 
 test("timeAgoLabel covers just now through days", () => {

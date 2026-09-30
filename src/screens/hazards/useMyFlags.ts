@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from "react";
 import {myFlags, unflag, type Flag} from "../../api/flags";
 import {toMessage} from "../../api/client";
 import {createTaskEpoch} from "../route/taskEpoch";
+import {pruneFlag} from "./hazardFilter";
 
 export function useMyFlags(token: string | null) {
   const [flags, setFlags] = useState<Flag[]>([]);
@@ -61,5 +62,8 @@ export function useMyFlags(token: string | null) {
     [token, busyId],
   );
   const clearError = useCallback((): void => setError(null), []);
-  return {flags, loading, refreshing, busyId, error, refresh, remove, clearError};
+  const removeLocal = useCallback((flagId: string): void => {
+    setFlags((prev) => pruneFlag(prev, flagId));
+  }, []);
+  return {flags, loading, refreshing, busyId, error, refresh, remove, removeLocal, clearError};
 }

@@ -18,6 +18,10 @@ export function filterFlags(flags: Flag[], filter: HazardFilter): Flag[] {
   return list;
 }
 
+export function pruneFlag(flags: Flag[], flagId: string): Flag[] {
+  return flags.some((f) => f.id === flagId) ? flags.filter((f) => f.id !== flagId) : flags;
+}
+
 export function timeAgoLabel(createdAt: string | undefined, nowMs: number, s: AgoStrings): string | null {
   if (!createdAt) return null;
   const at = Date.parse(createdAt);

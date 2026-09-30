@@ -1,8 +1,9 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {FlatList, Pressable, RefreshControl, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {useFocusEffect} from "@react-navigation/native";
 import * as Location from "expo-location";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
@@ -10,6 +11,8 @@ import FlagDetailSheet from "../components/FlagDetailSheet";
 import StatusRow from "../components/StatusRow";
 import {Fab} from "../components/Fab";
 import {snackAbove} from "../components/snackOffset";
+import {isStaleForRefresh} from "../components/feedback";
+import {ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
@@ -35,6 +38,29 @@ export default function HazardScreen() {
   const [snack, setSnack] = useState<string | null>(null);
   const [pos, setPos] = useState<{lat: number; lng: number} | null>(null);
   const focusN = useRef(0);
+  const lastRefreshRef = useRef(0);
+  const refreshMine = mine.refresh;
+  const removeMineLocal = mine.removeLocal;
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      if (isStaleForRefresh(lastRefreshRef.current, now)) {
+        lastRefreshRef.current = now;
+        refreshMine();
+      }
+    }, [refreshMine]),
+  );
+  useEffect(() => {
+    ensurePushConfigured();
+    return subscribeHazardPush((data: HazardPushData) => {
+      if (data.removed) {
+        removeMineLocal(data.flagId);
+        setSelected((cur) => (cur?.id === data.flagId ? null : cur));
+      }
+      lastRefreshRef.current = Date.now();
+      refreshMine();
+    }, "hazards");
+  }, [refreshMine, removeMineLocal]);
   useEffect(() => {
     let alive = true;
     void (async () => {
