@@ -102,6 +102,7 @@ export const vi: Strings = {
     tapToSet: "Chạm bản đồ để chọn",
     addStop: "Thêm điểm dừng",
     stops: "Điểm dừng",
+    stopRemove: "Xóa điểm dừng",
     vehicleCta: "Thêm xe của bạn trước để lập lộ trình",
     profileFailed: "Không tải được hồ sơ",
     findingRoute: "Đang tìm đường…",

@@ -6,12 +6,16 @@ import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {HazardZone, RouteOption, WidthBlock} from "../../api/routes";
 import type {MeVehicle} from "../../api/users";
+import {formatPoint} from "../../api/places";
+import {vehicleMeta} from "../../components/vehicleMeta";
 import {MAX_STOPS, type Point, type SearchField, type Stop} from "./types";
 import {vehicleIcon} from "./routeGeo";
+import {useStopLabels} from "./useStopLabels";
 
 type Props = {
   t: Strings;
   theme: AppTheme;
+  lang: string;
   originText: string;
   destText: string;
   stops: Stop[];
@@ -33,6 +37,8 @@ type Props = {
 
 export default function RouteCard(props: Props) {
   const {t, theme} = props;
+  const stopLabels = useStopLabels(props.stops, props.lang);
+  const canAddStop = props.stops.length < MAX_STOPS;
   return (
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
       <View style={styles.row}>
@@ -48,19 +54,25 @@ export default function RouteCard(props: Props) {
       </View>
       <View style={styles.stopVehicleRow}>
         <View style={styles.stopGroup}>
-          {props.stops.length < MAX_STOPS ? (
-            <Pressable style={[styles.plusBtn, {borderColor: theme.primary}]} onPress={() => props.onOpenSearch("stop")} accessibilityRole="button" accessibilityLabel={t.route.addStop}>
-              <MaterialIcons name="add" size={20} color={theme.primary} />
-            </Pressable>
-          ) : null}
+          <Pressable style={[styles.plusBtn, {borderColor: canAddStop ? theme.primary : theme.border}, !canAddStop && styles.disabled]} disabled={!canAddStop} onPress={() => props.onOpenSearch("stop")} accessibilityRole="button" accessibilityLabel={t.route.addStop}>
+            <MaterialIcons name="add" size={20} color={canAddStop ? theme.primary : theme.muted} />
+          </Pressable>
           {props.stops.map((s, i) => (
-            <Pressable key={`${s.lat},${s.lng},${i}`} style={[styles.chip, {borderColor: theme.primary}]} onPress={() => props.onDeleteStop(i)}><Text style={{color: theme.primary}}>{i + 1} · ×</Text></Pressable>
+            <View key={`${s.lat},${s.lng},${i}`} style={[styles.chip, {borderColor: theme.primary}]}>
+              <View style={[styles.stopBadge, {backgroundColor: theme.primary}]}>
+                <Text style={styles.stopBadgeText}>{i + 1}</Text>
+              </View>
+              <Text style={[styles.chipLabel, {color: theme.primary}]} numberOfLines={1}>{stopLabels[i] ?? formatPoint(s.lat, s.lng)}</Text>
+              <Pressable onPress={() => props.onDeleteStop(i)} hitSlop={6} accessibilityRole="button" accessibilityLabel={t.route.stopRemove}>
+                <MaterialIcons name="close" size={16} color={theme.primary} />
+              </Pressable>
+            </View>
           ))}
         </View>
         <Pressable style={[styles.input, styles.vehicleCompact, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
           <View style={styles.vehicleBtnRow}>
             <MaterialCommunityIcons name={vehicleIcon(props.activeVehicle?.type)} size={20} color={theme.primary} />
-            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? `${props.activeVehicle.baseWidth}m` : t.route.selectVehicle}</Text>
+            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? vehicleMeta(props.activeVehicle.baseWidth, props.activeVehicle.baseHeight, null, t) : t.route.selectVehicle}</Text>
             <MaterialIcons name="expand-more" size={20} color={theme.muted} />
           </View>
         </Pressable>
@@ -104,7 +116,10 @@ const styles = StyleSheet.create({
   swapBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   vehicleBtnRow: {flexDirection: "row", alignItems: "center", gap: 8},
   vehicleBtnText: {flex: 1, fontSize: 14, textAlign: "center"},
-  chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
+  chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6},
+  stopBadge: {width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center"},
+  stopBadgeText: {color: "#fff", fontSize: 11, fontWeight: "700"},
+  chipLabel: {fontSize: 12, fontWeight: "600", flexShrink: 1, maxWidth: 140},
   actionRow: {flexDirection: "row", gap: 8},
   primary: {flex: 1, borderRadius: 8, padding: 12, alignItems: "center"},
   saveBtn: {borderWidth: 1, backgroundColor: "transparent"},

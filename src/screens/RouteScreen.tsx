@@ -647,6 +647,7 @@ export default function RouteScreen() {
         <RouteCard
           t={t}
           theme={theme}
+          lang={lang}
           originText={originText}
           destText={destText}
           stops={stops}

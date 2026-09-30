@@ -101,6 +101,7 @@ export const en = {
     tapToSet: "Tap map to set",
     addStop: "Add stop",
     stops: "Stops",
+    stopRemove: "Remove stop",
     vehicleCta: "Add your vehicle first to plan a route",
     profileFailed: "Couldn't load your profile",
     findingRoute: "Finding route…",
