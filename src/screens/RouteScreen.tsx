@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import {ActivityIndicator, BackHandler, Keyboard, Modal, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation} from "@react-navigation/native";
-import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
+import {AppText as Text} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
@@ -32,6 +32,7 @@ import {shouldRetryCenter} from "./route/cameraIntent";
 import RouteMapView from "./route/RouteMapView";
 import RouteCard from "./route/RouteCard";
 import VehiclePickerSheet from "../components/VehiclePickerSheet";
+import SaveRouteSheet from "../components/SaveRouteSheet";
 import {Fab, FabColumn} from "../components/Fab";
 import {snackAbove} from "../components/snackOffset";
 
@@ -59,7 +60,6 @@ export default function RouteScreen() {
   const [snack, setSnack] = useState<string | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [saveName, setSaveName] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
   const [searchingFor, setSearchingFor] = useState<SearchField | null>(null);
   const [starting, setStarting] = useState(false);
@@ -527,18 +527,16 @@ export default function RouteScreen() {
   }
   async function onSave() {
     if (!token || !origin || !dest || !result) return;
-    setSaveName("");
     setSaveOpen(true);
   }
-  async function onSaveRoute() {
+  async function onSaveRoute(name: string | undefined) {
     if (!token || !origin || !dest || !result) return;
     Keyboard.dismiss();
     setSaveBusy(true);
     setError(null);
     try {
-      await saveRoute({name: saveName.trim() || undefined, originLat: origin.lat, originLng: origin.lng, destLat: dest.lat, destLng: dest.lng, stops: stops.map((stop) => ({lat: stop.lat, lng: stop.lng})), width: activeVehicle?.baseWidth, distanceMeters: result.distanceMeters, durationSeconds: result.durationSeconds, source: result.source, geometry: result.geometry}, token);
+      await saveRoute({name, originLat: origin.lat, originLng: origin.lng, destLat: dest.lat, destLng: dest.lng, stops: stops.map((stop) => ({lat: stop.lat, lng: stop.lng})), width: activeVehicle?.baseWidth, distanceMeters: result.distanceMeters, durationSeconds: result.durationSeconds, source: result.source, geometry: result.geometry}, token);
       setSaveOpen(false);
-      setSaveName("");
       setSnack(t.route.savedMsg);
     } catch (err) {
       setSaveOpen(false);
@@ -706,22 +704,24 @@ export default function RouteScreen() {
           </View>
         </View>
       ) : null}
-      <Modal visible={saveOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setSaveOpen(false); }}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, {backgroundColor: theme.paper}]}>
-            <Text style={[styles.modalTitle, {color: theme.text}]}>{t.route.saveRoute}</Text>
-            <TextInput style={[styles.modalInput, {borderColor: theme.border, color: theme.text}]} value={saveName} onChangeText={setSaveName} maxLength={120} autoFocus placeholder={t.route.routeName} placeholderTextColor={theme.muted} />
-            <View style={styles.modalActions}>
-              <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { Keyboard.dismiss(); setSaveOpen(false); }}>
-                <Text style={{color: theme.text}}>{t.common.close}</Text>
-              </Pressable>
-              <Pressable style={[styles.chip, {backgroundColor: theme.primary, borderColor: theme.primary}, saveBusy && styles.disabled]} disabled={saveBusy} onPress={() => void onSaveRoute()}>
-                {saveBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: "#fff", fontWeight: "700"}}>{t.common.save}</Text>}
-              </Pressable>
-            </View>
+      {saveOpen && result ? (
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); setSaveOpen(false); }} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
+            <SaveRouteSheet
+              t={t}
+              theme={theme}
+              originText={originText}
+              destText={destText}
+              distanceM={result.distanceMeters}
+              durationSec={result.durationSeconds}
+              busy={saveBusy}
+              onClose={() => { Keyboard.dismiss(); setSaveOpen(false); }}
+              onSave={(name) => void onSaveRoute(name)}
+            />
           </View>
         </View>
-      </Modal>
+      ) : null}
       {error ? (
         <Snack message={error} severity="error" sticky bottom={snackBottom} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : snack ? (
@@ -802,9 +802,4 @@ const styles = StyleSheet.create({
   hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   disabled: {opacity: 0.6},
-  modalOverlay: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24},
-  modalCard: {borderRadius: 16, padding: 16, gap: 12},
-  modalTitle: {fontSize: 16, fontWeight: "700"},
-  modalInput: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},
-  modalActions: {flexDirection: "row", justifyContent: "flex-end", gap: 8},
 });
