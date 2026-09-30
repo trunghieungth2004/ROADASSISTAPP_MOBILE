@@ -2,7 +2,8 @@ import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-nat
 import {AppText as Text} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {darkTheme, lightTheme} from "../theme";
+import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import Snack from "../components/Snack";
 import type {Strings} from "../i18n/en";
 import type {AppPermissionStates, PermissionState} from "../services/permissions";
 
@@ -12,6 +13,8 @@ type Props = {
   busy: boolean;
   showBackground: boolean;
   canDone: boolean;
+  grantError: string | null;
+  onHideGrantError: () => void;
   onGrantNotifications: () => void;
   onGrantBackground: () => void;
   onOpenBattery: () => void;
@@ -21,7 +24,7 @@ type Props = {
 
 function Row({t, theme, icon, title, desc, state, busy, onGrant}: {
   t: Strings;
-  theme: {primary: string; text: string; muted: string; border: string; paper: string};
+  theme: AppTheme;
   icon: string;
   title: string;
   desc: string;
@@ -48,12 +51,12 @@ function Row({t, theme, icon, title, desc, state, busy, onGrant}: {
   );
 }
 
-export default function PermissionGateScreen({t, states, busy, showBackground, canDone, onGrantNotifications, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
+export default function PermissionGateScreen({t, states, busy, showBackground, canDone, grantError, onHideGrantError, onGrantNotifications, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.root, {backgroundColor: theme.background, paddingTop: insets.top + 24}]}>
+    <View style={[styles.root, {backgroundColor: theme.background, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16}]}>
       <ScrollView contentContainerStyle={styles.body}>
         <MaterialIcons name="verified-user" size={48} color={theme.primary} />
         <Text style={[styles.title, {color: theme.text}]}>{t.more.gateTitle}</Text>
@@ -80,14 +83,16 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
           />
         ) : null}
         {showBackground ? (
-          <View style={[styles.row, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+          <View style={[styles.stepRow, {borderColor: theme.border}]}>
             <MaterialIcons name="battery-charging-full" size={26} color={theme.primary} />
             <View style={styles.rowText}>
               <Text style={[styles.rowTitle, {color: theme.text}]}>{t.more.permBattery}</Text>
               <Text style={[styles.rowDesc, {color: theme.muted}]}>{t.more.permBatteryHint}</Text>
+              <Text style={[styles.stepManual, {color: theme.muted}]}>{t.more.gateManual}</Text>
             </View>
-            <Pressable style={[styles.grantBtn, {backgroundColor: theme.primary}]} onPress={onOpenBattery} accessibilityRole="button" accessibilityLabel={t.more.permOpenSettings}>
-              <Text style={styles.grantText}>{t.more.permOpenSettings}</Text>
+            <Pressable style={[styles.stepBtn, {borderColor: theme.border}]} onPress={onOpenBattery} accessibilityRole="button" accessibilityLabel={t.more.permOpenSettings}>
+              <Text style={[styles.stepText, {color: theme.primary}]}>{t.more.permOpenSettings}</Text>
+              <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
             </Pressable>
           </View>
         ) : null}
@@ -98,6 +103,7 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
           <Text style={styles.doneText}>{t.more.gateDone}</Text>
         </Pressable>
       </ScrollView>
+      <Snack message={grantError} severity="error" sticky bottom={insets.bottom + 16} dangerColor={theme.danger} onHide={onHideGrantError} />
     </View>
   );
 }
@@ -112,6 +118,10 @@ const styles = StyleSheet.create({
   rowDesc: {fontSize: 13},
   grantBtn: {borderRadius: 999, paddingVertical: 10, paddingHorizontal: 20, alignItems: "center"},
   grantText: {color: "#fff", fontWeight: "700", fontSize: 14},
+  stepRow: {flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderStyle: "dashed", borderRadius: 16, padding: 16},
+  stepManual: {fontSize: 12, fontStyle: "italic"},
+  stepBtn: {flexDirection: "row", alignItems: "center", gap: 2, borderWidth: 1, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16},
+  stepText: {fontWeight: "700", fontSize: 14},
   skipBtn: {alignItems: "center", paddingVertical: 12},
   skipText: {fontSize: 15, fontWeight: "700"},
   doneBtn: {borderRadius: 14, padding: 15, alignItems: "center", marginTop: 4},

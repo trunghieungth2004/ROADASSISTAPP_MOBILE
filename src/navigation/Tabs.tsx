@@ -58,6 +58,7 @@ function PermissionGate({onDone}: {onDone: () => void}) {
   const {token, uid} = useAuth();
   const [states, setStates] = useState<AppPermissionStates | null>(null);
   const [busy, setBusy] = useState(false);
+  const [grantError, setGrantError] = useState<string | null>(null);
   const showBackground = Platform.OS === "android";
   const refresh = (): void => {
     void getPermissionStates().then(setStates).catch(() => undefined);
@@ -77,12 +78,15 @@ function PermissionGate({onDone}: {onDone: () => void}) {
   const grant = (fn: () => Promise<{granted: boolean; canAskAgain: boolean}>, register: boolean): void => {
     if (busy) return;
     setBusy(true);
+    setGrantError(null);
     void (async () => {
       try {
         const next = await fn();
         if (!next.granted && !next.canAskAgain) openAppSettings();
         await getPermissionStates().then(setStates).catch(() => undefined);
         if (next.granted && register) await syncPushToken(token, uid);
+      } catch {
+        setGrantError(t.more.gateFailed);
       } finally {
         setBusy(false);
       }
@@ -95,6 +99,8 @@ function PermissionGate({onDone}: {onDone: () => void}) {
       busy={busy}
       showBackground={showBackground}
       canDone={canDone}
+      grantError={grantError}
+      onHideGrantError={() => setGrantError(null)}
       onGrantNotifications={() => grant(requestNotificationPermission, true)}
       onGrantBackground={() => grant(requestBackgroundLocationPermission, false)}
       onOpenBattery={() => openBatterySettings()}
