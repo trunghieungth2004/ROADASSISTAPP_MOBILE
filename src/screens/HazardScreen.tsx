@@ -160,8 +160,9 @@ export default function HazardScreen() {
         <Snack message={snack} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setSnack(null)} />
       )}
       {selected ? (
-        <View style={[styles.sheetRoot, {bottom: insets.bottom + 12}]} pointerEvents="box-none">
-          <View style={styles.sheetWrap}>
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelected(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
             <FlagDetailSheet
               t={t}
               flag={selected}
@@ -190,6 +191,6 @@ const styles = StyleSheet.create({
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
   list: {gap: 8, paddingBottom: 8},
   hint: {fontSize: 12},
-  sheetRoot: {position: "absolute", left: 12, right: 12, bottom: 12},
-  sheetWrap: {width: "100%"},
+  centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
+  centerWrap: {width: "100%", paddingHorizontal: 24},
 });

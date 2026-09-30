@@ -490,19 +490,22 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
         </View>
       ) : null}
       {selectedFlag ? (
-        <View style={[styles.autoCard, {backgroundColor: theme.paper, borderColor: theme.border, bottom: insets.bottom + 12}]} pointerEvents="box-none">
-          <FlagDetailSheet
-            t={t}
-            flag={selectedFlag}
-            isOwn={uid != null && selectedFlag.reporterId === uid}
-            busy={flagBusy}
-            voted={votedIds.has(selectedFlag.id)}
-            denied={deniedIds.has(selectedFlag.id)}
-            onClose={closeFlag}
-            onConfirm={(id) => void onConfirmFlag(id)}
-            onDeny={(id) => void onDenyFlag(id)}
-            onRemove={(id) => void onRemoveFlag(id)}
-          />
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeFlag} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
+            <FlagDetailSheet
+              t={t}
+              flag={selectedFlag}
+              isOwn={uid != null && selectedFlag.reporterId === uid}
+              busy={flagBusy}
+              voted={votedIds.has(selectedFlag.id)}
+              denied={deniedIds.has(selectedFlag.id)}
+              onClose={closeFlag}
+              onConfirm={(id) => void onConfirmFlag(id)}
+              onDeny={(id) => void onDenyFlag(id)}
+              onRemove={(id) => void onRemoveFlag(id)}
+            />
+          </View>
         </View>
       ) : null}
     </View>
@@ -511,7 +514,6 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  autoCard: {position: "absolute", left: 12, right: 12, bottom: 0},
   sheetRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
   centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
   centerWrap: {width: "100%", paddingHorizontal: 24},

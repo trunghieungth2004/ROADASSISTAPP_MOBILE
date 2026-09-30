@@ -542,7 +542,7 @@ export default function RouteScreen() {
       setSnack(t.route.savedMsg);
     } catch (err) {
       setSaveOpen(false);
-      setSnack(toMessage(err));
+      setError(toMessage(err));
     } finally {
       setSaveBusy(false);
     }
@@ -751,8 +751,9 @@ export default function RouteScreen() {
         </View>
       ) : null}
       {selectedFlag ? (
-        <View style={[styles.sheetRoot, {bottom: insets.bottom + 12}]} pointerEvents="box-none">
-          <View style={styles.sheetWrap}>
+        <View style={styles.centerRoot}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFlag(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
+          <View style={styles.centerWrap}>
             <FlagDetailSheet
               t={t}
               flag={selectedFlag}
