@@ -1,6 +1,7 @@
 import type {RefObject} from "react";
 import {StyleSheet} from "react-native";
-import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import StyledLayer from "../../components/StyledLayer";
 import {maptilerStyleUrlFor} from "../../map/style";
 import FlagPinImages from "../../components/MapPinImages";
 import type {AppTheme} from "../../theme";
@@ -52,7 +53,7 @@ export default function NavMapView(props: Props) {
         <FlagPinImages />
       {props.pos ? (
         <GeoJSONSource id="nav-puck" data={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
-          <Layer
+          <StyledLayer
             type="symbol"
             id="nav-puck-arrow"
             style={{iconImage: "nav-arrow", iconSize: 0.42, iconAnchor: "center", iconRotate: props.arrowRotate, iconRotationAlignment: "map", iconAllowOverlap: true, iconIgnorePlacement: true}}
@@ -60,31 +61,31 @@ export default function NavMapView(props: Props) {
         </GeoJSONSource>
       ) : null}
         <GeoJSONSource id="nav-route-casing" data={{type: "Feature", geometry: props.route.geometry, properties: {}}}>
-          <Layer type="line" id="nav-route-line-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 11, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
+          <StyledLayer type="line" id="nav-route-line-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 11, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
         </GeoJSONSource>
         {props.traveled.length > 1 ? (
           <GeoJSONSource id="nav-traveled" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.traveled}, properties: {}}}>
-            <Layer type="line" id="nav-traveled-line" beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 5, lineOpacity: 0.7, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="nav-traveled-line" beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 5, lineOpacity: 0.7, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
         {props.remaining.length > 1 ? (
           <GeoJSONSource id="nav-route" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.remaining}, properties: {}}}>
-            <Layer type="line" id="nav-route-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 5, lineOpacity: 0.9, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="nav-route-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 5, lineOpacity: 0.9, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
         {props.highlight && props.highlight.length > 1 ? (
           <GeoJSONSource id="nav-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
-            <Layer type="line" id="nav-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="nav-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
         {props.highlight && props.highlight.length > 1 ? (
           <GeoJSONSource id="nav-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.highlight}, properties: {}}}>
-            <Layer type="line" id="nav-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="nav-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
       {b ? (
         <GeoJSONSource id="nav-b" data={{type: "Feature", geometry: {type: "Point", coordinates: [b[0], b[1]]}, properties: {}}}>
-          <Layer type="symbol" id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
+          <StyledLayer type="symbol" id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
         </GeoJSONSource>
       ) : null}
         <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />

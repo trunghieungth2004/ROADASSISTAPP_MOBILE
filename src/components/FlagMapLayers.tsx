@@ -1,5 +1,6 @@
 import {memo, useMemo} from "react";
-import {Layer, GeoJSONSource} from "@maplibre/maplibre-react-native";
+import {GeoJSONSource} from "@maplibre/maplibre-react-native";
+import StyledLayer from "./StyledLayer";
 import type {Flag} from "../api/flags";
 import {flagStatusColor} from "./flagStatus";
 
@@ -86,7 +87,7 @@ function FlagMapLayers({flags, onPick}: Props) {
     <>
       {groups.map((g) => (
           <GeoJSONSource key={`flag-fill-${g.icon}`} id={`flag-fill-${g.icon}`} data={g.fills}>
-            <Layer type="fill" id={`flag-fill-${g.icon}`} style={{fillColor: flagStatusColor(g.status === "0" ? "x" : g.status), fillOpacity: 0.25}} />
+            <StyledLayer type="fill" id={`flag-fill-${g.icon}`} style={{fillColor: flagStatusColor(g.status === "0" ? "x" : g.status), fillOpacity: 0.25}} />
           </GeoJSONSource>
       ))}
       {groups.map((g) => (
@@ -99,7 +100,7 @@ function FlagMapLayers({flags, onPick}: Props) {
               g.pick(features?.[0]?.properties?.id);
             }}
           >
-            <Layer
+            <StyledLayer
               type="symbol"
               id={`flag-dot-${g.icon}`}
               style={{iconImage: g.icon, iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}

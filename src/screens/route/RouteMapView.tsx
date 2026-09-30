@@ -4,7 +4,8 @@ import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResp
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/AppText";
-import {Camera, Images, Layer, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import StyledLayer from "../../components/StyledLayer";
 import {maptilerStyleUrlFor} from "../../map/style";
 import FlagPinImages from "../../components/MapPinImages";
 import {Fab} from "../../components/Fab";
@@ -82,41 +83,41 @@ export default function RouteMapView(props: Props) {
         }} />
         <FlagPinImages />
         {props.routes.map((r, i) => i === props.selectedIndex ? null : (
-          <GeoJSONSource key={`route-${i}`} id={`route-${i}`} data={{type: "Feature", geometry: r.geometry, properties: {}}}><Layer type="line" id={`routeLine-${i}`} beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource>
+          <GeoJSONSource key={`route-${i}`} id={`route-${i}`} data={{type: "Feature", geometry: r.geometry, properties: {}}}><StyledLayer type="line" id={`routeLine-${i}`} beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource>
         ))}
-        {props.result ? <GeoJSONSource id="route-casing" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><Layer type="line" id="routeLine-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
-        {props.result ? <GeoJSONSource id="route" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><Layer type="line" id="routeLine" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result ? <GeoJSONSource id="route-casing" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id="routeLine-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result ? <GeoJSONSource id="route" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id="routeLine" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
         {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
           <GeoJSONSource id="route-hazard-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
-            <Layer type="line" id="route-hazard-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="route-hazard-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
         {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
           <GeoJSONSource id="route-hazard-highlight" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
-            <Layer type="line" id="route-hazard-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
+            <StyledLayer type="line" id="route-hazard-highlight-line" beforeId="Ferry labels" style={{lineColor: "#f59e0b", lineWidth: 5, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
-        {props.origin ? <GeoJSONSource id="marker-a" data={pointFeature(props.origin.lng, props.origin.lat)}><Layer type="symbol" id="marker-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
-        {props.dest ? <GeoJSONSource id="marker-b" data={pointFeature(props.dest.lng, props.dest.lat)}><Layer type="symbol" id="marker-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
+        {props.origin ? <GeoJSONSource id="marker-a" data={pointFeature(props.origin.lng, props.origin.lat)}><StyledLayer type="symbol" id="marker-a-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
+        {props.dest ? <GeoJSONSource id="marker-b" data={pointFeature(props.dest.lng, props.dest.lat)}><StyledLayer type="symbol" id="marker-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} /></GeoJSONSource> : null}
         {props.gps ? (
           <GeoJSONSource id="gps-dot" data={pointFeature(props.gps.lng, props.gps.lat)}>
-            <Layer type="circle" id="gps-dot-circle" style={{circleRadius: 8, circleColor: "#0284c7", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}} />
+            <StyledLayer type="circle" id="gps-dot-circle" style={{circleRadius: 8, circleColor: "#0284c7", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}} />
           </GeoJSONSource>
         ) : null}
         {props.flagPoint ? (
           <GeoJSONSource id="flag-point" data={pointFeature(props.flagPoint.lng, props.flagPoint.lat)}>
-            <Layer type="symbol" id="flag-point-icon" style={{iconImage: "pin-preview", iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+            <StyledLayer type="symbol" id="flag-point-icon" style={{iconImage: "pin-preview", iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
         {props.stops.map((s, i) => (
           <GeoJSONSource key={`stop-${s.lat},${s.lng},${i}`} id={`stop-${s.lat},${s.lng},${i}`} data={pointFeature(s.lng, s.lat)}>
-            <Layer type="symbol" id={`stop-icon-${s.lat},${s.lng},${i}`} style={{iconImage: "stop-dot", iconSize: 0.3, iconAllowOverlap: true, iconIgnorePlacement: true}} />
-            <Layer type="symbol" id={`stop-label-${s.lat},${s.lng},${i}`} style={{textField: String(i + 1), textSize: 12, textColor: "#ffffff", textAnchor: "center", textAllowOverlap: true, textIgnorePlacement: true}} />
+            <StyledLayer type="symbol" id={`stop-icon-${s.lat},${s.lng},${i}`} style={{iconImage: "stop-dot", iconSize: 0.3, iconAllowOverlap: true, iconIgnorePlacement: true}} />
+            <StyledLayer type="symbol" id={`stop-label-${s.lat},${s.lng},${i}`} style={{textField: String(i + 1), textSize: 12, textColor: "#ffffff", textAnchor: "center", textAllowOverlap: true, textIgnorePlacement: true}} />
           </GeoJSONSource>
         ))}
         {props.result && (props.dragPos ?? props.selectedMid) ? (
           <GeoJSONSource id="reshape-handle" data={pointFeature((props.dragPos ? props.dragPos.lng : props.selectedMid![0]), (props.dragPos ? props.dragPos.lat : props.selectedMid![1]))}>
-            <Layer type="symbol" id="reshape-handle-icon" style={{iconImage: "handle2-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+            <StyledLayer type="symbol" id="reshape-handle-icon" style={{iconImage: "handle2-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
         <RouteFlags camRef={props.flagCamRef} token={props.flagsToken} refreshKey={props.flagsKey} onPick={props.onPickFlag} subscribeRegionDid={props.subscribeRegionDid} />

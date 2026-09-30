@@ -94,7 +94,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
         />
       ) : null}
       {visible.map((r) => (
-          <View style={styles.rowWrap}>
+          <View key={r.id} style={styles.rowWrap}>
             {renamingId === r.id ? (
               <View style={styles.renameRow}>
                 <TextInput style={[styles.renameInput, {borderColor: theme.border, color: theme.text}]} value={name} onChangeText={setName} maxLength={120} autoFocus placeholder={t.saved.name} placeholderTextColor={theme.muted} />
