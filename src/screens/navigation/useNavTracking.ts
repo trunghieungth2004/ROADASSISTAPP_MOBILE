@@ -303,7 +303,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
         const {status} = await Location.requestForegroundPermissionsAsync();
         if (!alive) return;
         if (status !== "granted") {
-          setError("Location denied");
+          setError(t.nav.locationDenied);
           return;
         }
         try {

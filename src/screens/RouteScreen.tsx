@@ -307,7 +307,7 @@ export default function RouteScreen() {
         if (applyCenter()) return;
       } catch {}
     }
-    if (!centeredRef.current && !pendingCenterRef.current) setSnack(t.route.locationUnavailable);
+    if (!centeredRef.current && !pendingCenterRef.current) setError(t.route.locationUnavailable);
   }
   useEffect(() => {
     if (centeredRef.current) return;
@@ -382,7 +382,7 @@ export default function RouteScreen() {
       setSnack(t.flag.reported);
       void refreshRoutesQuiet();
     } catch (err) {
-      setSnack(toMessage(err));
+      setError(toMessage(err));
     } finally {
       setFlagBusy(false);
     }
@@ -406,7 +406,7 @@ export default function RouteScreen() {
         setSnack(res.alreadyVoted ? t.flag.alreadyVoted : t.flag.confirmedMsg);
       }
     } catch (err) {
-      setSnack(toMessage(err));
+      setError(toMessage(err));
     } finally {
       setFlagBusy(false);
     }
@@ -422,7 +422,7 @@ export default function RouteScreen() {
       setFlagsKey((k) => k + 1);
       setSnack(res.alreadyVoted ? t.flag.alreadyDenied : t.flag.deniedMsg);
     } catch (err) {
-      setSnack(toMessage(err));
+      setError(toMessage(err));
     } finally {
       setFlagBusy(false);
     }
@@ -430,7 +430,7 @@ export default function RouteScreen() {
   async function onRemoveFlag(flagId: string) {
     if (!token) return;
     if (selectedFlag?.id === flagId && selectedFlag.status === "3") {
-      setSnack(t.flag.lockedRemoveDenied);
+      setError(t.flag.lockedRemoveDenied);
       return;
     }
     setFlagBusy(true);
@@ -440,7 +440,7 @@ export default function RouteScreen() {
       setFlagsKey((k) => k + 1);
       setSnack(t.flag.removedMsg);
     } catch (err) {
-      setSnack(toMessage(err));
+      setError(toMessage(err));
     } finally {
       setFlagBusy(false);
     }

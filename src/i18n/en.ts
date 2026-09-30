@@ -156,6 +156,7 @@ export const en = {
     eta: "ETA",
     m: "m",
     locating: "Waiting for GPS…",
+    locationDenied: "Location permission denied",
     rerouting: "Rerouting…",
     arrived: "You have arrived",
     hazardAhead: "Unconfirmed hazard in {d}",

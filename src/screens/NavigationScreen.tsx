@@ -26,6 +26,7 @@ import {flagTypeLabel} from "../i18n/labels";
 import {ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {playEventSound} from "../services/sound";
 import Snack from "../components/Snack";
+import {pickFeedback} from "../components/feedback";
 import FlagSheet, {type FlagReport} from "../components/FlagSheet";
 
 type Props = {
@@ -123,9 +124,10 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
       confirmSnackTimer.current = setTimeout(() => setConfirmSnack(null), 6000);
     } catch (err) {
-      setConfirmSnack(toMessage(err));
-      if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
-      confirmSnackTimer.current = setTimeout(() => setConfirmSnack(null), 6000);
+      setConfirmSnack(null);
+      setFetchError(toMessage(err));
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
     } finally {
       setFlagBusy(false);
     }
@@ -140,6 +142,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       setFlagsKey((k) => k + 1);
       voice.speak(res.alreadyVoted ? t.flag.alreadyDenied : t.flag.deniedMsg);
     } catch (err) {
+      setFetchError(toMessage(err));
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       voice.speak(toMessage(err));
     } finally {
       setFlagBusy(false);
@@ -155,6 +160,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       voice.speak(t.flag.reported);
       void nav.refreshRouteQuiet();
     } catch (err) {
+      setFetchError(toMessage(err));
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       voice.speak(toMessage(err));
     } finally {
       setReportBusy(false);
@@ -162,6 +170,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   }
   async function onRemoveFlag(flagId: string) {
     if (selectedFlag?.id === flagId && selectedFlag.status === "3") {
+      setFetchError(t.flag.lockedRemoveDenied);
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       voice.speak(t.flag.lockedRemoveDenied);
       return;
     }
@@ -172,6 +183,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       setFlagsKey((k) => k + 1);
       voice.speak(t.flag.removedMsg);
     } catch (err) {
+      setFetchError(toMessage(err));
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       voice.speak(toMessage(err));
     } finally {
       setFlagBusy(false);
@@ -445,10 +459,10 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       <Fab theme={theme} label={t.flag.reportTitle} disabled={!nav.pos} onPress={() => nav.pos && setReportAt({lat: nav.pos.lat, lng: nav.pos.lng})} style={{position: "absolute", left: 12, top: insets.top + 88}}>
         <MaterialIcons name="add-alert" size={22} color={nav.pos ? theme.primary : theme.muted} />
       </Fab>
-      {nav.error ? (
-        <Snack message={nav.error} severity="error" sticky bottom={snackAbove(insets.bottom + 12, bottomH)} dangerColor={theme.danger} onHide={nav.clearError} />
+      {nav.error ?? voiceError ?? fetchError ? (
+        <Snack message={nav.error ?? voiceError ?? fetchError} severity="error" sticky bottom={snackAbove(insets.bottom + 12, bottomH)} dangerColor={theme.danger} onHide={() => { nav.clearError(); setVoiceError(null); setFetchError(null); }} />
       ) : (
-        <Snack message={voiceError ?? fetchError ?? confirmSnack ?? nav.notice} bottom={snackAbove(insets.bottom + 12, bottomH)} onHide={() => {}} />
+        <Snack message={confirmSnack ?? nav.notice} severity={pickFeedback(confirmSnack ? "success" : "neutral")} bottom={snackAbove(insets.bottom + 12, bottomH)} onHide={() => {}} />
       )}
       {listOpen ? (
         <TurnListSheet

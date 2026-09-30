@@ -3,6 +3,7 @@ import {Keyboard, Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect} from "@react-navigation/native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {updateProfile} from "../api/users";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
@@ -10,6 +11,8 @@ import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
+import Snack from "../components/Snack";
+import {snackAbove} from "../components/snackOffset";
 import OnboardingScreen from "./OnboardingScreen";
 import DiagnosticsScreen from "./DiagnosticsScreen";
 import {useThemeMode} from "../context/ThemeContext";
@@ -29,6 +32,7 @@ export default function MoreScreen() {
   const {mode, toggle: toggleTheme} = useThemeMode();
   const scheme = mode;
   const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const insets = useSafeAreaInsets();
   const [editOpen, setEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -111,7 +115,6 @@ export default function MoreScreen() {
         <Modal visible={servicesOpen} animationType="slide" onRequestClose={() => setServicesOpen(false)}>
           <OnboardingScreen t={t} busy={servicesBusy} error={servicesError} onFinish={(selected) => void onServicesFinish(selected)} onSkip={() => void onServicesSkip()} />
         </Modal>
-        {notice ? <Text style={[styles.notice, {color: theme.success}]}>{notice}</Text> : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow}><MaterialIcons name="home" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.tabs.home}</Text></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
@@ -170,6 +173,7 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={() => void signOut()}><MaterialIcons name="logout" size={20} color={theme.danger} /><Text style={[styles.listText, {color: theme.danger}]}>{t.more.signOut}</Text></Pressable>
         </View>
       </ScrollView>
+      <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
     </ScreenContainer>
   );
 }
@@ -196,7 +200,6 @@ const styles = StyleSheet.create({
   modalActions: {flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 8},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   error: {fontSize: 13},
-  notice: {fontSize: 13, textAlign: "center"},
   card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
   listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},

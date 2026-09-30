@@ -2,6 +2,7 @@ import {useState} from "react";
 import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {signInWithEmailAndPassword} from "firebase/auth";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {auth} from "../auth/firebase";
 import {register} from "../api/auth";
 import {toMessage} from "../api/client";
@@ -10,12 +11,15 @@ import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
+import Snack from "../components/Snack";
+import {snackAbove} from "../components/snackOffset";
 export default function LoginScreen() {
   const {t} = useStrings();
   const {signIn} = useAuth();
   const {refresh} = useProfile();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,12 +50,12 @@ export default function LoginScreen() {
         {mode === "register" ? <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.auth.phone} placeholderTextColor={theme.muted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" /> : null}
         <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.auth.email} placeholderTextColor={theme.muted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.auth.password} placeholderTextColor={theme.muted} value={password} onChangeText={setPassword} secureTextEntry />
-        {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
         <Pressable style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void onSubmit()}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === "login" ? t.auth.signIn : t.auth.createAccount}</Text>}
         </Pressable>
       </ScrollView>
       </KeyboardAvoidingView>
+      <Snack message={error} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setError(null)} />
     </ScreenContainer>
   );
 }
@@ -62,7 +66,6 @@ const styles = StyleSheet.create({
   tabs: {flexDirection: "row", gap: 8},
   tab: {flex: 1, padding: 10, borderWidth: 1, borderRadius: 8, alignItems: "center"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
-  error: {fontSize: 13},
   primary: {borderRadius: 8, padding: 12, alignItems: "center"},
   disabled: {opacity: 0.6},
   primaryText: {color: "#fff", fontWeight: "700"},

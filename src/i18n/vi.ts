@@ -157,6 +157,7 @@ export const vi: Strings = {
     eta: "Đến nơi",
     m: "m",
     locating: "Đang chờ GPS…",
+    locationDenied: "Quyền vị trí bị từ chối",
     rerouting: "Đang tìm đường lại…",
     arrived: "Đã đến nơi",
     hazardAhead: "Chướng ngại chưa xác nhận trong {d}",
