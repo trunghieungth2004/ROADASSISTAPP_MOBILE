@@ -413,6 +413,9 @@ export const vi: Strings = {
     mechanic: "Sửa xe",
     pickLocation: "Chọn trên bản đồ",
     useGps: "Dùng GPS",
+    tapToSet: "Chạm bản đồ để đặt điểm yêu cầu",
+    clearPoint: "Xóa điểm",
+    refresh: "Làm mới",
   },
   saved: {
     title: "Lộ trình đã lưu",

@@ -18,7 +18,6 @@ import {syncPushToken} from "../services/push";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
 import AssistScreen from "../screens/AssistScreen";
-import ResponderScreen from "../screens/ResponderScreen";
 import VehicleScreen from "../screens/VehicleScreen";
 import MoreScreen from "../screens/MoreScreen";
 import {hasProviderLicense} from "../services/licenses";
@@ -150,7 +149,7 @@ export default function Tabs() {
     <Tab.Navigator initialRouteName="Route" tabBar={(props) => <TabBar {...props} />} screenOptions={{headerShown: true, headerStyle: {backgroundColor: theme.paper}, headerTintColor: theme.text}}>
       <Tab.Screen name="Route" component={RouteScreen} options={{title: t.tabs.route}} />
       <Tab.Screen name="Hazards" component={HazardScreen} options={{title: t.tabs.hazards}} />
-      <Tab.Screen name="Assist" component={provider ? ResponderScreen : AssistScreen} options={{title: t.tabs.dispatch}} />
+      <Tab.Screen name="Assist" component={AssistScreen} options={{title: t.tabs.dispatch}} />
       <Tab.Screen name="Vehicle" component={VehicleScreen} options={{title: t.tabs.vehicle}} />
       <Tab.Screen name="More" component={MoreScreen} options={{title: t.tabs.more}} />
     </Tab.Navigator>

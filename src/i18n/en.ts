@@ -412,6 +412,9 @@ export const en = {
     mechanic: "Mechanic",
     pickLocation: "Pick on map",
     useGps: "Use GPS",
+    tapToSet: "Tap map to set request point",
+    clearPoint: "Clear point",
+    refresh: "Refresh",
   },
   saved: {
     title: "Saved routes",
