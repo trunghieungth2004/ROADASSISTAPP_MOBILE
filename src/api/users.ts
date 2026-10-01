@@ -8,6 +8,7 @@ export type MeUser = {
   role: string;
   status?: string | null;
   trustScore?: number;
+  points?: number;
   volunteerAvailable?: boolean;
   volunteerRadiusKm?: number;
   capability?: string;

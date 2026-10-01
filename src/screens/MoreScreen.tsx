@@ -13,6 +13,7 @@ import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
 import {snackAbove} from "../components/snackOffset";
+import {myFlags} from "../api/flags";
 import OnboardingScreen from "./OnboardingScreen";
 import DiagnosticsScreen from "./DiagnosticsScreen";
 import {useThemeMode} from "../context/ThemeContext";
@@ -43,9 +44,18 @@ export default function MoreScreen() {
   const [perms, setPerms] = useState<AppPermissionStates>({notifications: {granted: false, canAskAgain: true}, backgroundLocation: {granted: false, canAskAgain: true}});
   const [permsBusy, setPermsBusy] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [reportCount, setReportCount] = useState(0);
+  const [confirmedCount, setConfirmedCount] = useState(0);
   useFocusEffect(useCallback(() => {
     void getPermissionStates().then(setPerms).catch(() => undefined);
-  }, []));
+    if (!token) return;
+    void myFlags(token)
+      .then((list) => {
+        setReportCount(list.length);
+        setConfirmedCount(list.filter((f) => f.status === "2").length);
+      })
+      .catch(() => undefined);
+  }, [token]));
   async function onEnableNotifications() {
     if (permsBusy) return;
     setPermsBusy(true);
@@ -97,7 +107,12 @@ export default function MoreScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
         <View style={[styles.headerCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <View style={styles.headerRow}>
-            <View style={[styles.avatar, {backgroundColor: theme.primary}]}><Text style={styles.avatarText}>{initials(displayName)}</Text></View>
+            <View>
+              <View style={[styles.avatar, {backgroundColor: theme.primary}]}><Text style={styles.avatarText}>{initials(displayName)}</Text></View>
+              <Pressable style={[styles.avatarEdit, {backgroundColor: theme.paper, borderColor: theme.border}]} onPress={openEdit} accessibilityRole="button" accessibilityLabel={t.more.editName}>
+                <MaterialIcons name="edit" size={16} color={theme.primary} />
+              </Pressable>
+            </View>
             <View style={styles.headerText}>
               <Text style={[styles.name, {color: theme.text}]}>{displayName}</Text>
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
@@ -106,7 +121,20 @@ export default function MoreScreen() {
                 {services.map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{s}</Text></View>))}
               </View>
             </View>
-            <Pressable style={[styles.editBtn, {backgroundColor: theme.primary}]} onPress={openEdit}><Text style={styles.editBtnText}>{t.common.save}</Text></Pressable>
+          </View>
+          <View style={styles.statRow}>
+            <View style={styles.stat}>
+              <Text style={[styles.statNumber, {color: theme.text}]}>{user?.points ?? 0}</Text>
+              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.points}</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={[styles.statNumber, {color: theme.text}]}>{reportCount}</Text>
+              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.reports}</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={[styles.statNumber, {color: theme.text}]}>{confirmedCount}</Text>
+              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.confirmed}</Text>
+            </View>
           </View>
         </View>
         <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setEditOpen(false); }}>
@@ -116,8 +144,6 @@ export default function MoreScreen() {
           <OnboardingScreen t={t} busy={servicesBusy} error={servicesError} onFinish={(selected) => void onServicesFinish(selected)} onSkip={() => void onServicesSkip()} />
         </Modal>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow}><MaterialIcons name="home" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.tabs.home}</Text></Pressable>
-          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
@@ -183,6 +209,11 @@ const styles = StyleSheet.create({
   headerRow: {flexDirection: "row", alignItems: "center", gap: 12},
   avatar: {width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center"},
   avatarText: {color: "#fff", fontWeight: "700", fontSize: 18},
+  avatarEdit: {position: "absolute", right: -6, bottom: -6, width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center"},
+  statRow: {flexDirection: "row", marginTop: 4},
+  stat: {flex: 1, alignItems: "center", gap: 2},
+  statNumber: {fontSize: 18, fontWeight: "700"},
+  statLabel: {fontSize: 11},
   headerText: {flex: 1, minWidth: 0, gap: 2},
   name: {fontSize: 18, fontWeight: "700"},
   email: {fontSize: 13},
@@ -191,8 +222,6 @@ const styles = StyleSheet.create({
   badgeText: {color: "#fff", fontSize: 12, fontWeight: "600"},
   service: {borderWidth: 1, borderRadius: 12, paddingVertical: 2, paddingHorizontal: 8},
   serviceText: {fontSize: 12},
-  editBtn: {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
-  editBtnText: {color: "#fff", fontWeight: "600", fontSize: 12},
   vehicleLine: {fontSize: 13},
   modalOverlay: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24},
   modalCard: {borderRadius: 16, padding: 16, gap: 12},

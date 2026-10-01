@@ -64,6 +64,7 @@ export default function HazardRow(props: Props) {
             </View>
           </View>
           <Text style={[styles.meta, {color: theme.muted}]}>
+            {flag.reporterHandle ? `${flag.reporterHandle} · ` : ""}
             {flag.voteCount ?? 0} {t.hazards.votes}
             {ago ? ` · ${ago}` : ""}
             {props.distanceM !== null ? ` · ${formatDist(props.distanceM, t.route.km, t.nav.m)}` : ""}

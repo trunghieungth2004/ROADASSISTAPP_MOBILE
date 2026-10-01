@@ -12,6 +12,7 @@ export type Flag = {
   status: string;
   voteCount?: number;
   reporterId?: string;
+  reporterHandle?: string;
   createdAt?: string;
   ttlExpiresAtMs?: number | null;
 };
@@ -29,6 +30,7 @@ type FlagWire = {
   voteCount?: number;
   reporterId?: string;
   reporterUid?: string;
+  reporterHandle?: string;
   createdAt?: string;
   ttlExpiresAt?: {_seconds?: number; _nanoseconds?: number} | string | number | null;
 };
@@ -59,6 +61,7 @@ export function toFlag(raw: FlagWire): Flag {  return {
     status: raw.status,
     voteCount: raw.voteCount,
     reporterId: raw.reporterId ?? raw.reporterUid,
+    reporterHandle: raw.reporterHandle,
     createdAt: raw.createdAt,
     ttlExpiresAtMs: ttlMsOf(raw.ttlExpiresAt),
   };

@@ -39,7 +39,7 @@ export default function FlagDetailSheet({t, flag, isOwn, busy, voted, denied, on
   const showLocked = actions.includes("locked");
   const progress = flag.status === "1" ? t.flag.confirmations.replace("{v}", String(Math.max(0, flag.voteCount ?? 0))).replace("{t}", String(FLAG_CONSENSUS_THRESHOLD)) : null;
   const until = formatUntil(flag.ttlExpiresAtMs, Date.now(), t.flag);
-  const meta = joinMeta([`${flag.voteCount ?? 0} ${t.flag.votes}`, progress, until]);
+  const meta = joinMeta([flag.reporterHandle ?? null, `${flag.voteCount ?? 0} ${t.flag.votes}`, progress, until]);
   return (
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
       <View style={styles.headRow}>
