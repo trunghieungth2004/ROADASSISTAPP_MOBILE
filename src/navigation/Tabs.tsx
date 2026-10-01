@@ -18,8 +18,10 @@ import {syncPushToken} from "../services/push";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
 import AssistScreen from "../screens/AssistScreen";
+import ResponderScreen from "../screens/ResponderScreen";
 import VehicleScreen from "../screens/VehicleScreen";
 import MoreScreen from "../screens/MoreScreen";
+import {hasProviderLicense} from "../services/licenses";
 const Tab = createBottomTabNavigator();
 type IconProps = {color: string; size: number};
 const TAB_ICONS: Record<string, (props: IconProps) => ReactNode> = {
@@ -50,8 +52,9 @@ function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
   })}</View>;
 }
 function UnsupportedRole() {
+  const {t} = useStrings();
   const {signOut} = useAuth();
-  return <View style={styles.center}><Text>Role not supported on mobile yet.</Text><Pressable style={styles.primary} onPress={() => void signOut()}><Text style={styles.primaryText}>Sign out</Text></Pressable></View>;
+  return <View style={styles.center}><Text>{t.roles.unsupported}</Text><Pressable style={styles.primary} onPress={() => void signOut()}><Text style={styles.primaryText}>{t.more.signOut}</Text></Pressable></View>;
 }
 function PermissionGate({onDone}: {onDone: () => void}) {
   const {t} = useStrings();
@@ -125,6 +128,7 @@ export default function Tabs() {
   const {t} = useStrings();
   const {token, loaded} = useAuth();
   const {loading, roleChosen, isRider, bundle} = useProfile();
+  const provider = hasProviderLicense(bundle?.user.services);
   const [permsDone, setPermsDone] = useState(false);
   useEffect(() => {
     if (!token) {
@@ -140,13 +144,13 @@ export default function Tabs() {
   if (!loaded || (token && loading && !bundle)) return <View style={styles.center}><ActivityIndicator /></View>;
   if (!token) return <LoginScreen />;
   if (!roleChosen) return <OnboardingGate />;
-  if (!isRider) return <UnsupportedRole />;
+  if (!isRider && !provider) return <UnsupportedRole />;
   if (!permsDone) return <PermissionGate onDone={() => setPermsDone(true)} />;
   return (
     <Tab.Navigator initialRouteName="Route" tabBar={(props) => <TabBar {...props} />} screenOptions={{headerShown: true, headerStyle: {backgroundColor: theme.paper}, headerTintColor: theme.text}}>
       <Tab.Screen name="Route" component={RouteScreen} options={{title: t.tabs.route}} />
       <Tab.Screen name="Hazards" component={HazardScreen} options={{title: t.tabs.hazards}} />
-      <Tab.Screen name="Assist" component={AssistScreen} options={{title: `${t.tabs.dispatch} · ${t.tabs.soon}`}} listeners={{tabPress: (e) => e.preventDefault()}} />
+      <Tab.Screen name="Assist" component={provider ? ResponderScreen : AssistScreen} options={{title: t.tabs.dispatch}} />
       <Tab.Screen name="Vehicle" component={VehicleScreen} options={{title: t.tabs.vehicle}} />
       <Tab.Screen name="More" component={MoreScreen} options={{title: t.tabs.more}} />
     </Tab.Navigator>

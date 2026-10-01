@@ -14,6 +14,9 @@ import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
 import {snackAbove} from "../components/snackOffset";
+import MapPointPicker from "../components/MapPointPicker";
+import {formatPoint} from "../api/places";
+import {ensurePushConfigured, subscribeDispatchPush} from "../services/push";
 export default function AssistScreen() {
   const {t, lang} = useStrings();
   const {token} = useAuth();
@@ -27,16 +30,37 @@ export default function AssistScreen() {
   const [dest, setDest] = useState<Place | null>(null);
   const [tickets, setTickets] = useState<DispatchTicket[]>([]);
   const [busy, setBusy] = useState(false);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [at, setAt] = useState<{lat: number; lng: number} | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reload = useCallback(async () => { if (!token) return; try { setTickets(await myTickets(token)); } catch (err) { setError(toMessage(err)); } }, [token]);
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    ensurePushConfigured();
+    return subscribeDispatchPush(() => {
+      void reload();
+    }, "assist");
+  }, [reload]);
   async function currentPoint() { const {status} = await Location.requestForegroundPermissionsAsync(); if (status !== "granted") throw new Error("Location denied"); const pos = await Location.getCurrentPositionAsync({}); return {lat: pos.coords.latitude, lng: pos.coords.longitude}; }
+  async function useGpsPoint() {
+    if (gpsBusy) return;
+    setGpsBusy(true);
+    setError(null);
+    try {
+      setAt(await currentPoint());
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setGpsBusy(false);
+    }
+  }
   async function onRequest() {
     if (!token) return;
     if (ticketType === "TOW" && !dest) { setError(t.assist.towNeedsDest); return; }
     setBusy(true); setError(null); setNotice(null);
-    try { const at = await currentPoint(); await createTicket({ticketType, lat: at.lat, lng: at.lng, note: note.trim() || undefined, destinationPoint: ticketType === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth}, token); setNotice(t.assist.requested); setNote(""); await reload(); } catch (err) { setError(toMessage(err)); } finally { setBusy(false); }
+    try { const point = at ?? await currentPoint(); await createTicket({ticketType, lat: point.lat, lng: point.lng, note: note.trim() || undefined, destinationPoint: ticketType === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth}, token); setNotice(t.assist.requested); setNote(""); setAt(null); await reload(); } catch (err) { setError(toMessage(err)); } finally { setBusy(false); }
   }
   async function onCancel(id: string) { if (!token) return; try { await cancelTicket(id, token); setNotice(t.assist.cancelled); await reload(); } catch (err) { setError(toMessage(err)); } }
   return (
@@ -44,9 +68,18 @@ export default function AssistScreen() {
       <FlatList contentContainerStyle={[styles.container, {backgroundColor: theme.background}]} data={tickets} keyExtractor={(item) => item.id} ListHeaderComponent={
         <View style={styles.form}>
           <Text style={[styles.title, {color: theme.text}]}>{t.assist.title}</Text>
-          <View style={styles.row}>{(["SOS", "TOW"] as TicketType[]).map((kind) => (<Pressable key={kind} style={[styles.chip, {borderColor: theme.primary}, ticketType === kind && {backgroundColor: theme.primary}]} onPress={() => setTicketType(kind)}><Text style={{color: ticketType === kind ? "#fff" : theme.text}}>{kind === "SOS" ? t.assist.sos : t.assist.tow}</Text></Pressable>))}</View>
+          <View style={styles.row}>{(["SOS", "TOW", "MECHANIC"] as TicketType[]).map((kind) => (<Pressable key={kind} style={[styles.chip, {borderColor: theme.primary}, ticketType === kind && {backgroundColor: theme.primary}]} onPress={() => setTicketType(kind)}><Text style={{color: ticketType === kind ? "#fff" : theme.text}}>{kind === "SOS" ? t.assist.sos : kind === "TOW" ? t.assist.tow : t.assist.mechanic}</Text></Pressable>))}</View>
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.assist.note} placeholderTextColor={theme.muted} value={note} onChangeText={setNote} />
           {ticketType === "TOW" ? <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={setDest} /> : null}
+          <View style={styles.row}>
+            <Pressable style={[styles.chip, {borderColor: theme.primary}, gpsBusy && styles.disabled]} disabled={gpsBusy} onPress={() => void useGpsPoint()} accessibilityRole="button" accessibilityLabel={t.assist.useGps}>
+              <Text style={{color: theme.primary}}>{t.assist.useGps}</Text>
+            </Pressable>
+            <Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => setPickOpen(true)} accessibilityRole="button" accessibilityLabel={t.assist.pickLocation}>
+              <Text style={{color: theme.primary}}>{t.assist.pickLocation}</Text>
+            </Pressable>
+          </View>
+          {at ? <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(at.lat, at.lng)}</Text> : null}
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void onRequest()}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.assist.request}</Text>}</Pressable>
           <Text style={[styles.section, {color: theme.text}]}>{t.assist.myTickets}</Text>
         </View>
@@ -58,6 +91,11 @@ export default function AssistScreen() {
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
+      {pickOpen ? (
+        <View style={styles.fullScreen}>
+          <MapPointPicker t={t} lang={lang} initial={at} onPick={(p) => { setAt(p); setPickOpen(false); }} onClose={() => setPickOpen(false)} />
+        </View>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -74,5 +112,7 @@ const styles = StyleSheet.create({
   primaryText: {color: "#fff", fontWeight: "700"},
   card: {borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 8, gap: 4},
   cardTitle: {fontWeight: "700"},
+  coords: {fontSize: 12},
+  fullScreen: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, elevation: 6},
   hint: {fontSize: 12},
 });

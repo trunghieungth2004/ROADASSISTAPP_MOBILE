@@ -1,10 +1,11 @@
-import {useCallback, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {Keyboard, Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {updateProfile} from "../api/users";
+import * as Location from "expo-location";
+import {setVolunteerAvailability, updateProfile, volunteerHeartbeat} from "../api/users";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -44,8 +45,11 @@ export default function MoreScreen() {
   const [perms, setPerms] = useState<AppPermissionStates>({notifications: {granted: false, canAskAgain: true}, backgroundLocation: {granted: false, canAskAgain: true}});
   const [permsBusy, setPermsBusy] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [volBusy, setVolBusy] = useState(false);
+  const [volError, setVolError] = useState<string | null>(null);
   const [reportCount, setReportCount] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
+  const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
   useFocusEffect(useCallback(() => {
     void getPermissionStates().then(setPerms).catch(() => undefined);
     if (!token) return;
@@ -82,6 +86,50 @@ export default function MoreScreen() {
       }
     } finally {
       setPermsBusy(false);
+    }
+  }
+  const beatHeart = useCallback(async (): Promise<void> => {
+    if (!token) return;
+    const {status} = await Location.getForegroundPermissionsAsync();
+    if (status !== "granted") return;
+    const pos = await Location.getCurrentPositionAsync({});
+    await volunteerHeartbeat(pos.coords.latitude, pos.coords.longitude, token);
+  }, [token]);
+  useEffect(() => {
+    if (!user?.volunteerAvailable) return;
+    void beatHeart().catch(() => undefined);
+    const timer = setInterval(() => {
+      void beatHeart().catch(() => undefined);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [user?.volunteerAvailable, beatHeart]);
+  async function onVolunteerToggle(next: boolean): Promise<void> {
+    if (!token || volBusy) return;
+    setVolBusy(true);
+    setVolError(null);
+    try {
+      await setVolunteerAvailability({available: next}, token);
+      await refresh();
+      if (next) await beatHeart();
+      setNotice(t.more.saved);
+    } catch (err) {
+      setVolError(toMessage(err));
+    } finally {
+      setVolBusy(false);
+    }
+  }
+  async function onVolunteerOption(patch: {volunteerRadiusKm?: number; capability?: string}): Promise<void> {
+    if (!token || volBusy) return;
+    setVolBusy(true);
+    setVolError(null);
+    try {
+      await setVolunteerAvailability({available: true, ...patch}, token);
+      await refresh();
+      setNotice(t.more.saved);
+    } catch (err) {
+      setVolError(toMessage(err));
+    } finally {
+      setVolBusy(false);
     }
   }
   const displayName = user?.displayName || user?.email || "—";
@@ -185,6 +233,54 @@ export default function MoreScreen() {
             <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => openBatterySettings()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{t.more.permOpenSettings}</Text></Pressable>
           </View>
         </View>
+        {isVolunteer ? (
+          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <View style={styles.listRow}>
+              <MaterialIcons name="volunteer-activism" size={20} color={theme.primary} />
+              <View style={styles.permText}>
+                <Text style={[styles.listText, {color: theme.text}]}>{t.more.volTitle}</Text>
+              </View>
+              <View style={[styles.permPill, {backgroundColor: user?.volunteerAvailable ? theme.primary : theme.divider}]}>
+                <Text style={styles.permPillText}>{user?.volunteerAvailable ? t.more.permOn : t.more.permOff}</Text>
+              </View>
+              <View pointerEvents="none">
+                <Switch value={user?.volunteerAvailable === true} onValueChange={(v) => void onVolunteerToggle(v)} disabled={volBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
+              </View>
+            </View>
+            {user?.volunteerAvailable ? (
+              <>
+                <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+                <View style={styles.optionBlock}>
+                  <Text style={[styles.optionLabel, {color: theme.text}]}>{t.more.volRadius}</Text>
+                  <View style={styles.optionRow}>
+                    {[2, 5, 10, 15].map((km) => {
+                      const current = user?.volunteerRadiusKm ?? 5;
+                      const selected = current === km;
+                      return (
+                        <Pressable key={km} style={[styles.optChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]} disabled={volBusy} onPress={() => void onVolunteerOption({volunteerRadiusKm: km})} accessibilityRole="button">
+                          <Text style={[styles.optText, {color: selected ? theme.primary : theme.text}]}>{km}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={styles.optionBlock}>
+                  <Text style={[styles.optionLabel, {color: theme.text}]}>{t.more.volCapability}</Text>
+                  <View style={styles.optionRow}>
+                    {[{id: "SOLO_BIKE", label: t.more.volSoloBike}, {id: "CAR", label: t.more.volCar}].map((c) => {
+                      const selected = (user?.capability ?? "SOLO_BIKE") === c.id;
+                      return (
+                        <Pressable key={c.id} style={[styles.optChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]} disabled={volBusy} onPress={() => void onVolunteerOption({capability: c.id})} accessibilityRole="button">
+                          <Text style={[styles.optText, {color: selected ? theme.primary : theme.text}]}>{c.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            ) : null}
+          </View>
+        ) : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => setDiagOpen(true)}>
             <MaterialIcons name="bug-report" size={20} color={theme.primary} />
@@ -199,7 +295,11 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={() => void signOut()}><MaterialIcons name="logout" size={20} color={theme.danger} /><Text style={[styles.listText, {color: theme.danger}]}>{t.more.signOut}</Text></Pressable>
         </View>
       </ScrollView>
-      <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+      {volError ? (
+        <Snack message={volError} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
+      ) : (
+        <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+      )}
     </ScreenContainer>
   );
 }
@@ -238,6 +338,11 @@ const styles = StyleSheet.create({
   permPillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   permBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10},
   permBtnText: {fontSize: 13, fontWeight: "700"},
+  optionBlock: {gap: 8, paddingVertical: 14, paddingHorizontal: 16},
+  optionLabel: {fontSize: 13, fontWeight: "700"},
+  optionRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
+  optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16},
+  optText: {fontSize: 13, fontWeight: "600"},
   listSecondary: {fontSize: 13},
   divider: {height: 1, marginHorizontal: 16},
   primary: {borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center"},
