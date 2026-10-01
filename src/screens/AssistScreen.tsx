@@ -8,6 +8,8 @@ import {useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
 import {acceptTicket, cancelTicket, createTicket, getTicket, myTickets, nearTickets, updateTicketStatus, type DispatchTicket, type TicketType} from "../api/dispatch";
+import {nearShops, type Shop} from "../api/shops";
+import {findRoute, type RouteOption} from "../api/routes";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import {PlaceSearchField, usePlaceSearch} from "../components/place-search";
@@ -19,12 +21,13 @@ import Snack from "../components/Snack";
 import StatusRow from "../components/StatusRow";
 import {snackAbove} from "../components/snackOffset";
 import {Fab, FabColumn} from "../components/Fab";
-import {formatPoint, reverseLabel} from "../api/places";
+import {formatPoint} from "../api/places";
 import {ensurePushConfigured, subscribeDispatchPush} from "../services/push";
 import {hasProviderLicense} from "../services/licenses";
-import {createTaskEpoch, type TaskEpoch} from "./route/taskEpoch";
+import {boundsOf} from "./route/routeGeo";
 import AssistMapView from "./assist/AssistMapView";
-import {coordOf, ticketById, toggleSelected} from "./assist/assistPick";
+import {ticketById, toggleSelected} from "./assist/assistPick";
+import {WALK_RADII, walkKm, walkMinutes} from "./assist/walkShop";
 
 const ACTIVE_KEY = "roadassist.activeTicket";
 
@@ -47,17 +50,16 @@ export default function AssistScreen() {
   const [mine, setMine] = useState<DispatchTicket[]>([]);
   const [nearby, setNearby] = useState<DispatchTicket[]>([]);
   const [gps, setGps] = useState<{lat: number; lng: number} | null>(null);
-  const [at, setAt] = useState<{lat: number; lng: number} | null>(null);
-  const [atLabel, setAtLabel] = useState("");
-  const [picking, setPicking] = useState(false);
-  const [pickBusy, setPickBusy] = useState(false);
-  const [pickEpoch] = useState<TaskEpoch>(createTaskEpoch);
-  const pickAbortRef = useRef<AbortController | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [active, setActive] = useState<DispatchTicket | null>(null);
+  const [radius, setRadius] = useState(1000);
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [shopLoading, setShopLoading] = useState(false);
+  const [shopSel, setShopSel] = useState<Shop | null>(null);
+  const [walkRoute, setWalkRoute] = useState<RouteOption | null>(null);
+  const [walkBusy, setWalkBusy] = useState(false);
   const [reqBusy, setReqBusy] = useState(false);
   const [respBusy, setRespBusy] = useState(false);
-  const [gpsBusy, setGpsBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -65,6 +67,16 @@ export default function AssistScreen() {
   const snackBottom = cardH > 0 ? snackAbove(12, cardH) : insets.bottom + 24;
   const selectedTicket = selectedId ? ticketById([...mine, ...nearby], selectedId) : null;
   const selectedIsMine = selectedTicket ? mine.some((item) => item.id === selectedTicket.id) : false;
+  const mechanic = ticketType === "MECHANIC";
+  function radiusLabel(r: number): string {
+    if (r < 1000) return t.shop.radiusM.replace("{n}", String(r));
+    return t.shop.radiusKm.replace("{n}", String(r / 1000));
+  }
+  function openBadge(shop: Shop): {label: string; color: string} {
+    if (shop.openNow === true) return {label: t.shop.open, color: theme.primary};
+    if (shop.openNow === false) return {label: t.shop.closed, color: theme.danger};
+    return {label: t.shop.unknownHours, color: theme.muted};
+  }
   function applyCenter(): boolean {
     const pending = pendingCenterRef.current;
     const cam = cameraRef.current;
@@ -73,6 +85,10 @@ export default function AssistScreen() {
     centeredRef.current = true;
     void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800});
     return true;
+  }
+  function fitWalk(route: RouteOption): void {
+    const b = boundsOf(route.geometry.coordinates);
+    if (b) void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
   }
   const loadActive = useCallback(async (id: string | null, key: string | null): Promise<void> => {
     if (!key || !id) {
@@ -147,80 +163,45 @@ export default function AssistScreen() {
       navigation.setOptions({headerShown: true});
     };
   }, [navigation]);
-  function cancelPick(): void {
-    pickEpoch.invalidate();
-    pickAbortRef.current?.abort();
-    pickAbortRef.current = null;
-    setPickBusy(false);
-    setPicking(false);
-  }
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (picking) {
-        cancelPick();
-        return true;
-      }
       if (selectedId) {
         setSelectedId(null);
+        return true;
+      }
+      if (shopSel) {
+        setShopSel(null);
+        setWalkRoute(null);
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [picking, selectedId]);
+  }, [selectedId, shopSel]);
+  const loadShops = useCallback(async (): Promise<void> => {
+    if (!token || !gps) {
+      setShops([]);
+      return;
+    }
+    setShopLoading(true);
+    setError(null);
+    try {
+      setShops(await nearShops(gps.lat, gps.lng, token, {radiusMeters: radius, type: "SHOP", acceptingOnly: true}));
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setShopLoading(false);
+    }
+  }, [token, gps, radius]);
   useEffect(() => {
-    return () => {
-      pickEpoch.invalidate();
-      pickAbortRef.current?.abort();
-      pickAbortRef.current = null;
-    };
-  }, [pickEpoch]);
+    if (!mechanic) return;
+    void loadShops();
+  }, [mechanic, loadShops]);
   async function currentPoint(): Promise<{lat: number; lng: number}> {
     const {status} = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") throw new Error(t.nav.locationDenied);
     const pos = await Location.getCurrentPositionAsync({});
     return {lat: pos.coords.latitude, lng: pos.coords.longitude};
-  }
-  async function useGpsPoint(): Promise<void> {
-    if (gpsBusy) return;
-    setGpsBusy(true);
-    setError(null);
-    try {
-      const p = await currentPoint();
-      setGps(p);
-      setAt(p);
-      setAtLabel(await reverseLabel(p.lat, p.lng, lang));
-      void cameraRef.current?.setStop({center: [p.lng, p.lat], zoom: 15, duration: 600});
-    } catch (err) {
-      setError(toMessage(err));
-    } finally {
-      setGpsBusy(false);
-    }
-  }
-  async function onMapPress(e: unknown): Promise<void> {
-    if (!picking || pickAbortRef.current) return;
-    const c = coordOf(e);
-    if (!c) return;
-    Keyboard.dismiss();
-    const ctrl = new AbortController();
-    pickAbortRef.current = ctrl;
-    const id = pickEpoch.claim();
-    setPickBusy(true);
-    try {
-      const label = await reverseLabel(c.lat, c.lng, lang, ctrl.signal);
-      if (!pickEpoch.current(id)) return;
-      setAt({lat: c.lat, lng: c.lng});
-      setAtLabel(label);
-    } catch (err) {
-      if (!pickEpoch.current(id)) return;
-      setError(toMessage(err));
-    } finally {
-      if (pickAbortRef.current === ctrl) pickAbortRef.current = null;
-      if (pickEpoch.current(id)) {
-        setPickBusy(false);
-        setPicking(false);
-      }
-    }
   }
   function onPickTicket(id: string): void {
     const next = toggleSelected(selectedId, id);
@@ -228,6 +209,35 @@ export default function AssistScreen() {
     if (!next) return;
     const ticket = ticketById([...mine, ...nearby], id);
     if (ticket) void cameraRef.current?.setStop({center: [ticket.lng, ticket.lat], zoom: 15, duration: 600});
+  }
+  async function onPickShop(id: string): Promise<void> {
+    const shop = shops.find((s) => s.id === id) ?? null;
+    setShopSel(shop);
+    setWalkRoute(null);
+    if (!shop || !token) return;
+    let origin = gps;
+    if (!origin) {
+      try {
+        origin = await currentPoint();
+        setGps(origin);
+      } catch (err) {
+        setError(toMessage(err));
+        return;
+      }
+    }
+    setWalkBusy(true);
+    setError(null);
+    try {
+      const res = await findRoute({originLat: origin.lat, originLng: origin.lng, destLat: shop.lat, destLng: shop.lng, mode: "foot"}, token);
+      const route = res.routes?.[0] ?? null;
+      setWalkRoute(route);
+      if (route) fitWalk(route);
+      else void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setWalkBusy(false);
+    }
   }
   async function onRequest(): Promise<void> {
     if (!token) return;
@@ -240,13 +250,10 @@ export default function AssistScreen() {
     setNotice(null);
     try {
       Keyboard.dismiss();
-      const point = at ?? await currentPoint();
+      const point = await currentPoint();
       await createTicket({ticketType, lat: point.lat, lng: point.lng, note: note.trim() || undefined, destinationPoint: ticketType === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth}, token);
       setNotice(t.assist.requested);
       setNote("");
-      setAt(null);
-      setAtLabel("");
-      setPicking(false);
       setDest(null);
       destSearch.clear();
       await reloadAll();
@@ -314,21 +321,19 @@ export default function AssistScreen() {
   return (
     <View style={styles.root}>
       <AssistMapView
-        t={t}
         lang={lang}
         theme={theme}
         cameraRef={cameraRef}
         gps={gps}
-        at={at}
-        dest={dest ? {lat: dest.lat, lng: dest.lng} : null}
+        dest={ticketType === "TOW" && dest ? {lat: dest.lat, lng: dest.lng} : null}
         mine={mine}
         nearby={provider ? nearby : []}
-        picking={picking}
-        pickBusy={pickBusy}
-        onMapPress={(e) => void onMapPress(e)}
+        shops={mechanic ? shops : []}
+        selectedShop={mechanic ? shopSel : null}
+        walkRoute={mechanic ? walkRoute : null}
         onMapReady={() => applyCenter()}
         onPickTicket={onPickTicket}
-        onCancelPick={cancelPick}
+        onPickShop={(id) => void onPickShop(id)}
       />
       <FabColumn bottom={cardH + 92}>
         <Fab theme={theme} label={t.common.currentLocation} onPress={() => void onLocate()}>
@@ -383,25 +388,67 @@ export default function AssistScreen() {
                 </View>
               </View>
             ) : null}
-            <Text style={[styles.title, {color: theme.text}]}>{t.assist.title}</Text>
+            <Text style={[styles.title, {color: theme.text}]}>{mechanic ? t.shop.title : t.assist.title}</Text>
             <View style={styles.row}>{(["SOS", "TOW", "MECHANIC"] as TicketType[]).map((kind) => (<Pressable key={kind} style={[styles.chip, {borderColor: theme.primary}, ticketType === kind && {backgroundColor: theme.primary}]} onPress={() => setTicketType(kind)}><Text style={{color: ticketType === kind ? "#fff" : theme.text}}>{kind === "SOS" ? t.assist.sos : kind === "TOW" ? t.assist.tow : t.assist.mechanic}</Text></Pressable>))}</View>
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.assist.note} placeholderTextColor={theme.muted} value={note} onChangeText={setNote} />
-            {ticketType === "TOW" ? <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={setDest} /> : null}
-            <View style={styles.row}>
-              <Pressable style={[styles.chip, {borderColor: theme.primary}, gpsBusy && styles.disabled]} disabled={gpsBusy} onPress={() => void useGpsPoint()} accessibilityRole="button" accessibilityLabel={t.assist.useGps}>
-                <Text style={{color: theme.primary}}>{t.assist.useGps}</Text>
-              </Pressable>
-              <Pressable style={[styles.chip, {borderColor: theme.primary}, picking && {backgroundColor: theme.primary}]} onPress={() => (picking ? cancelPick() : (Keyboard.dismiss(), setSelectedId(null), setPicking(true)))} accessibilityRole="button" accessibilityLabel={t.assist.pickLocation}>
-                <Text style={{color: picking ? "#fff" : theme.primary}}>{t.assist.pickLocation}</Text>
-              </Pressable>
-              {at ? (
-                <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { setAt(null); setAtLabel(""); }} accessibilityRole="button" accessibilityLabel={t.assist.clearPoint}>
-                  <Text style={{color: theme.muted}}>{t.assist.clearPoint}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {at ? <Text style={[styles.coords, {color: theme.muted}]}>{atLabel || formatPoint(at.lat, at.lng)}</Text> : null}
-            <Pressable style={[styles.primary, {backgroundColor: theme.primary}, reqBusy && styles.disabled]} disabled={reqBusy} onPress={() => void onRequest()} accessibilityRole="button" accessibilityLabel={t.assist.request}>{reqBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.assist.request}</Text>}</Pressable>
+            {mechanic ? (
+              <>
+                <View style={styles.row}>
+                  {WALK_RADII.map((r) => (
+                    <Pressable key={r} style={[styles.chip, {borderColor: theme.primary}, radius === r && {backgroundColor: theme.primary}]} onPress={() => { setRadius(r); setShopSel(null); setWalkRoute(null); }} accessibilityRole="button">
+                      <Text style={{color: radius === r ? "#fff" : theme.text}}>{radiusLabel(r)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {shopSel ? (
+                  <View style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
+                    <View style={styles.selectedRow}>
+                      <Text style={[styles.cardTitle, {color: theme.text}]}>{shopSel.name}</Text>
+                      <Pressable onPress={() => { setShopSel(null); setWalkRoute(null); }} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.shop.clearRoute}>
+                        <MaterialIcons name="close" size={18} color={theme.muted} />
+                      </Pressable>
+                    </View>
+                    {walkBusy ? (
+                      <StatusRow theme={theme} text={t.common.loading} />
+                    ) : walkRoute ? (
+                      <Text style={[styles.coords, {color: theme.muted}]}>{t.shop.walkRoute} · {(walkRoute.distanceMeters / 1000).toFixed(1)} {t.route.km} · {Math.round(walkRoute.durationSeconds / 60)} {t.route.min}</Text>
+                    ) : (
+                      <Text style={[styles.coords, {color: theme.muted}]}>{t.shop.walkTo}</Text>
+                    )}
+                  </View>
+                ) : null}
+                <Text style={[styles.section, {color: theme.text}]}>{t.shop.nearby}</Text>
+                {shopLoading ? (
+                  <StatusRow theme={theme} text={t.shop.loading} />
+                ) : shops.length === 0 ? (
+                  <Text style={[styles.hint, {color: theme.muted}]}>{t.shop.empty}</Text>
+                ) : (
+                  shops.map((shop) => {
+                    const badge = openBadge(shop);
+                    const dist = typeof shop.distance === "number" ? shop.distance : null;
+                    return (
+                      <View key={shop.id} style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: shopSel?.id === shop.id ? theme.primary : theme.border}]}>
+                        <Pressable onPress={() => void onPickShop(shop.id)} accessibilityRole="button">
+                          <Text style={[styles.cardTitle, {color: theme.text}]}>{shop.name}</Text>
+                        </Pressable>
+                        <View style={styles.metaRow}>
+                          {dist !== null ? <Text style={[styles.coords, {color: theme.muted}]}>{walkKm(dist)} {t.route.km} · {walkMinutes(dist)} {t.route.min}</Text> : null}
+                          <Text style={[styles.badge, {color: badge.color}]}>{badge.label}</Text>
+                        </View>
+                        <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, walkBusy && styles.disabled]} disabled={walkBusy} onPress={() => void onPickShop(shop.id)} accessibilityRole="button" accessibilityLabel={t.shop.walkTo}>
+                          <Text style={styles.actionText}>{t.shop.walkTo}</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })
+                )}
+              </>
+            ) : (
+              <>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.assist.note} placeholderTextColor={theme.muted} value={note} onChangeText={setNote} />
+                {ticketType === "TOW" ? <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={setDest} /> : null}
+                <Pressable style={[styles.primary, {backgroundColor: theme.primary}, reqBusy && styles.disabled]} disabled={reqBusy} onPress={() => void onRequest()} accessibilityRole="button" accessibilityLabel={t.assist.request}>{reqBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.assist.request}</Text>}</Pressable>
+              </>
+            )}
             <Text style={[styles.section, {color: theme.text}]}>{t.assist.myTickets}</Text>
             {loading && mine.length === 0 ? (
               <StatusRow theme={theme} text={t.common.loading} />
@@ -448,9 +495,7 @@ export default function AssistScreen() {
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
-      {picking ? (
-        <Snack message={t.assist.tapToSet} sticky bottom={snackBottom} accentColor={theme.primary} onHide={() => {}} />
-      ) : error ? (
+      {error ? (
         <Snack message={error} severity="error" sticky bottom={snackBottom} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom} accentColor={theme.primary} onHide={() => setNotice(null)} />
@@ -477,6 +522,8 @@ const styles = StyleSheet.create({
   cardTitle: {fontWeight: "700"},
   coords: {fontSize: 12},
   hint: {fontSize: 12},
+  metaRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
+  badge: {fontSize: 12, fontWeight: "700"},
   actionRow: {flexDirection: "row", gap: 8},
   actionBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
   actionText: {color: "#fff", fontWeight: "700"},

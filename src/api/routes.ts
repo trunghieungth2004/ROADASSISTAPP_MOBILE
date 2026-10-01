@@ -13,6 +13,7 @@ export type RouteRequest = {
   stops?: LatLng[];
   width?: number;
   vehicleType?: string;
+  mode?: "scooter" | "car" | "foot";
 };
 
 export type RouteGeometry = {
