@@ -15,6 +15,8 @@ import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
 import {snackAbove} from "../components/snackOffset";
 import {myFlags} from "../api/flags";
+import {myShops, updateShop, type Shop} from "../api/shops";
+import ShopFormSheet from "../components/ShopFormSheet";
 import OnboardingScreen from "./OnboardingScreen";
 import DiagnosticsScreen from "./DiagnosticsScreen";
 import {useThemeMode} from "../context/ThemeContext";
@@ -50,6 +52,23 @@ export default function MoreScreen() {
   const [reportCount, setReportCount] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
   const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
+  const isShopOwner = (user?.services ?? []).includes("SHOP");
+  const [shopList, setShopList] = useState<Shop[]>([]);
+  const [shopBusyId, setShopBusyId] = useState<string | null>(null);
+  const [shopError, setShopError] = useState<string | null>(null);
+  const [shopCreateOpen, setShopCreateOpen] = useState(false);
+  const [shopEdit, setShopEdit] = useState<Shop | null>(null);
+  const loadShops = useCallback(async (): Promise<void> => {
+    if (!token) {
+      setShopList([]);
+      return;
+    }
+    try {
+      setShopList(await myShops(token));
+    } catch (err) {
+      setShopError(toMessage(err));
+    }
+  }, [token]);
   useFocusEffect(useCallback(() => {
     void getPermissionStates().then(setPerms).catch(() => undefined);
     if (!token) return;
@@ -59,7 +78,8 @@ export default function MoreScreen() {
         setConfirmedCount(list.filter((f) => f.status === "2").length);
       })
       .catch(() => undefined);
-  }, [token]));
+    if (isShopOwner) void loadShops();
+  }, [token, isShopOwner, loadShops]));
   async function onEnableNotifications() {
     if (permsBusy) return;
     setPermsBusy(true);
@@ -149,6 +169,20 @@ export default function MoreScreen() {
   async function onServicesSkip() {
     setServicesBusy(true); setServicesError(null);
     try { await markOnboarded("RIDER"); await refresh(); setServicesOpen(false); } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
+  }
+  async function onShopToggle(shop: Shop, next: boolean): Promise<void> {
+    if (!token || shopBusyId) return;
+    setShopBusyId(shop.id);
+    setShopError(null);
+    try {
+      await updateShop({shopId: shop.id, accepting: next}, token);
+      await loadShops();
+      setNotice(t.more.saved);
+    } catch (err) {
+      setShopError(toMessage(err));
+    } finally {
+      setShopBusyId(null);
+    }
   }
   return (
     <ScreenContainer>
@@ -281,6 +315,44 @@ export default function MoreScreen() {
             ) : null}
           </View>
         ) : null}
+        {isShopOwner ? (
+          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <View style={styles.listRow}>
+              <MaterialIcons name="store" size={20} color={theme.primary} />
+              <Text style={[styles.listText, {color: theme.text}]}>{t.shop.myShops}</Text>
+              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setShopCreateOpen(true)} accessibilityRole="button" accessibilityLabel={t.shop.addShop}>
+                <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.shop.addShop}</Text>
+              </Pressable>
+            </View>
+            {shopList.length === 0 ? (
+              <Text style={[styles.emptyShops, {color: theme.muted}]}>{t.shop.noOwned}</Text>
+            ) : (
+              shopList.map((shop, index) => (
+                <View key={shop.id}>
+                  {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
+                  <View style={styles.listRow}>
+                    <Pressable style={styles.permText} onPress={() => setShopEdit(shop)} accessibilityRole="button">
+                      <Text style={[styles.listText, {color: theme.text}]}>{shop.name}</Text>
+                      <Text style={[styles.permHint, {color: theme.muted}]}>{shop.type}</Text>
+                    </Pressable>
+                    <View style={[styles.permPill, {backgroundColor: shop.accepting !== false ? theme.primary : theme.divider}]}>
+                      <Text style={styles.permPillText}>{shop.accepting !== false ? t.more.permOn : t.more.permOff}</Text>
+                    </View>
+                    <View pointerEvents="none">
+                      <Switch value={shop.accepting !== false} onValueChange={(v) => void onShopToggle(shop, v)} disabled={shopBusyId !== null} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        ) : null}
+        <Modal visible={shopCreateOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setShopCreateOpen(false); }}>
+          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><ShopFormSheet t={t} token={token} shop={null} onClose={() => { Keyboard.dismiss(); setShopCreateOpen(false); }} onSaved={() => { setShopCreateOpen(false); setNotice(t.shop.shopSaved); void loadShops(); }} /></View></View>
+        </Modal>
+        <Modal visible={shopEdit !== null} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setShopEdit(null); }}>
+          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}>{shopEdit ? <ShopFormSheet t={t} token={token} shop={shopEdit} onClose={() => { Keyboard.dismiss(); setShopEdit(null); }} onSaved={() => { setShopEdit(null); setNotice(t.shop.shopSaved); void loadShops(); }} /> : null}</View></View>
+        </Modal>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => setDiagOpen(true)}>
             <MaterialIcons name="bug-report" size={20} color={theme.primary} />
@@ -297,6 +369,8 @@ export default function MoreScreen() {
       </ScrollView>
       {volError ? (
         <Snack message={volError} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
+      ) : shopError ? (
+        <Snack message={shopError} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setShopError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
@@ -344,6 +418,7 @@ const styles = StyleSheet.create({
   optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16},
   optText: {fontSize: 13, fontWeight: "600"},
   listSecondary: {fontSize: 13},
+  emptyShops: {fontSize: 13, paddingHorizontal: 16, paddingBottom: 14},
   divider: {height: 1, marginHorizontal: 16},
   primary: {borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center"},
   primaryText: {color: "#fff", fontWeight: "700"},
