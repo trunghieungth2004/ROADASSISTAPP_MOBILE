@@ -52,3 +52,11 @@ export function setActiveVehicle(payload: {profileId: string | null}, token: str
 export function updateProfile(payload: {displayName: string}, token: string): Promise<{updated: number}> {
   return api.put<{updated: number}>("/users/profile", payload, token);
 }
+
+export function setVolunteerAvailability(payload: {available: boolean; volunteerRadiusKm?: number; capability?: string}, token: string): Promise<{updated: number; available: boolean}> {
+  return api.put<{updated: number; available: boolean}>("/users/volunteer", payload, token);
+}
+
+export function volunteerHeartbeat(lat: number, lng: number, token: string): Promise<unknown> {
+  return api.post<unknown>("/users/volunteer/heartbeat", {lat, lng}, token);
+}

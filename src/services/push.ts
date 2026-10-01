@@ -2,16 +2,9 @@ import {Platform} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {registerPush, unregisterPush} from "../api/push";
+import {parseDispatchPush, parseHazardPush, type DispatchPushData, type HazardPushData} from "./pushPayload";
 
-export type HazardPushData = {
-  flagId: string;
-  type?: string;
-  status?: string;
-  lat?: number;
-  lng?: number;
-  radiusMeters?: number;
-  removed?: boolean;
-};
+export type {DispatchPushData, HazardPushData};
 
 const DEVICE_KEY = "roadassist.push.device";
 const OWNER_KEY = "roadassist.push.owner";
@@ -24,22 +17,6 @@ let navForeground = false;
 
 export function setNavForeground(open: boolean): void {
   navForeground = open;
-}
-
-export function parseHazardPush(data: unknown): HazardPushData | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-  if (typeof d.flagId !== "string" || d.flagId === "") return null;
-  const num = (v: unknown): number | undefined => (typeof v === "string" && v !== "" && Number.isFinite(Number(v)) ? Number(v) : undefined);
-  return {
-    flagId: d.flagId,
-    type: typeof d.type === "string" ? d.type : undefined,
-    status: typeof d.status === "string" ? d.status : undefined,
-    lat: num(d.lat),
-    lng: num(d.lng),
-    radiusMeters: num(d.radiusMeters),
-    removed: d.removed === true || d.removed === "true" || undefined,
-  };
 }
 
 export function claimPush(flagId: string): boolean {
@@ -116,6 +93,22 @@ export function subscribeHazardPush(onPush: (data: HazardPushData) => void, owne
     const parsed = parseHazardPush(n.request.content.data);
     if (parsed && claimPush(`${owner}:${parsed.flagId}`)) {
       void AsyncStorage.setItem(LAST_PUSH_KEY, JSON.stringify({flagId: parsed.flagId, at: Date.now()})).catch(() => undefined);
+      onPush(parsed);
+    }
+  };
+  const received = Notifications.addNotificationReceivedListener(fromNotification);
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => fromNotification(r.notification));
+  return () => {
+    received.remove();
+    tapped.remove();
+  };
+}
+
+export function subscribeDispatchPush(onPush: (data: DispatchPushData) => void, owner: string): () => void {
+  const fromNotification = (n: Notifications.Notification | null | undefined): void => {
+    if (!n) return;
+    const parsed = parseDispatchPush(n.request.content.data);
+    if (parsed && claimPush(`${owner}:${parsed.ticketId}`)) {
       onPush(parsed);
     }
   };
