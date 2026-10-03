@@ -4,11 +4,11 @@ import {AppText as Text, AppTextInput as TextInput} from "../components/AppText"
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {useNavigation} from "@react-navigation/native";
+import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
 import {acceptTicket, cancelTicket, createTicket, getTicket, myTickets, nearTickets, updateTicketStatus, type DispatchTicket, type TicketType} from "../api/dispatch";
-import {nearShops, type Shop} from "../api/shops";
+import {myProviders, nearProviders, pingProviderLocation, reportProvider, REPORT_REASONS, type Provider, type ReportReason} from "../api/providers";
 import {findRoute, type RouteOption} from "../api/routes";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search/PlaceSearch.types";
@@ -18,12 +18,14 @@ import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import Snack from "../components/Snack";
+import Overlay from "../components/overlay/Overlay";
 import StatusRow from "../components/StatusRow";
-import {snackAbove} from "../components/snackOffset";
+import {snackAboveTabs} from "../components/snackOffset";
 import {Fab, FabColumn} from "../components/Fab";
 import {formatPoint} from "../api/places";
 import {ensurePushConfigured, subscribeDispatchPush} from "../services/push";
-import {hasProviderLicense} from "../services/licenses";
+import {capturePosition, useLocationBeat} from "../services/locationBeats";
+import {ticketTitle} from "./assist/ticketLabels";
 import {boundsOf} from "./route/routeGeo";
 import AssistMapView from "./assist/AssistMapView";
 import {ticketById, toggleSelected} from "./assist/assistPick";
@@ -35,7 +37,9 @@ export default function AssistScreen() {
   const {t, lang} = useStrings();
   const {token} = useAuth();
   const {activeVehicle, bundle} = useProfile();
-  const provider = hasProviderLicense(bundle?.user.services);
+  const [ownProviders, setOwnProviders] = useState<Provider[]>([]);
+  const provider = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
+    ownProviders.some((p) => p.kind === "TOW" && p.status === "ACTIVE");
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -52,10 +56,37 @@ export default function AssistScreen() {
   const [gps, setGps] = useState<{lat: number; lng: number} | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [active, setActive] = useState<DispatchTicket | null>(null);
+  const [reportFor, setReportFor] = useState<{id: string; name: string} | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>("FAKE_BUSINESS");
+  const [reportNote, setReportNote] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const towOnDuty = ownProviders.some((item) => item.kind === "TOW" && item.status === "ACTIVE" && item.accepting !== false && item.suspended !== true);
+  useLocationBeat(!!token && towOnDuty, active ? 60 * 1000 : 5 * 60 * 1000, async () => {
+    if (!token) return;
+    const pos = await capturePosition();
+    if (!pos) return;
+    await pingProviderLocation(pos.lat, pos.lng, token);
+  });
+  async function onReport(): Promise<void> {
+    if (!token || !reportFor || reportBusy) return;
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      await reportProvider({providerId: reportFor.id, reason: reportReason, ...(reportNote.trim() ? {note: reportNote.trim()} : {})}, token);
+      setReportFor(null);
+      setReportNote("");
+      setNotice(t.report.filed);
+    } catch (err) {
+      setReportError(toMessage(err));
+    } finally {
+      setReportBusy(false);
+    }
+  }
   const [radius, setRadius] = useState(1000);
-  const [shops, setShops] = useState<Shop[]>([]);
+  const [shops, setShops] = useState<Provider[]>([]);
   const [shopLoading, setShopLoading] = useState(false);
-  const [shopSel, setShopSel] = useState<Shop | null>(null);
+  const [shopSel, setShopSel] = useState<Provider | null>(null);
   const [walkRoute, setWalkRoute] = useState<RouteOption | null>(null);
   const [walkBusy, setWalkBusy] = useState(false);
   const [reqBusy, setReqBusy] = useState(false);
@@ -64,7 +95,7 @@ export default function AssistScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cardH, setCardH] = useState(0);
-  const snackBottom = cardH > 0 ? snackAbove(12, cardH) : insets.bottom + 24;
+  const snackBottom = snackAboveTabs(insets.bottom);
   const selectedTicket = selectedId ? ticketById([...mine, ...nearby], selectedId) : null;
   const selectedIsMine = selectedTicket ? mine.some((item) => item.id === selectedTicket.id) : false;
   const mechanic = ticketType === "MECHANIC";
@@ -72,7 +103,7 @@ export default function AssistScreen() {
     if (r < 1000) return t.shop.radiusM.replace("{n}", String(r));
     return t.shop.radiusKm.replace("{n}", String(r / 1000));
   }
-  function openBadge(shop: Shop): {label: string; color: string} {
+  function openBadge(shop: Provider): {label: string; color: string} {
     if (shop.openNow === true) return {label: t.shop.open, color: theme.primary};
     if (shop.openNow === false) return {label: t.shop.closed, color: theme.danger};
     return {label: t.shop.unknownHours, color: theme.muted};
@@ -129,7 +160,16 @@ export default function AssistScreen() {
         }
       }
       setMine(await myTickets(token));
-      if (provider) {
+      let fetched: Provider[] = [];
+      try {
+        fetched = await myProviders(token);
+        setOwnProviders(fetched);
+      } catch {
+        setOwnProviders([]);
+      }
+      const gate = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
+        fetched.some((item) => item.kind === "TOW" && item.status === "ACTIVE");
+      if (gate) {
         if (!granted) throw new Error(t.nav.locationDenied);
         if (pos) {
           setNearby(await nearTickets(pos.lat, pos.lng, token));
@@ -146,10 +186,10 @@ export default function AssistScreen() {
     } finally {
       setLoading(false);
     }
-  }, [token, provider, loadActive, t]);
-  useEffect(() => {
+  }, [token, bundle?.user.services, loadActive, t]);
+  useFocusEffect(useCallback(() => {
     void reloadAll();
-  }, [reloadAll]);
+  }, [reloadAll]));
   useEffect(() => {
     ensurePushConfigured();
     return subscribeDispatchPush((data) => {
@@ -186,7 +226,7 @@ export default function AssistScreen() {
     setShopLoading(true);
     setError(null);
     try {
-      setShops(await nearShops(gps.lat, gps.lng, token, {radiusMeters: radius, type: "SHOP", acceptingOnly: true}));
+      setShops(await nearProviders(gps.lat, gps.lng, token, {radiusMeters: radius, kind: "SHOP", acceptingOnly: true}));
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -321,7 +361,6 @@ export default function AssistScreen() {
   return (
     <View style={styles.root}>
       <AssistMapView
-        lang={lang}
         theme={theme}
         cameraRef={cameraRef}
         gps={gps}
@@ -347,13 +386,21 @@ export default function AssistScreen() {
         <View style={[styles.selectedWrap, {bottom: cardH + 24}]} pointerEvents="box-none">
           <View style={[styles.selectedCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
             <View style={styles.selectedRow}>
-              <Text style={[styles.cardTitle, {color: theme.text}]}>{selectedTicket.ticketType} · {selectedTicket.status}</Text>
+              <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTitle(selectedTicket, t)}</Text>
               <Pressable onPress={() => setSelectedId(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.common.close}>
                 <MaterialIcons name="close" size={18} color={theme.muted} />
               </Pressable>
             </View>
             {typeof selectedTicket.note === "string" && selectedTicket.note ? <Text style={{color: theme.text}}>{selectedTicket.note}</Text> : null}
             <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(selectedTicket.lat, selectedTicket.lng)}</Text>
+            {typeof selectedTicket.towPlate === "string" && selectedTicket.towPlate ? (
+              <Text style={[styles.coords, {color: theme.text}]}>{t.tow.plate}: {selectedTicket.towPlate}</Text>
+            ) : null}
+            {typeof selectedTicket.assignedShopId === "string" && selectedTicket.assignedShopId ? (
+              <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { setReportReason("FAKE_BUSINESS"); setReportNote(""); setReportError(null); setReportFor({id: selectedTicket.assignedShopId as string, name: selectedTicket.towPlate ?? t.report.unknownProvider}); }} accessibilityRole="button" accessibilityLabel={t.report.title}>
+                <Text style={{color: theme.primary}}>{t.report.title}</Text>
+              </Pressable>
+            ) : null}
             {selectedIsMine ? (
               selectedTicket.status === "1" || selectedTicket.status === "2" ? (
                 <Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => void onCancel(selectedTicket.id)} accessibilityRole="button" accessibilityLabel={t.assist.cancel}>
@@ -368,14 +415,17 @@ export default function AssistScreen() {
           </View>
         </View>
       ) : null}
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.bottomContainer}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.bottomContainer}>
         <View onLayout={(e) => setCardH(e.nativeEvent.layout.height)} style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {active ? (
               <View style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
-                <Text style={[styles.cardTitle, {color: theme.text}]}>{t.assist.activeJob} · {active.ticketType} · {active.status}</Text>
+                <Text style={[styles.cardTitle, {color: theme.text}]}>{t.assist.activeJob} · {ticketTitle(active, t)}</Text>
                 {typeof active.note === "string" && active.note ? <Text style={{color: theme.text}}>{active.note}</Text> : null}
                 <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(active.lat, active.lng)}</Text>
+                {typeof active.towPlate === "string" && active.towPlate ? (
+                  <Text style={[styles.coords, {color: theme.text}]}>{t.tow.plate}: {active.towPlate}</Text>
+                ) : null}
                 <View style={styles.actionRow}>
                   {active.status === "2" ? (
                     <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, respBusy && styles.disabled]} disabled={respBusy} onPress={() => void onStatus("3")} accessibilityRole="button" accessibilityLabel={t.assist.arrived}>
@@ -410,7 +460,7 @@ export default function AssistScreen() {
                     {walkBusy ? (
                       <StatusRow theme={theme} text={t.common.loading} />
                     ) : walkRoute ? (
-                      <Text style={[styles.coords, {color: theme.muted}]}>{t.shop.walkRoute} · {(walkRoute.distanceMeters / 1000).toFixed(1)} {t.route.km} · {Math.round(walkRoute.durationSeconds / 60)} {t.route.min}</Text>
+                      <Text style={[styles.coords, {color: theme.muted}]}>{t.shop.walkRoute} · {((walkRoute.distanceMeters ?? 0) / 1000).toFixed(1)} {t.route.km} · {Math.round((walkRoute.durationSeconds ?? 0) / 60)} {t.route.min}</Text>
                     ) : (
                       <Text style={[styles.coords, {color: theme.muted}]}>{t.shop.walkTo}</Text>
                     )}
@@ -434,9 +484,14 @@ export default function AssistScreen() {
                           {dist !== null ? <Text style={[styles.coords, {color: theme.muted}]}>{walkKm(dist)} {t.route.km} · {walkMinutes(dist)} {t.route.min}</Text> : null}
                           <Text style={[styles.badge, {color: badge.color}]}>{badge.label}</Text>
                         </View>
-                        <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, walkBusy && styles.disabled]} disabled={walkBusy} onPress={() => void onPickShop(shop.id)} accessibilityRole="button" accessibilityLabel={t.shop.walkTo}>
-                          <Text style={styles.actionText}>{t.shop.walkTo}</Text>
-                        </Pressable>
+                        <View style={styles.actionRow}>
+                          <Pressable style={[styles.actionBtn, styles.actionGrow, {backgroundColor: theme.primary}, walkBusy && styles.disabled]} disabled={walkBusy} onPress={() => void onPickShop(shop.id)} accessibilityRole="button" accessibilityLabel={t.shop.walkTo}>
+                            <Text style={styles.actionText}>{t.shop.walkTo}</Text>
+                          </Pressable>
+                          <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { setReportReason("FAKE_BUSINESS"); setReportNote(""); setReportError(null); setReportFor({id: shop.id, name: shop.name}); }} accessibilityRole="button" accessibilityLabel={t.report.title}>
+                            <MaterialIcons name="flag" size={18} color={theme.primary} />
+                          </Pressable>
+                        </View>
                       </View>
                     );
                   })
@@ -445,7 +500,7 @@ export default function AssistScreen() {
             ) : (
               <>
                 <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.assist.note} placeholderTextColor={theme.muted} value={note} onChangeText={setNote} />
-                {ticketType === "TOW" ? <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} onSelect={setDest} /> : null}
+                {ticketType === "TOW" ? <PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} groupLabels={{saved: t.route.savedPlaces, directory: t.route.directory, map: t.route.mapResults}} onSelect={setDest} /> : null}
                 <Pressable style={[styles.primary, {backgroundColor: theme.primary}, reqBusy && styles.disabled]} disabled={reqBusy} onPress={() => void onRequest()} accessibilityRole="button" accessibilityLabel={t.assist.request}>{reqBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.assist.request}</Text>}</Pressable>
               </>
             )}
@@ -458,7 +513,7 @@ export default function AssistScreen() {
               mine.map((item) => (
                 <View key={item.id} style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: selectedId === item.id ? theme.primary : theme.border}]}>
                   <Pressable onPress={() => onPickTicket(item.id)} accessibilityRole="button">
-                    <Text style={[styles.cardTitle, {color: theme.text}]}>{item.ticketType} · {item.status}</Text>
+                    <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTitle(item, t)}</Text>
                   </Pressable>
                   {typeof item.note === "string" && item.note ? <Text style={{color: theme.text}}>{item.note}</Text> : null}
                   {item.status === "1" || item.status === "2" ? (
@@ -480,7 +535,7 @@ export default function AssistScreen() {
                   nearby.map((item) => (
                     <View key={item.id} style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: selectedId === item.id ? theme.primary : theme.border}]}>
                       <Pressable onPress={() => onPickTicket(item.id)} accessibilityRole="button">
-                        <Text style={[styles.cardTitle, {color: theme.text}]}>{item.ticketType} · {item.status}</Text>
+                        <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTitle(item, t)}</Text>
                       </Pressable>
                       {typeof item.note === "string" && item.note ? <Text style={{color: theme.text}}>{item.note}</Text> : null}
                       <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(item.lat, item.lng)}</Text>
@@ -495,6 +550,24 @@ export default function AssistScreen() {
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <Overlay
+        visible={reportFor !== null}
+        variant="dialog"
+        title={reportFor ? `${t.report.title} · ${reportFor.name}` : t.report.title}
+        closeLabel={t.common.cancel}
+        onClose={() => setReportFor(null)}
+        actions={[{label: t.report.submit, tone: "primary", busy: reportBusy, onPress: () => void onReport()}]}
+      >
+        {reportError ? <Text style={[styles.hint, {color: theme.danger}]}>{reportError}</Text> : null}
+        <View style={styles.row}>
+          {REPORT_REASONS.map((reason) => (
+            <Pressable key={reason} onPress={() => setReportReason(reason)} style={[styles.chip, {borderColor: theme.primary}, reportReason === reason && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: reportReason === reason}}>
+              <Text style={{color: reportReason === reason ? "#fff" : theme.text}}>{{FAKE_BUSINESS: t.report.reasonFakeBusiness, WRONG_LOCATION: t.report.reasonWrongLocation, UNSAFE: t.report.reasonUnsafe, HARASSMENT: t.report.reasonHarassment, SPAM: t.report.reasonSpam, OTHER: t.report.reasonOther}[reason]}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.report.notePlaceholder} placeholderTextColor={theme.muted} value={reportNote} onChangeText={setReportNote} maxLength={280} />
+      </Overlay>
       {error ? (
         <Snack message={error} severity="error" sticky bottom={snackBottom} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (
@@ -526,6 +599,7 @@ const styles = StyleSheet.create({
   badge: {fontSize: 12, fontWeight: "700"},
   actionRow: {flexDirection: "row", gap: 8},
   actionBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
+  actionGrow: {flex: 1},
   actionText: {color: "#fff", fontWeight: "700"},
   selectedWrap: {position: "absolute", left: 12, right: 12, zIndex: 10, elevation: 5},
   selectedCard: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 6},

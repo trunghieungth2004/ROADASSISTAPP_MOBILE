@@ -56,9 +56,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   next: {kind: string; street: string | undefined; toGo: number} | null;
   speedKmh: number | null;
   onRegionChanging: (e: unknown) => void;
-  onRegionDid: () => void;
   onRecenter: () => void;
-  requestRerouteNow: () => void;
   rerouteForConfirm: () => Promise<boolean>;
   refreshRouteQuiet: () => Promise<{changed: boolean; warnings: FlagWarning[]} | null>;
   previewStep: (idx: number) => void;
@@ -473,7 +471,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
             );
           },
         );
-        void startBgNav(t.nav.bgNavTitle, `${t.nav.bgNavBody} · ${distText(seedRoute.distanceMeters)}`);
+        void startBgNav(t.nav.bgNavTitle, `${t.nav.bgNavBody} · ${distText(seedRoute.distanceMeters ?? 0)}`);
         const appSub = AppState.addEventListener("change", (state) => {
           if (state !== "active" || !alive) return;
           void (async () => {
@@ -514,8 +512,6 @@ export function useNavTracking(opts: NavTrackingOpts): {
       followingRef.current = false;
     }
   };
-
-  const onRegionDid = (): void => {};
 
   const HIGHLIGHT_HALF_METERS = 80;
   const flagWarningList = useMemo(() => (route.warnings ?? []).filter(isFlagWarning), [route]);
@@ -581,11 +577,6 @@ export function useNavTracking(opts: NavTrackingOpts): {
       duration: 500,
     });
   };
-  const requestRerouteNow = (): void => {
-    const p = lastFixRef.current;
-    if (p && !reroutingRef.current && !arrivedRef.current) void reroute(p.lat, p.lng, true);
-  };
-
   const onRecenter = (): void => {
     setFollowing(true);
     followingRef.current = true;
@@ -662,9 +653,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
     next: next ? {kind: next.kind, street: nextStreet, toGo: nextToGo} : null,
     speedKmh,
   onRegionChanging,
-  onRegionDid,
   onRecenter,
-  requestRerouteNow,
   rerouteForConfirm,
   refreshRouteQuiet,
   previewStep,

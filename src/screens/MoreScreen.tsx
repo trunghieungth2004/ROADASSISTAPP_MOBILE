@@ -1,11 +1,12 @@
-import {useCallback, useEffect, useState} from "react";
-import {Keyboard, Modal, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {useCallback, useState} from "react";
+import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {useFocusEffect} from "@react-navigation/native";
+import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import * as Location from "expo-location";
 import {setVolunteerAvailability, updateProfile, volunteerHeartbeat} from "../api/users";
+import {capturePosition, useLocationBeat} from "../services/locationBeats";
+import {missingKinds, providerPill, providerRowSubtitle, serviceLabel, switchEnabled} from "./more/providerUi";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -13,12 +14,14 @@ import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
-import {snackAbove} from "../components/snackOffset";
+import {snackAboveTabs} from "../components/snackOffset";
 import {myFlags} from "../api/flags";
-import {myShops, updateShop, type Shop} from "../api/shops";
-import ShopFormSheet from "../components/ShopFormSheet";
+import {createProvider, myProviders, updateProvider, type Provider} from "../api/providers";
+import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
+import type {ShopDraft, TowDraft} from "./OnboardingScreen";
+import ProviderFormDialog from "../components/ProviderFormDialog";
 import OnboardingScreen from "./OnboardingScreen";
-import DiagnosticsScreen from "./DiagnosticsScreen";
+import Overlay from "../components/overlay/Overlay";
 import {useThemeMode} from "../context/ThemeContext";
 import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
@@ -46,27 +49,26 @@ export default function MoreScreen() {
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [perms, setPerms] = useState<AppPermissionStates>({notifications: {granted: false, canAskAgain: true}, backgroundLocation: {granted: false, canAskAgain: true}});
   const [permsBusy, setPermsBusy] = useState(false);
-  const [diagOpen, setDiagOpen] = useState(false);
+  const navigation = useNavigation();
   const [volBusy, setVolBusy] = useState(false);
   const [volError, setVolError] = useState<string | null>(null);
   const [reportCount, setReportCount] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
   const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
-  const isShopOwner = (user?.services ?? []).includes("SHOP");
-  const [shopList, setShopList] = useState<Shop[]>([]);
-  const [shopBusyId, setShopBusyId] = useState<string | null>(null);
-  const [shopError, setShopError] = useState<string | null>(null);
-  const [shopCreateOpen, setShopCreateOpen] = useState(false);
-  const [shopEdit, setShopEdit] = useState<Shop | null>(null);
-  const loadShops = useCallback(async (): Promise<void> => {
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerBusy, setProviderBusy] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
+  const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | null>(null);
+  const [providerEdit, setProviderEdit] = useState<Provider | null>(null);
+  const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
-      setShopList([]);
+      setProviders([]);
       return;
     }
     try {
-      setShopList(await myShops(token));
+      setProviders(await myProviders(token));
     } catch (err) {
-      setShopError(toMessage(err));
+      setProviderError(toMessage(err));
     }
   }, [token]);
   useFocusEffect(useCallback(() => {
@@ -78,8 +80,8 @@ export default function MoreScreen() {
         setConfirmedCount(list.filter((f) => f.status === "2").length);
       })
       .catch(() => undefined);
-    if (isShopOwner) void loadShops();
-  }, [token, isShopOwner, loadShops]));
+    void loadProviders();
+  }, [token, loadProviders]));
   async function onEnableNotifications() {
     if (permsBusy) return;
     setPermsBusy(true);
@@ -108,21 +110,13 @@ export default function MoreScreen() {
       setPermsBusy(false);
     }
   }
-  const beatHeart = useCallback(async (): Promise<void> => {
+  const volunteerOn = user?.volunteerAvailable === true;
+  useLocationBeat(!!token && volunteerOn, 5 * 60 * 1000, async () => {
     if (!token) return;
-    const {status} = await Location.getForegroundPermissionsAsync();
-    if (status !== "granted") return;
-    const pos = await Location.getCurrentPositionAsync({});
-    await volunteerHeartbeat(pos.coords.latitude, pos.coords.longitude, token);
-  }, [token]);
-  useEffect(() => {
-    if (!user?.volunteerAvailable) return;
-    void beatHeart().catch(() => undefined);
-    const timer = setInterval(() => {
-      void beatHeart().catch(() => undefined);
-    }, 5 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [user?.volunteerAvailable, beatHeart]);
+    const pos = await capturePosition();
+    if (!pos) return;
+    await volunteerHeartbeat(pos.lat, pos.lng, token);
+  });
   async function onVolunteerToggle(next: boolean): Promise<void> {
     if (!token || volBusy) return;
     setVolBusy(true);
@@ -130,7 +124,10 @@ export default function MoreScreen() {
     try {
       await setVolunteerAvailability({available: next}, token);
       await refresh();
-      if (next) await beatHeart();
+      if (next && token) {
+        const pos = await capturePosition();
+        if (pos) await volunteerHeartbeat(pos.lat, pos.lng, token);
+      }
       setNotice(t.more.saved);
     } catch (err) {
       setVolError(toMessage(err));
@@ -162,28 +159,53 @@ export default function MoreScreen() {
     setEditError(null);
     try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); }
   }
-  async function onServicesFinish(selected: string[]) {
+  async function onServicesFinish(selected: string[], shop: ShopDraft | null, tow: TowDraft | null) {
     setServicesBusy(true); setServicesError(null);
-    try { for (const service of selected) await markOnboarded(service); await refresh(); setServicesOpen(false); setNotice(t.more.saved); } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
+    try {
+      if (shop && shop.name.trim() === "") throw new Error(t.provider.invalidName);
+      if (tow) {
+        if (tow.name.trim() === "") throw new Error(t.provider.invalidName);
+        if (validateTowDraft({plate: tow.plate, vehicleType: tow.vehicleType, width: tow.width})) throw new Error(t.tow.invalid);
+      }
+      for (const service of selected) await markOnboarded(service);
+      if (token) {
+        if (shop) {
+          try {
+            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {})}, token);
+          } catch (err) {
+            throw new Error(`${t.provider.createShopFailed} ${toMessage(err)}`);
+          }
+        }
+        if (tow) {
+          try {
+            await createProvider({kind: "TOW", name: tow.name.trim(), lat: tow.lat, lng: tow.lng, plate: normalizeTowPlate(tow.plate), vehicleType: tow.vehicleType, vehicleWidth: parseTowWidth(tow.width) ?? undefined}, token);
+          } catch (err) {
+            throw new Error(`${t.provider.createTowFailed} ${toMessage(err)}`);
+          }
+        }
+      }
+      await refresh(); await loadProviders(); setServicesOpen(false); setNotice(t.provider.saved);
+    } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
   }
   async function onServicesSkip() {
     setServicesBusy(true); setServicesError(null);
     try { await markOnboarded("RIDER"); await refresh(); setServicesOpen(false); } catch (err) { setServicesError(toMessage(err)); } finally { setServicesBusy(false); }
   }
-  async function onShopToggle(shop: Shop, next: boolean): Promise<void> {
-    if (!token || shopBusyId) return;
-    setShopBusyId(shop.id);
-    setShopError(null);
+  async function onProviderToggle(provider: Provider, next: boolean): Promise<void> {
+    if (!token || providerBusy) return;
+    setProviderBusy(true);
+    setProviderError(null);
     try {
-      await updateShop({shopId: shop.id, accepting: next}, token);
-      await loadShops();
+      await updateProvider({providerId: provider.id, accepting: next}, token);
+      await loadProviders();
       setNotice(t.more.saved);
     } catch (err) {
-      setShopError(toMessage(err));
+      setProviderError(toMessage(err));
     } finally {
-      setShopBusyId(null);
+      setProviderBusy(false);
     }
   }
+  const missing = missingKinds(providers);
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
@@ -200,7 +222,7 @@ export default function MoreScreen() {
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
               <View style={styles.badgeRow}>
                 <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.more.roleUser}</Text></View>
-                {services.map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{s}</Text></View>))}
+                {services.map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
               </View>
             </View>
           </View>
@@ -219,19 +241,30 @@ export default function MoreScreen() {
             </View>
           </View>
         </View>
-        <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setEditOpen(false); }}>
-          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><Text style={[styles.modalTitle, {color: theme.text}]}>{t.more.displayName}</Text>{editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}<TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} /><View style={styles.modalActions}><Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { Keyboard.dismiss(); setEditOpen(false); }}><Text style={{color: theme.text}}>{t.common.close}</Text></Pressable><Pressable style={[styles.primary, {backgroundColor: theme.primary, opacity: !nameDraft.trim() ? 0.5 : 1}]} disabled={!nameDraft.trim()} onPress={() => void onSaveName()}><Text style={styles.primaryText}>{t.common.save}</Text></Pressable></View></View></View>
-        </Modal>
-        <Modal visible={servicesOpen} animationType="slide" onRequestClose={() => setServicesOpen(false)}>
-          <OnboardingScreen t={t} busy={servicesBusy} error={servicesError} onFinish={(selected) => void onServicesFinish(selected)} onSkip={() => void onServicesSkip()} />
-        </Modal>
+        <Overlay
+          visible={editOpen}
+          variant="dialog"
+          title={t.more.displayName}
+          closeLabel={t.common.cancel}
+          onClose={() => { Keyboard.dismiss(); setEditOpen(false); }}
+          scrollable={false}
+          actions={[{label: t.common.save, tone: "primary", disabled: !nameDraft.trim(), onPress: () => void onSaveName()}]}
+        >
+          {editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}
+          <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} />
+        </Overlay>
+        <Overlay visible={servicesOpen} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setServicesOpen(false)}>
+          {servicesOpen ? (
+            <OnboardingScreen t={t} lang={lang} token={token} busy={servicesBusy} error={servicesError} selectedServices={services} registered={{shop: !missing.shop, tow: !missing.tow}} onFinish={(selected, shop, tow) => void onServicesFinish(selected, shop, tow)} onSkip={() => void onServicesSkip()} />
+          ) : null}
+        </Overlay>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text></Pressable>
+          <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={toggleTheme} accessibilityRole="switch" accessibilityState={{checked: scheme === "dark"}}><MaterialIcons name={scheme === "dark" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text><View pointerEvents="none"><Switch value={scheme === "dark"} onValueChange={() => toggleTheme()} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
-          <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text></Pressable>
+          <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <View style={styles.listRow}>
@@ -315,64 +348,86 @@ export default function MoreScreen() {
             ) : null}
           </View>
         ) : null}
-        {isShopOwner ? (
-          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-            <View style={styles.listRow}>
-              <MaterialIcons name="store" size={20} color={theme.primary} />
-              <Text style={[styles.listText, {color: theme.text}]}>{t.shop.myShops}</Text>
-              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setShopCreateOpen(true)} accessibilityRole="button" accessibilityLabel={t.shop.addShop}>
-                <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.shop.addShop}</Text>
-              </Pressable>
-            </View>
-            {shopList.length === 0 ? (
-              <Text style={[styles.emptyShops, {color: theme.muted}]}>{t.shop.noOwned}</Text>
-            ) : (
-              shopList.map((shop, index) => (
-                <View key={shop.id}>
-                  {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
-                  <View style={styles.listRow}>
-                    <Pressable style={styles.permText} onPress={() => setShopEdit(shop)} accessibilityRole="button">
-                      <Text style={[styles.listText, {color: theme.text}]}>{shop.name}</Text>
-                      <Text style={[styles.permHint, {color: theme.muted}]}>{shop.type}</Text>
-                    </Pressable>
-                    <View style={[styles.permPill, {backgroundColor: shop.accepting !== false ? theme.primary : theme.divider}]}>
-                      <Text style={styles.permPillText}>{shop.accepting !== false ? t.more.permOn : t.more.permOff}</Text>
-                    </View>
-                    <View pointerEvents="none">
-                      <Switch value={shop.accepting !== false} onValueChange={(v) => void onShopToggle(shop, v)} disabled={shopBusyId !== null} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
-                    </View>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        ) : null}
-        <Modal visible={shopCreateOpen} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setShopCreateOpen(false); }}>
-          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}><ShopFormSheet t={t} token={token} shop={null} onClose={() => { Keyboard.dismiss(); setShopCreateOpen(false); }} onSaved={() => { setShopCreateOpen(false); setNotice(t.shop.shopSaved); void loadShops(); }} /></View></View>
-        </Modal>
-        <Modal visible={shopEdit !== null} transparent animationType="fade" onRequestClose={() => { Keyboard.dismiss(); setShopEdit(null); }}>
-          <View style={styles.modalOverlay}><View style={[styles.modalCard, {backgroundColor: theme.paper}]}>{shopEdit ? <ShopFormSheet t={t} token={token} shop={shopEdit} onClose={() => { Keyboard.dismiss(); setShopEdit(null); }} onSaved={() => { setShopEdit(null); setNotice(t.shop.shopSaved); void loadShops(); }} /> : null}</View></View>
-        </Modal>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow} onPress={() => setDiagOpen(true)}>
+          <View style={styles.listRow}>
+            <MaterialIcons name="store" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.provider.title}</Text>
+          </View>
+          {(() => {
+            if (!missing.shop && !missing.tow) return null;
+            return (
+              <View style={styles.providerCtas}>
+                {missing.shop ? (
+                  <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setProviderCreate("SHOP")} accessibilityRole="button" accessibilityLabel={t.provider.addShop}>
+                    <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.provider.addShop}</Text>
+                  </Pressable>
+                ) : null}
+                {missing.tow ? (
+                  <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setProviderCreate("TOW")} accessibilityRole="button" accessibilityLabel={t.provider.registerTow}>
+                    <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.provider.registerTow}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })()}
+          {providers.map((provider, index) => {
+            const pill = providerPill(provider, t);
+            const pillBg = pill.tone === "on" ? theme.primary : pill.tone === "alert" ? theme.danger : theme.divider;
+            const pillFg = pill.tone === "off" ? theme.text : "#fff";
+            const note = provider.suspended === true && typeof provider.suspendedReason === "string" && provider.suspendedReason ?
+              provider.suspendedReason :
+              provider.status === "DENIED" && typeof provider.reviewNote === "string" && provider.reviewNote ?
+                provider.reviewNote :
+                null;
+            return (
+              <View key={provider.id}>
+                {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
+                <View style={styles.listRow}>
+                  <MaterialIcons name={provider.kind === "TOW" ? "local-shipping" : "storefront"} size={20} color={theme.primary} />
+                  <Pressable style={styles.permText} onPress={() => setProviderEdit(provider)} accessibilityRole="button" accessibilityLabel={`${provider.name}, ${pill.label}`}>
+                    <Text style={[styles.listText, {color: theme.text}]}>{provider.name}</Text>
+                    <Text style={[styles.permHint, {color: theme.muted}]}>{providerRowSubtitle(provider, t)}</Text>
+                    {note ? <Text style={[styles.permHint, {color: theme.muted}]}>{note}</Text> : null}
+                  </Pressable>
+                  <View style={[styles.permPill, {backgroundColor: pillBg}]}>
+                    <Text style={[styles.permPillText, {color: pillFg}]}>{pill.label}</Text>
+                  </View>
+                  <Switch value={provider.accepting !== false} onValueChange={(v) => void onProviderToggle(provider, v)} disabled={!switchEnabled(provider, providerBusy)} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
+                </View>
+                {provider.kind === "TOW" && provider.status === "DENIED" ? (
+                  <View style={styles.providerCtas}>
+                    <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setProviderCreate("TOW")} accessibilityRole="button" accessibilityLabel={t.provider.reapplyTow}>
+                      <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.provider.reapplyTow}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+        {providerCreate ? (
+          <ProviderFormDialog t={t} token={token} kind={providerCreate} provider={null} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); }} onSaved={() => { setProviderCreate(null); setNotice(t.provider.saved); void loadProviders(); }} />
+        ) : null}
+        {providerEdit ? (
+          <ProviderFormDialog t={t} token={token} kind={providerEdit.kind === "TOW" ? "TOW" : "SHOP"} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />
+        ) : null}
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Diagnostics" as never)}>
             <MaterialIcons name="bug-report" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.diagnostics}</Text>
             <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
           </Pressable>
         </View>
-        <Modal visible={diagOpen} animationType="slide" onRequestClose={() => setDiagOpen(false)}>
-          <DiagnosticsScreen t={t} authToken={token} onClose={() => setDiagOpen(false)} />
-        </Modal>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => void signOut()}><MaterialIcons name="logout" size={20} color={theme.danger} /><Text style={[styles.listText, {color: theme.danger}]}>{t.more.signOut}</Text></Pressable>
         </View>
       </ScrollView>
       {volError ? (
-        <Snack message={volError} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
-      ) : shopError ? (
-        <Snack message={shopError} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setShopError(null)} />
+        <Snack message={volError} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
+      ) : providerError ? (
+        <Snack message={providerError} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
       ) : (
-        <Snack message={notice} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+        <Snack message={notice} severity="confirm" bottom={snackAboveTabs(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
     </ScreenContainer>
   );
@@ -396,11 +451,6 @@ const styles = StyleSheet.create({
   badgeText: {color: "#fff", fontSize: 12, fontWeight: "600"},
   service: {borderWidth: 1, borderRadius: 12, paddingVertical: 2, paddingHorizontal: 8},
   serviceText: {fontSize: 12},
-  vehicleLine: {fontSize: 13},
-  modalOverlay: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24},
-  modalCard: {borderRadius: 16, padding: 16, gap: 12},
-  modalTitle: {fontSize: 16, fontWeight: "700"},
-  modalActions: {flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 8},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   error: {fontSize: 13},
   card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
@@ -418,9 +468,6 @@ const styles = StyleSheet.create({
   optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16},
   optText: {fontSize: 13, fontWeight: "600"},
   listSecondary: {fontSize: 13},
-  emptyShops: {fontSize: 13, paddingHorizontal: 16, paddingBottom: 14},
+  providerCtas: {flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 14},
   divider: {height: 1, marginHorizontal: 16},
-  primary: {borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, alignItems: "center"},
-  primaryText: {color: "#fff", fontWeight: "700"},
-  chip: {borderWidth: 1, borderRadius: 8, padding: 8, alignItems: "center"},
 });

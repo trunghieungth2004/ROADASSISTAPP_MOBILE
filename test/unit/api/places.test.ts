@@ -1,5 +1,6 @@
 import {expect, jest, test} from "@jest/globals";
 import {formatPoint, reverseLabel, searchMapPlaces} from "../../../src/api/places";
+import {config} from "../../../src/config";
 
 const realFetch = globalThis.fetch;
 
@@ -41,15 +42,12 @@ test("reverseLabel falls back to coordinates on network failure", async () => {
 });
 
 test("reverseLabel falls back to coordinates without a key", async () => {
-  const prev = process.env.EXPO_PUBLIC_MAPTILER_KEY;
-  process.env.EXPO_PUBLIC_MAPTILER_KEY = "";
-  jest.resetModules();
+  const prev = config.maptilerKey;
+  jest.replaceProperty(config, "maptilerKey", "");
   try {
-    const fresh = await import("../../../src/api/places");
-    await expect(fresh.reverseLabel(10.75, 106.65, "en")).resolves.toBe(formatPoint(10.75, 106.65));
+    await expect(reverseLabel(10.75, 106.65, "en")).resolves.toBe(formatPoint(10.75, 106.65));
   } finally {
-    if (prev === undefined) delete process.env.EXPO_PUBLIC_MAPTILER_KEY;
-    else process.env.EXPO_PUBLIC_MAPTILER_KEY = prev;
+    jest.replaceProperty(config, "maptilerKey", prev);
   }
 });
 

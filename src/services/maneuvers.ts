@@ -98,7 +98,9 @@ export function synthesizeManeuvers(coords: [number, number][]): RouteStep[] {
   return out;
 }
 
-export function maneuverSteps(route: {steps?: RouteStep[]; geometry: {coordinates: [number, number][]}}): RouteStep[] {
+export function maneuverSteps(route: {steps?: RouteStep[]; geometry?: {coordinates?: [number, number][]}}): RouteStep[] {
   if (route.steps && route.steps.length > 0) return route.steps;
-  return synthesizeManeuvers(route.geometry.coordinates);
+  const coords = route.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length === 0) return [];
+  return synthesizeManeuvers(coords);
 }

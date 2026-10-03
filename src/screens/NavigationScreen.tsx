@@ -1,10 +1,15 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {BackHandler, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useKeepAwake} from "expo-keep-awake";
+import {useNavigation} from "@react-navigation/native";
 import {useAuth} from "../context/AuthContext";
+import {useStrings} from "../context/LanguageContext";
+import {useNavSession} from "../context/NavSessionContext";
+import Overlay from "../components/overlay/Overlay";
+import {flagStatusColor, flagStatusLabel} from "../components/flagStatus";
 import type {RouteOption} from "../api/routes";
 import {confirmFlag, denyFlag, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {toMessage} from "../api/client";
@@ -19,7 +24,7 @@ import NavMapView from "./navigation/NavMapView";
 import NavHeader from "./navigation/NavHeader";
 import TurnListSheet from "./navigation/TurnListSheet";
 import {Fab, FabColumn} from "../components/Fab";
-import {snackAbove} from "../components/snackOffset";
+import {SNACK_GAP} from "../components/snackOffset";
 import FlagDetailSheet from "../components/FlagDetailSheet";
 import {hazardKind} from "../components/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
@@ -27,7 +32,9 @@ import {ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHa
 import {playEventSound} from "../services/sound";
 import Snack from "../components/Snack";
 import {pickFeedback} from "../components/feedback";
-import FlagSheet, {type FlagReport} from "../components/FlagSheet";
+import FlagReportDialog from "../components/FlagReportDialog";
+import type {FlagReport} from "../components/FlagSheet";
+import {flagOverlayActions} from "./hazards/flagActions";
 
 type Props = {
   t: Strings;
@@ -42,7 +49,43 @@ type Props = {
   onExit: () => void;
 };
 
-export default function NavigationScreen({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, onExit}: Props) {
+export default function NavigationScreen() {
+  const {t, lang} = useStrings();
+  const {token} = useAuth();
+  const {session, clear} = useNavSession();
+  const navigation = useNavigation();
+  const onExit = useCallback(() => {
+    clear();
+    navigation.goBack();
+  }, [clear, navigation]);
+  useEffect(() => {
+    if (!session || !token) {
+      const timer = setTimeout(() => {
+        clear();
+        navigation.goBack();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [session, token, clear, navigation]);
+  if (!session || !token) return null;
+  return (
+    <NavigationContent
+      t={t}
+      lang={lang}
+      token={token}
+      initialRoute={session.route}
+      dest={session.dest}
+      seed={session.seed}
+      stops={session.stops}
+      width={session.width}
+      vehicleType={session.vehicleType}
+      onExit={onExit}
+    />
+  );
+}
+
+function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, onExit}: Props) {
   useKeepAwake();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
@@ -58,12 +101,12 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   const fetchErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmSnack, setConfirmSnack] = useState<string | null>(null);
   const confirmSnackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aliveRef = useRef(true);
   const nav = useNavTracking({token, lang, t, dest, stops, width, vehicleType, initialRoute, seed, speak: voice.speak, resolveVoice: voice.resolveVoice});
   const startCoord = initialRoute.geometry.coordinates[0];
   const initialCenter: [number, number] = startCoord ? [startCoord[0], startCoord[1]] : [seed.lng, seed.lat];
   const [listOpen, setListOpen] = useState(false);
   const [reportAt, setReportAt] = useState<{lat: number; lng: number} | null>(null);
-  const [reportBusy, setReportBusy] = useState(false);
   const [flagsKey, setFlagsKey] = useState(0);
   const [topCards, setTopCards] = useState<{flag: Flag; addedAt: number}[]>([]);
   const [nowTs, setNowTs] = useState(Date.now());
@@ -152,7 +195,6 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   }
   async function onSubmitReport(report: FlagReport) {
     if (!reportAt) return;
-    setReportBusy(true);
     try {
       await submitFlag({type: report.type, lat: reportAt.lat, lng: reportAt.lng, radiusMeters: report.radiusMeters, note: report.note}, token);
       setReportAt(null);
@@ -164,8 +206,6 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
       if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
       fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       voice.speak(toMessage(err));
-    } finally {
-      setReportBusy(false);
     }
   }
   async function onRemoveFlag(flagId: string) {
@@ -200,11 +240,13 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     try {
       flag = await getFlag(flagId, key);
     } catch (err) {
+      if (!aliveRef.current) return;
       setFetchError(toMessage(err));
       if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
       fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
       return;
     }
+    if (!aliveRef.current) return;
     const me = uidRef.current;
     setFlagsKey((k) => k + 1);
     if (!flag) {
@@ -221,11 +263,13 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     let routeToGo: number | null = null;
     if (!confirmedPush) {
       const res = await nav.refreshRouteQuiet();
+      if (!aliveRef.current) return;
       const match = res?.warnings.find((w) => w.flagId === flag.id) ?? null;
       if (match) routeToGo = Math.max(0, match.distanceMeters - progM);
     }
     let rerouted = false;
     if (confirmedPush) rerouted = await nav.rerouteForConfirm();
+    if (!aliveRef.current) return;
     const p = posRef.current;
     const straightToGo = p ? distBetween(p, {lat: flag.lat, lng: flag.lng}) : null;
     const useToGo = routeToGo ?? straightToGo;
@@ -251,8 +295,9 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     void nav.refreshRouteQuiet();
     voice.speak(t.flag.clearedMsg);
   };
-  const pace = nav.route.distanceMeters > 0 ? nav.route.durationSeconds / nav.route.distanceMeters : 0;
-  const remaining = nav.progress?.remainingMeters ?? nav.route.distanceMeters;
+  const routeMeters = nav.route.distanceMeters ?? 0;
+  const pace = routeMeters > 0 ? (nav.route.durationSeconds ?? 0) / routeMeters : 0;
+  const remaining = nav.progress?.remainingMeters ?? routeMeters;
   const progressM = nav.progress?.progressMeters ?? 0;
   const focusedWarning = nav.hazardFocus ? nav.flagWarnings[nav.hazardFocus.idx] ?? null : null;
   let nearestWarning = focusedWarning;
@@ -278,7 +323,7 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     votesShownRef.current = showVotes;
   }, [showVotes]);
   const etaMin = Math.max(1, Math.round((remaining * pace) / 60));
-  const frac = nav.route.distanceMeters > 0 ? Math.min(1, (nav.progress?.progressMeters ?? 0) / nav.route.distanceMeters) : 0;
+  const frac = routeMeters > 0 ? Math.min(1, (nav.progress?.progressMeters ?? 0) / routeMeters) : 0;
   const shadeRef = useRef({at: 0, frac: -1, turn: ""});
   useEffect(() => {
     const turnKey = nav.next ? `${nav.next.kind}|${nav.next.street ?? ""}` : nav.arrived ? "arrived" : "";
@@ -294,6 +339,17 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
   }, [nav.next, frac, remaining, etaMin, nav.arrived, t]);
   useEffect(() => () => {
     void clearNavShade();
+  }, []);
+  useEffect(() => {
+    const voice = voiceErrorTimer.current;
+    const fetch = fetchErrorTimer.current;
+    const confirm = confirmSnackTimer.current;
+    return () => {
+      if (voice) clearTimeout(voice);
+      if (fetch) clearTimeout(fetch);
+      if (confirm) clearTimeout(confirm);
+      aliveRef.current = false;
+    };
   }, []);
   useEffect(() => {
     ensurePushConfigured();
@@ -319,29 +375,10 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
     }, 1000);
     return () => clearInterval(timer);
   }, [topCards.length]);
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (reportAt) {
-        setReportAt(null);
-        return true;
-      }
-      if (selectedFlag) {
-        closeFlag();
-        return true;
-      }
-      if (listOpen) {
-        setListOpen(false);
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [listOpen, selectedFlag, reportAt]);
   return (
     <View style={[styles.root, {backgroundColor: theme.background}]}>
       <NavMapView
         theme={theme}
-        lang={lang}
         route={nav.route}
         pos={nav.pos}
         initialCenter={initialCenter}
@@ -361,7 +398,6 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
         onPickFlag={openManualFlag}
         onAutoFlag={onAutoFlag}
         onRegionChanging={nav.onRegionChanging}
-        onRegionDid={nav.onRegionDid}
       />
       <View onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
         <NavHeader
@@ -460,53 +496,59 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
         <MaterialIcons name="add-alert" size={22} color={nav.pos ? theme.primary : theme.muted} />
       </Fab>
       {nav.error ?? voiceError ?? fetchError ? (
-        <Snack message={nav.error ?? voiceError ?? fetchError} severity="error" sticky bottom={snackAbove(insets.bottom + 12, bottomH)} dangerColor={theme.danger} onHide={() => { nav.clearError(); setVoiceError(null); setFetchError(null); }} />
+        <Snack message={nav.error ?? voiceError ?? fetchError} severity="error" sticky bottom={bottomH + insets.bottom + SNACK_GAP * 2} dangerColor={theme.danger} onHide={() => { nav.clearError(); setVoiceError(null); setFetchError(null); }} />
       ) : (
-        <Snack message={confirmSnack ?? nav.notice} severity={pickFeedback(confirmSnack ? "success" : "neutral")} bottom={snackAbove(insets.bottom + 12, bottomH)} onHide={() => {}} />
+        <Snack message={confirmSnack ?? nav.notice} severity={pickFeedback(confirmSnack ? "success" : "neutral")} bottom={bottomH + insets.bottom + SNACK_GAP * 2} onHide={() => {}} />
       )}
       {listOpen ? (
-        <TurnListSheet
-          t={t}
-          theme={theme}
-          bottomPad={insets.bottom + 12}
-          steps={nav.steps}
-          stepProg={nav.stepProg}
-          streets={nav.streets}
-          progress={nav.progress}
-          remainingMeters={nav.progress?.remainingMeters ?? nav.route.distanceMeters}
-          onClose={() => setListOpen(false)}
-          onPreviewStep={(i) => {
-            setListOpen(false);
-            nav.previewStep(i);
-          }}
-        />
+        <Overlay visible variant="sheet" title={formatDist(remaining, t.route.km, t.nav.m)} closeLabel={t.common.cancel} onClose={() => setListOpen(false)}>
+          <TurnListSheet
+            t={t}
+            theme={theme}
+            steps={nav.steps}
+            stepProg={nav.stepProg}
+            streets={nav.streets}
+            progress={nav.progress}
+            onPreviewStep={(i) => {
+              setListOpen(false);
+              nav.previewStep(i);
+            }}
+          />
+        </Overlay>
       ) : null}
       {reportAt ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setReportAt(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <FlagSheet t={t} lat={reportAt.lat} lng={reportAt.lng} busy={reportBusy} centered onClose={() => setReportAt(null)} onSubmit={(r) => void onSubmitReport(r)} />
-          </View>
-        </View>
+        <FlagReportDialog t={t} lat={reportAt.lat} lng={reportAt.lng} onClose={() => setReportAt(null)} onSubmit={(r) => void onSubmitReport(r)} />
       ) : null}
       {selectedFlag ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeFlag} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <FlagDetailSheet
-              t={t}
-              flag={selectedFlag}
-              isOwn={uid != null && selectedFlag.reporterId === uid}
-              busy={flagBusy}
-              voted={votedIds.has(selectedFlag.id)}
-              denied={deniedIds.has(selectedFlag.id)}
-              onClose={closeFlag}
-              onConfirm={(id) => void onConfirmFlag(id)}
-              onDeny={(id) => void onDenyFlag(id)}
-              onRemove={(id) => void onRemoveFlag(id)}
-            />
-          </View>
-        </View>
+        <Overlay
+          visible
+          variant="dialog"
+          title={flagTypeLabel(selectedFlag.type, t)}
+          leading={<MaterialIcons name={hazardKind(selectedFlag.type).icon} size={22} color={hazardKind(selectedFlag.type).color} />}
+          right={
+            <View style={[styles.statusChip, {backgroundColor: flagStatusColor(selectedFlag.status)}]}>
+              <Text style={styles.statusText}>{flagStatusLabel(selectedFlag.status, t)}</Text>
+            </View>
+          }
+          closeLabel={t.common.cancel}
+          onClose={closeFlag}
+          actions={flagOverlayActions(
+            selectedFlag.id,
+            selectedFlag.status,
+            uid != null && selectedFlag.reporterId === uid,
+            votedIds.has(selectedFlag.id),
+            deniedIds.has(selectedFlag.id),
+            flagBusy,
+            {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
+            {onConfirm: (id) => void onConfirmFlag(id), onDeny: (id) => void onDenyFlag(id), onRemove: (id) => void onRemoveFlag(id)},
+          )}
+        >
+          <FlagDetailSheet
+            t={t}
+            flag={selectedFlag}
+            isOwn={uid != null && selectedFlag.reporterId === uid}
+          />
+        </Overlay>
       ) : null}
     </View>
   );
@@ -514,11 +556,8 @@ export default function NavigationScreen({t, lang, token, initialRoute, dest, se
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  sheetRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
-  centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
-  centerWrap: {width: "100%", paddingHorizontal: 24},
-  sheetWrap: {width: "100%"},
-  navSheetRoot: {position: "absolute", left: 12, right: 12, bottom: 12},
+  statusChip: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
+  statusText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   bottomStack: {position: "absolute", left: 88, right: 76, gap: 8},
   bottomBar: {borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 4, alignItems: "center"},
   hazardCard: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12},

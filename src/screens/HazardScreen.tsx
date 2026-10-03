@@ -7,10 +7,14 @@ import {useFocusEffect} from "@react-navigation/native";
 import * as Location from "expo-location";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
+import Overlay from "../components/overlay/Overlay";
+import {flagOverlayActions} from "./hazards/flagActions";
+import {hazardKind} from "../components/hazardStyle";
+import {flagStatusColor, flagStatusLabel} from "../components/flagStatus";
 import FlagDetailSheet from "../components/FlagDetailSheet";
 import StatusRow from "../components/StatusRow";
 import {Fab} from "../components/Fab";
-import {snackAbove} from "../components/snackOffset";
+import {snackAboveTabs} from "../components/snackOffset";
 import {isStaleForRefresh} from "../components/feedback";
 import {ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {useAuth} from "../context/AuthContext";
@@ -109,7 +113,7 @@ export default function HazardScreen() {
         </View>
         {showMap ? (
           <View style={[styles.mapPanel, {borderColor: theme.border}]}>
-            <HazardMapView lang={lang} flags={visible} focus={focus} onPickFlag={setSelected} />
+            <HazardMapView flags={visible} focus={focus} onPickFlag={setSelected} />
           </View>
         ) : null}
         <View style={styles.pillRow}>
@@ -155,28 +159,40 @@ export default function HazardScreen() {
         )}
       </View>
       {mine.error ? (
-        <Snack message={mine.error} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={mine.clearError} />
+        <Snack message={mine.error} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={mine.clearError} />
       ) : (
-        <Snack message={snack} severity="confirm" bottom={snackAbove(insets.bottom, 24)} accentColor={theme.primary} onHide={() => setSnack(null)} />
+        <Snack message={snack} severity="confirm" bottom={snackAboveTabs(insets.bottom)} accentColor={theme.primary} onHide={() => setSnack(null)} />
       )}
       {selected ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelected(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <FlagDetailSheet
-              t={t}
-              flag={selected}
-              isOwn={uid != null && selected.reporterId === uid}
-              busy={mine.busyId !== null}
-              voted={false}
-              denied={false}
-              onClose={() => setSelected(null)}
-              onConfirm={() => {}}
-              onDeny={() => {}}
-              onRemove={(id) => void onRemove(id)}
-            />
-          </View>
-        </View>
+        <Overlay
+          visible
+          variant="dialog"
+          title={flagTypeLabel(selected.type, t)}
+          leading={<MaterialIcons name={hazardKind(selected.type).icon} size={22} color={hazardKind(selected.type).color} />}
+          right={
+            <View style={[styles.statusChip, {backgroundColor: flagStatusColor(selected.status)}]}>
+              <Text style={styles.statusText}>{flagStatusLabel(selected.status, t)}</Text>
+            </View>
+          }
+          closeLabel={t.common.cancel}
+          onClose={() => setSelected(null)}
+          actions={flagOverlayActions(
+            selected.id,
+            selected.status,
+            uid != null && selected.reporterId === uid,
+            false,
+            false,
+            mine.busyId !== null,
+            {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
+            {onConfirm: () => {}, onDeny: () => {}, onRemove: (id) => void onRemove(id)},
+          )}
+        >
+          <FlagDetailSheet
+            t={t}
+            flag={selected}
+            isOwn={uid != null && selected.reporterId === uid}
+          />
+        </Overlay>
       ) : null}
     </ScreenContainer>
   );
@@ -191,6 +207,6 @@ const styles = StyleSheet.create({
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
   list: {gap: 8, paddingBottom: 8},
   hint: {fontSize: 12},
-  centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
-  centerWrap: {width: "100%", paddingHorizontal: 24},
+  statusChip: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
+  statusText: {color: "#fff", fontSize: 12, fontWeight: "700"},
 });

@@ -17,7 +17,6 @@ export type VehicleProfile = {
   type: string;
   baseWidth: number;
   baseHeight: number;
-  towVehicleType?: string | null;
 };
 
 export type CreateProfilePayload = {
@@ -33,7 +32,6 @@ export type RideConfigPayload = {
   estHeight?: number;
 };
 
-export type TowVehicleType = "CAR" | "VAN" | "TRUCK";
 
 export function listProfiles(token: string): Promise<VehicleProfile[]> {
   return api.post<VehicleProfile[]>("/vehicleProfiles/all", {}, token);
@@ -47,6 +45,3 @@ export function addRideConfig(payload: RideConfigPayload, token: string): Promis
   return api.post<{id: string}>("/vehicleProfiles/rideConfig", payload, token);
 }
 
-export function setTowVehicle(profileId: string, towVehicleType: TowVehicleType | null, token: string): Promise<VehicleProfile> {
-  return api.put<VehicleProfile>("/vehicleProfiles/tow", {profileId, towVehicleType}, token);
-}

@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, BackHandler, Keyboard, Modal, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, BackHandler, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation} from "@react-navigation/native";
 import {AppText as Text} from "../components/AppText";
@@ -17,12 +17,19 @@ import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import PlaceSearchScreen from "./PlaceSearchScreen";
-import NavigationScreen from "./NavigationScreen";
+import Overlay from "../components/overlay/Overlay";
+import FlagReportDialog from "../components/FlagReportDialog";
+import SaveRouteDialog from "../components/SaveRouteDialog";
+import {useNavSession} from "../context/NavSessionContext";
 import SavedRoutesSheet from "../components/SavedRoutesSheet";
 import Snack from "../components/Snack";
-import FlagSheet, {type FlagReport} from "../components/FlagSheet";
+import {flagOverlayActions} from "./hazards/flagActions";
+import type {FlagReport} from "../components/FlagSheet";
 import FlagDetailSheet from "../components/FlagDetailSheet";
 import {confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
+import {flagTypeLabel} from "../i18n/labels";
+import {hazardKind} from "../components/hazardStyle";
+import {flagStatusColor, flagStatusLabel} from "../components/flagStatus";
 import {markDenied, markVoted} from "../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./route/types";
 import {boundsOf, midOf} from "./route/routeGeo";
@@ -32,9 +39,8 @@ import {shouldRetryCenter} from "./route/cameraIntent";
 import RouteMapView from "./route/RouteMapView";
 import RouteCard from "./route/RouteCard";
 import VehiclePickerSheet from "../components/VehiclePickerSheet";
-import SaveRouteSheet from "../components/SaveRouteSheet";
 import {Fab, FabColumn} from "../components/Fab";
-import {snackAbove} from "../components/snackOffset";
+import {snackAboveTabs} from "../components/snackOffset";
 
 export default function RouteScreen() {
   const {t, lang} = useStrings();
@@ -63,7 +69,7 @@ export default function RouteScreen() {
   const [saveBusy, setSaveBusy] = useState(false);
   const [searchingFor, setSearchingFor] = useState<SearchField | null>(null);
   const [starting, setStarting] = useState(false);
-  const [navInitial, setNavInitial] = useState<{route: RouteOption; dest: Point; stops: Stop[]; seed: {lat: number; lng: number}} | null>(null);
+  const {start: startNavSession} = useNavSession();
   const [pickingFor, setPickingFor] = useState<SearchField | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
   const [pickEpoch] = useState<TaskEpoch>(createTaskEpoch);
@@ -86,7 +92,7 @@ export default function RouteScreen() {
   const [hazardFocusIdx, setHazardFocusIdx] = useState(-1);
   const [hazardHighlight, setHazardHighlight] = useState<[number, number][] | null>(null);
   const [cardH, setCardH] = useState(0);
-  const snackBottom = searchingFor || flagMode || pickingFor ? insets.bottom + 24 : snackAbove(12, cardH);
+  const snackBottom = snackAboveTabs(insets.bottom);
   const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   function fitRouteGeometry(coords: [number, number][]) {
@@ -148,10 +154,6 @@ export default function RouteScreen() {
       return;
     }
   }
-  function onNavExit() {
-    setNavInitial(null);
-    if (!centeredRef.current) void centerOnLocal();
-  }
   async function onStart() {
     if (!token || !dest || starting) return;
     setStarting(true);
@@ -174,7 +176,8 @@ export default function RouteScreen() {
       setSelectedIndex(0);
       setHazardFocusIdx(-1);
       setHazardHighlight(null);
-      setNavInitial({route: first, dest, stops, seed: live});
+      startNavSession({route: first, dest, stops: stops.map((s) => ({lat: s.lat, lng: s.lng})), seed: live, ...(activeVehicle?.baseWidth !== undefined ? {width: activeVehicle.baseWidth} : {}), ...(activeVehicle?.type ? {vehicleType: activeVehicle.type} : {})});
+      navigation.navigate("Navigation" as never);
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -328,32 +331,14 @@ export default function RouteScreen() {
   }, []);
   useEffect(() => {
     navigation.setOptions({
-      tabBarStyle: {display: searchingFor ? "none" : "flex"},
       headerShown: false,
     });
     return () => {
-      navigation.setOptions({tabBarStyle: {display: "flex"}, headerShown: true});
+      navigation.setOptions({headerShown: true});
     };
-  }, [navigation, searchingFor]);
+  }, [navigation]);
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (selectedFlag) {
-        setSelectedFlag(null);
-        return true;
-      }
-      if (flagPoint) {
-        cancelFlagReport();
-        return true;
-      }
-      if (savedOpen) {
-        Keyboard.dismiss();
-        setSavedOpen(false);
-        return true;
-      }
-      if (searchingFor) {
-        setSearchingFor(null);
-        return true;
-      }
       if (pickingFor) {
         cancelPick();
         return true;
@@ -361,7 +346,7 @@ export default function RouteScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [savedOpen, searchingFor, pickingFor, selectedFlag, flagPoint]);
+  }, [pickingFor]);
   function toggleFlagMode() {
     setFlagMode((v) => !v);
     cancelPick();
@@ -486,7 +471,8 @@ export default function RouteScreen() {
       setGpsBusy(false);
     }
   }
-  function onClear() {    setOrigin(null);
+  function onClear(): void {
+    setOrigin(null);
     setDest(null);
     setOriginText("");
     setDestText("");
@@ -525,7 +511,7 @@ export default function RouteScreen() {
       setError(toMessage(err));
     }
   }
-  async function onSave() {
+  function onSave(): void {
     if (!token || !origin || !dest || !result) return;
     setSaveOpen(true);
   }
@@ -578,7 +564,6 @@ export default function RouteScreen() {
     }}>
       <RouteMapView
         t={t}
-        lang={lang}
         theme={theme}
         cameraRef={cameraRef}
         routes={routes}
@@ -671,14 +656,12 @@ export default function RouteScreen() {
       </>
       ) : null}
       {vehicleOpen ? (
-        <View style={styles.sheetRoot} pointerEvents="box-none">
-          <View style={styles.sheetWrap}>
-            <VehiclePickerSheet t={t} theme={theme} token={token} activeId={activeVehicle?.id ?? null} onPick={(id) => void onVehiclePress(id)} onClose={() => setVehicleOpen(false)} />
-          </View>
-        </View>
+        <Overlay visible variant="sheet" title={t.vehicle.title} closeLabel={t.common.cancel} onClose={() => setVehicleOpen(false)}>
+          <VehiclePickerSheet t={t} theme={theme} token={token} activeId={activeVehicle?.id ?? null} onPick={(id) => void onVehiclePress(id)} />
+        </Overlay>
       ) : null}
       {searchingFor ? (
-        <View style={styles.fullScreen}>
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setSearchingFor(null); }}>
           <PlaceSearchScreen
               t={t}
               token={token ?? undefined}
@@ -695,33 +678,25 @@ export default function RouteScreen() {
               }}
               onClose={() => { Keyboard.dismiss(); setSearchingFor(null); }}
             />
-        </View>
+        </Overlay>
       ) : null}
       {savedOpen ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); setSavedOpen(false); }} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <SavedRoutesSheet t={t} token={token} onOpen={(id) => void onOpenSaved(id)} onClose={() => setSavedOpen(false)} />
-          </View>
-        </View>
+        <Overlay visible variant="dialog" title={t.saved.title} closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setSavedOpen(false); }}>
+          <SavedRoutesSheet t={t} token={token} onOpen={(id) => void onOpenSaved(id)} />
+        </Overlay>
       ) : null}
       {saveOpen && result ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { Keyboard.dismiss(); setSaveOpen(false); }} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <SaveRouteSheet
-              t={t}
-              theme={theme}
-              originText={originText}
-              destText={destText}
-              distanceM={result.distanceMeters}
-              durationSec={result.durationSeconds}
-              busy={saveBusy}
-              onClose={() => { Keyboard.dismiss(); setSaveOpen(false); }}
-              onSave={(name) => void onSaveRoute(name)}
-            />
-          </View>
-        </View>
+        <SaveRouteDialog
+          t={t}
+          theme={theme}
+          originText={originText}
+          destText={destText}
+          distanceM={result.distanceMeters ?? 0}
+          durationSec={result.durationSeconds ?? 0}
+          busy={saveBusy}
+          onClose={() => { Keyboard.dismiss(); setSaveOpen(false); }}
+          onSave={(name) => void onSaveRoute(name)}
+        />
       ) : null}
       {error ? (
         <Snack message={error} severity="error" sticky bottom={snackBottom} dangerColor={theme.danger} onHide={() => setError(null)} />
@@ -744,63 +719,48 @@ export default function RouteScreen() {
         />
       )}
       {flagPoint ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={cancelFlagReport} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <FlagSheet t={t} lat={flagPoint.lat} lng={flagPoint.lng} busy={flagBusy} centered onClose={cancelFlagReport} onSubmit={(r) => void onSubmitFlag(r)} />
-          </View>
-        </View>
+        <FlagReportDialog t={t} lat={flagPoint.lat} lng={flagPoint.lng} onClose={cancelFlagReport} onSubmit={(r) => void onSubmitFlag(r)} />
       ) : null}
       {selectedFlag ? (
-        <View style={styles.centerRoot}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedFlag(null)} accessibilityRole="button" accessibilityLabel={t.common.close} />
-          <View style={styles.centerWrap}>
-            <FlagDetailSheet
-              t={t}
-              flag={selectedFlag}
-              isOwn={uid != null && selectedFlag.reporterId === uid}
-              busy={flagBusy}
-              voted={votedIds.has(selectedFlag.id)}
-              denied={deniedIds.has(selectedFlag.id)}
-              onClose={() => setSelectedFlag(null)}
-              onConfirm={(id) => void onConfirmFlag(id)}
-              onDeny={(id) => void onDenyFlag(id)}
-              onRemove={(id) => void onRemoveFlag(id)}
-            />
-          </View>
-        </View>
-      ) : null}
-      <Modal visible={navInitial !== null} animationType="slide" onRequestClose={onNavExit}>
-        {navInitial && token ? (
-          <NavigationScreen
+        <Overlay
+          visible
+          variant="dialog"
+          title={flagTypeLabel(selectedFlag.type, t)}
+          leading={<MaterialIcons name={hazardKind(selectedFlag.type).icon} size={22} color={hazardKind(selectedFlag.type).color} />}
+          right={
+            <View style={[styles.statusChip, {backgroundColor: flagStatusColor(selectedFlag.status)}]}>
+              <Text style={styles.statusText}>{flagStatusLabel(selectedFlag.status, t)}</Text>
+            </View>
+          }
+          closeLabel={t.common.cancel}
+          onClose={() => setSelectedFlag(null)}
+          actions={flagOverlayActions(
+            selectedFlag.id,
+            selectedFlag.status,
+            uid != null && selectedFlag.reporterId === uid,
+            votedIds.has(selectedFlag.id),
+            deniedIds.has(selectedFlag.id),
+            flagBusy,
+            {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
+            {onConfirm: (id) => void onConfirmFlag(id), onDeny: (id) => void onDenyFlag(id), onRemove: (id) => void onRemoveFlag(id)},
+          )}
+        >
+          <FlagDetailSheet
             t={t}
-            lang={lang}
-            token={token}
-            initialRoute={navInitial.route}
-            dest={navInitial.dest}
-            seed={navInitial.seed}
-            stops={navInitial.stops.map((s) => ({lat: s.lat, lng: s.lng}))}
-            width={activeVehicle?.baseWidth}
-            vehicleType={activeVehicle?.type}
-            onExit={onNavExit}
+            flag={selectedFlag}
+            isOwn={uid != null && selectedFlag.reporterId === uid}
           />
-        ) : null}
-      </Modal>
+        </Overlay>
+      ) : null}
     </View>
   );
 }
 const styles = StyleSheet.create({
   root: {flex: 1},
-  fullScreen: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, elevation: 6},
-  savedRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
-  centerRoot: {position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
-  centerWrap: {width: "100%", paddingHorizontal: 24},
-  sheetWrap: {width: "100%"},
-  sheetRoot: {position: "absolute", left: 12, right: 12, bottom: 12},
+  statusChip: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
+  statusText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12, gap: 8},
   fabRow: {flexDirection: "row", alignItems: "center", gap: 8},
   fabSpacer: {flex: 1},
   hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
-  chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
-  disabled: {opacity: 0.6},
 });

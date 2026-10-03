@@ -2,16 +2,16 @@ import {useEffect, useState} from "react";
 import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "./AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {deleteSavedRoute, listSavedRoutes, renameSavedRoute, type SavedRouteSummary} from "../api/routes";
 import {toMessage} from "../api/client";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
-type Props = {t: Strings; token: string | null; onOpen: (routeId: string) => void; onClose: () => void};
-export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
+
+type Props = {t: Strings; token: string | null; onOpen: (routeId: string) => void};
+
+export default function SavedRoutesSheet({t, token, onOpen}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const insets = useSafeAreaInsets();
   const [routes, setRoutes] = useState<SavedRouteSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,13 +74,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
     }
   }
   return (
-    <View style={[styles.sheet, {backgroundColor: theme.paper, borderColor: theme.border, paddingBottom: insets.bottom + 12}]}>
-      <View style={styles.headRow}>
-        <Text style={[styles.title, {color: theme.text}]}>{t.saved.title}</Text>
-        <Pressable style={styles.closeBtn} onPress={() => { Keyboard.dismiss(); onClose(); }} accessibilityRole="button" accessibilityLabel={t.common.close}>
-          <MaterialIcons name="close" size={22} color={theme.text} />
-        </Pressable>
-      </View>
+    <View style={styles.body}>
       {error ? <Text style={{color: theme.danger}}>{error}</Text> : null}
       {loading ? <Text style={{color: theme.muted}}>{t.route.searching}</Text> : null}
       {!loading && routes.length === 0 && !error ? <Text style={{color: theme.muted}}>{t.saved.empty}</Text> : null}
@@ -93,6 +87,7 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
           placeholderTextColor={theme.muted}
         />
       ) : null}
+      <View style={styles.list}>
       {visible.map((r) => (
           <View key={r.id} style={styles.rowWrap}>
             {renamingId === r.id ? (
@@ -130,16 +125,15 @@ export default function SavedRoutesSheet({t, token, onOpen, onClose}: Props) {
             )}
           </View>
         ))}
+      </View>
     </View>
   );
 }
+
 const styles = StyleSheet.create({
-  sheet: {borderRadius: 20, borderWidth: 1, padding: 12, gap: 8, maxHeight: "85%"},
+  body: {gap: 8, width: "100%"},
+  list: {gap: 8},
   searchInput: {borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 14},
-  headRow: {flexDirection: "row", alignItems: "center", gap: 8},
-  title: {flex: 1, fontSize: 16, fontWeight: "700"},
-  closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
-  list: {flexGrow: 0},
   rowWrap: {paddingVertical: 6},
   row: {flexDirection: "row", alignItems: "center", gap: 6},
   rowMain: {flex: 1, minWidth: 0, gap: 2},

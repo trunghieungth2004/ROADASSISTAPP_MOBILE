@@ -1,4 +1,4 @@
-import {useRef, useState, type MutableRefObject} from "react";
+import {useCallback, useRef, useState, type MutableRefObject} from "react";
 import {PanResponder, type PanResponderInstance} from "react-native";
 import {formatPoint} from "../../api/places";
 import type {RouteOption} from "../../api/routes";
@@ -29,7 +29,6 @@ export function useRouteDrag(ctx: DragContext): {
   dragPos: Point | null;
   dragPan: PanResponderInstance;
   camRef: MutableRefObject<CamState>;
-  mapZoom: number;
   subscribeRegionDid: (cb: () => void) => () => void;
   onRegionChange: (e: unknown) => void;
   onRegionDid: (e: unknown) => void;
@@ -39,18 +38,17 @@ export function useRouteDrag(ctx: DragContext): {
   ctxRef.current = ctx;
   const [dragging, setDragging] = useState<DragTarget | null>(null);
   const [dragPos, setDragPos] = useState<Point | null>(null);
-  const mapZoom = 13;
   const camRef = useRef<CamState>(null);
   const grantRef = useRef<{target: DragTarget; base: Point} | null>(null);
   const dragTargetRef = useRef<DragTarget | null>(null);
   const regionListeners = useRef(new Set<() => void>());
   dragTargetRef.current = dragging;
-  const subscribeRegionDid = (cb: () => void): (() => void) => {
+  const subscribeRegionDid = useCallback((cb: () => void): (() => void) => {
     regionListeners.current.add(cb);
     return () => {
       regionListeners.current.delete(cb);
     };
-  };
+  }, []);
   function onRegionChange(e: unknown) {
     const p = (e as {nativeEvent?: {center?: [number, number]; zoom?: number; bounds?: [number, number, number, number]}}).nativeEvent;
     const c = p?.center;
@@ -191,5 +189,5 @@ export function useRouteDrag(ctx: DragContext): {
       setDragPos(null);
     },
   })).current;
-  return {dragging, dragPos, dragPan, camRef, mapZoom, subscribeRegionDid, onRegionChange, onRegionDid, onMapPress};
+  return {dragging, dragPos, dragPan, camRef, subscribeRegionDid, onRegionChange, onRegionDid, onMapPress};
 }

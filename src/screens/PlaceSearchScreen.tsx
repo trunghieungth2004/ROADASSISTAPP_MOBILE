@@ -29,7 +29,7 @@ function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
   if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
   return "place";
 }
-type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap: () => void; onClose: () => void};
+type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onClose: () => void};
 export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onClose}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
@@ -77,10 +77,12 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
           {locating ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="my-location" size={20} color={theme.primary} />}
           <Text style={[styles.actionBtnText, {color: theme.text}]} numberOfLines={1}>{t.common.currentLocation}</Text>
         </Pressable>
+        {onPickOnMap ? (
         <Pressable style={[styles.actionBtn, {borderColor: theme.border}]} onPress={onPickOnMap}>
           <MaterialIcons name="pin-drop" size={20} color={theme.primary} />
           <Text style={[styles.actionBtnText, {color: theme.text}]} numberOfLines={1}>{t.route.pickOnMap}</Text>
         </Pressable>
+        ) : null}
       </View>
       {search.searching ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.searching}</Text> : null}
       {!search.searching && search.input.trim().length >= 3 && search.options.length === 0 ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.noResults}</Text> : null}

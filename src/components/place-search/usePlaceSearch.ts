@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {useWindowDimensions} from "react-native";
 import {listSavedPlaces, placeKey, reverseLabel, searchDirectory, searchMapPlaces} from "../../api/places";
 import type {Place} from "./PlaceSearch.types";
@@ -42,5 +42,9 @@ export function usePlaceSearch({token, lang}: {token?: string; lang: string}) {
   const clear = useCallback(() => { setSelected(null); setInput(""); setOptions([]); setSearching(false); }, []);
   const refreshSaved = useCallback(() => { if (lastRef.current.trim().length >= MIN_QUERY_LEN) { run(lastRef.current); return; } void savedNow().then(setOptions); }, [run, savedNow]);
   const resolvePoint = useCallback((lat: number, lng: number) => reverseLabel(lat, lng, lang), [lang]);
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    seqRef.current += 1;
+  }, []);
   return {input, options, searching, selected, handleInput, pin, select, clear, refreshSaved, resolvePoint};
 }

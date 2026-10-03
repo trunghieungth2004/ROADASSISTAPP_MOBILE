@@ -16,8 +16,8 @@ export type DispatchTicket = {
   assignedUid?: string | null;
   assignedShopId?: string | null;
   assignedKind?: string | null;
+  towPlate?: string | null;
   createdAt?: string;
-  [key: string]: unknown;
 };
 
 export type CreateTicketPayload = {
@@ -47,29 +47,8 @@ export function cancelTicket(ticketId: string, token: string): Promise<{updated:
   return api.put<{updated: number}>("/dispatch/status", {ticketId, status: "5"}, token);
 }
 
-export function updateTicketDestination(payload: {ticketId: string; destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}}, token: string): Promise<DispatchTicket> {
-  return api.post<DispatchTicket>("/dispatch/destination", payload, token);
-}
-
 export function nearTickets(lat: number, lng: number, token: string, radiusMeters?: number): Promise<DispatchTicket[]> {
   return api.post<DispatchTicket[]>("/dispatch/near", {lat, lng, radiusMeters}, token);
-}
-
-export type DispatchOffer = {
-  id: string;
-  name?: string;
-  lat: number;
-  lng: number;
-  type?: string;
-  [key: string]: unknown;
-};
-
-export function ticketOffers(payload: {lat: number; lng: number; radiusMeters?: number; kind?: string; limit?: number}, token: string): Promise<DispatchOffer[]> {
-  return api.post<DispatchOffer[]>("/dispatch/offers", payload, token);
-}
-
-export function selectOffer(ticketId: string, shopId: string, token: string): Promise<{selected: string}> {
-  return api.post<{selected: string}>("/dispatch/select", {ticketId, shopId}, token);
 }
 
 export function acceptTicket(ticketId: string, token: string, shopId?: string): Promise<{matched: boolean; kind: string}> {

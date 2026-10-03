@@ -1,8 +1,9 @@
 import type {RefObject} from "react";
+import {useState} from "react";
 import {StyleSheet} from "react-native";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/StyledLayer";
-import {maptilerStyleUrlFor} from "../../map/style";
+import {bundledMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/MapPinImages";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
@@ -11,7 +12,6 @@ import NavFlags from "./NavFlags";
 
 type Props = {
   theme: AppTheme;
-  lang: string;
   route: RouteOption;
   pos: {lat: number; lng: number} | null;
   initialCenter: [number, number];
@@ -31,22 +31,21 @@ type Props = {
   onPickFlag: (flag: Flag) => void;
   onAutoFlag: (flag: Flag | null) => void;
   onRegionChanging: (e: unknown) => void;
-  onRegionDid: () => void;
 };
 
 export default function NavMapView(props: Props) {
+  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
   const {theme} = props;
   const coords = props.route.geometry.coordinates;
   const b = coords.length > 0 ? coords[coords.length - 1] : null;
   return (
     <Map
       style={StyleSheet.absoluteFill}
-      mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"}
+      mapStyle={mapStyle}
       logo={false}
       attribution={false}
       androidView="texture"
       onRegionIsChanging={(e: unknown) => props.onRegionChanging(e)}
-      onRegionDidChange={() => props.onRegionDid()}
     >
       <Camera ref={props.cameraRef} initialViewState={{center: props.initialCenter, zoom: 13}} />
         <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "b-dot": require("../../../assets/map/b-dot.png")}} />

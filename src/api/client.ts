@@ -57,7 +57,7 @@ async function request<T>(path: string, init: RequestInit, token?: string): Prom
     const fresh = await tokenRefresher().catch(() => null);
     if (fresh) res = await send(path, init, fresh);
   }
-  const body = (await res.json()) as ApiEnvelope<T> & {message?: string};
+  const body = await readBody<T>(res);
   if (!res.ok || body.status === "ERROR") {
     const statusCode = body.statusCode ?? res.status;
     if (res.status === 401 || statusCode === 401 || (statusCode === 403 && body.message === "User is inactive")) {
@@ -68,11 +68,40 @@ async function request<T>(path: string, init: RequestInit, token?: string): Prom
   return body.data;
 }
 
+function readTextWithTimeout(res: Response): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ApiError("Request timed out", 408)), REQUEST_TIMEOUT_MS);
+  });
+  return Promise.race([
+    res.text().finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    timeout,
+  ]);
+}
+
+async function readBody<T>(res: Response): Promise<ApiEnvelope<T> & {message?: string}> {
+  let text: string;
+  try {
+    text = await readTextWithTimeout(res);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(`Request failed (${res.status})`, res.status);
+  }
+  try {
+    return JSON.parse(text) as ApiEnvelope<T> & {message?: string};
+  } catch {
+    throw new ApiError(`Request failed (${res.status})`, res.status);
+  }
+}
+
 function send(path: string, init: RequestInit, token?: string): Promise<Response> {
   return fetchWithTimeout(`${API_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "Accept": "application/json",
       ...(token ? {Authorization: `Bearer ${token}`} : {}),
       ...(init.headers ?? {}),
     },

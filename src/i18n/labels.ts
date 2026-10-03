@@ -8,10 +8,6 @@ export function vehicleTypeLabel(value: string, t: Strings): string {
   return pick(t.vehicle.types as Record<string, string>, value);
 }
 
-export function configTypeLabel(value: string, t: Strings): string {
-  return pick(t.vehicle.configs as Record<string, string>, value);
-}
-
 export function flagTypeLabel(value: string, t: Strings): string {
   if (value === "FLOOD") {
     return t.flag.flood;
@@ -23,8 +19,4 @@ export function flagTypeLabel(value: string, t: Strings): string {
     return t.flag.accident;
   }
   return value;
-}
-
-export function tierLabel(value: string, t: Strings): string {
-  return pick(t.hazards.tiers as Record<string, string>, value);
 }

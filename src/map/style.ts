@@ -1,29 +1,21 @@
 import {config} from "../config";
+import type {StyleSpecification} from "@maplibre/maplibre-gl-style-spec";
+import base from "./streets-v4.json";
 
 export const mapDefaults = {
   center: [106.6602, 10.7626] as [number, number],
   zoom: 13,
 };
 
-const TILE_ZOOM = 14;
+const KEY_TOKEN = "__MAPTILER_KEY__";
 
-export const maptilerStyleUrl = config.maptilerKey
-  ? `https://api.maptiler.com/maps/streets-v4/style.json?key=${config.maptilerKey}`
-  : undefined;
-
-export function maptilerStyleUrlFor(lang: string): string | undefined {
-  if (!config.maptilerKey) return undefined;
-  const code = lang === "vi" ? "vi" : "en";
-  return `https://api.maptiler.com/maps/streets-v4/style.json?key=${config.maptilerKey}&language=${code}`;
+export function buildMapStyle(key: string): StyleSpecification {
+  return JSON.parse(
+    JSON.stringify(base).split(KEY_TOKEN).join(key),
+  ) as StyleSpecification;
 }
 
-export function brandTileUrl(): string {
-  const n = 2 ** TILE_ZOOM;
-  const [lng, lat] = mapDefaults.center;
-  const x = Math.floor(((lng + 180) / 360) * n);
-  const rad = (lat * Math.PI) / 180;
-  const y = Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n);
-  return config.maptilerKey
-    ? `https://api.maptiler.com/maps/streets-v2/${TILE_ZOOM}/${x}/${y}.png?key=${config.maptilerKey}`
-    : `https://tile.openstreetmap.org/${TILE_ZOOM}/${x}/${y}.png`;
+export function bundledMapStyle(): StyleSpecification | undefined {
+  if (!config.maptilerKey) return undefined;
+  return buildMapStyle(config.maptilerKey);
 }

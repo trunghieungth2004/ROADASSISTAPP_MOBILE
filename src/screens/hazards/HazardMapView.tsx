@@ -1,7 +1,7 @@
-import {useEffect, useRef} from "react";
+import {useEffect, useRef, useState} from "react";
 import {StyleSheet, View} from "react-native";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
-import {maptilerStyleUrlFor} from "../../map/style";
+import {bundledMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
 import FlagMapLayers from "../../components/FlagMapLayers";
 import FlagPinImages from "../../components/MapPinImages";
@@ -9,13 +9,13 @@ import {HCMC_CENTER} from "../route/types";
 import {shouldAutoFit} from "../route/cameraIntent";
 
 type Props = {
-  lang: string;
   flags: Flag[];
   focus: {lat: number; lng: number; n: number} | null;
   onPickFlag: (flag: Flag) => void;
 };
 
 export default function HazardMapView(props: Props) {
+  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
   const cameraRef = useRef<CameraRef | null>(null);
   const pendingRef = useRef<{lat: number; lng: number} | null>(null);
   const fittedRef = useRef(false);
@@ -50,7 +50,7 @@ export default function HazardMapView(props: Props) {
     <View style={styles.clip}>
       <Map
         style={StyleSheet.absoluteFill}
-        mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"}
+        mapStyle={mapStyle}
         logo={false}
         attribution={false}
         androidView="texture"

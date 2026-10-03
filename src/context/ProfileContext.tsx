@@ -1,27 +1,42 @@
-import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {fetchMeBundle, setActiveVehicle as apiActivateVehicle, setOnboarded as apiSetOnboarded, type MeBundle, type MeUser, type MeVehicle} from "../api/users";
 import {useAuth} from "./AuthContext";
-type ProfileState = {bundle: MeBundle | null; loading: boolean; user: MeUser | null; vehicles: MeVehicle[]; activeVehicle: MeVehicle | null; hasVehicle: boolean; roleChosen: boolean; isRider: boolean; refresh: () => Promise<MeBundle | null>; activateVehicle: (profileId: string | null) => Promise<void>; markOnboarded: (service: string) => Promise<void>};
+export type ProfileState = {bundle: MeBundle | null; loading: boolean; user: MeUser | null; vehicles: MeVehicle[]; activeVehicle: MeVehicle | null; hasVehicle: boolean; roleChosen: boolean; isRider: boolean; refresh: () => Promise<MeBundle | null>; activateVehicle: (profileId: string | null) => Promise<void>; markOnboarded: (service: string) => Promise<void>};
 const ProfileContext = createContext<ProfileState | null>(null);
 export function ProfileProvider({children}: {children: ReactNode}) {
   const {uid, token} = useAuth();
   const [bundle, setBundle] = useState<MeBundle | null>(null);
   const [loading, setLoading] = useState(false);
+  const seqRef = useRef(0);
+  const bundleRef = useRef<MeBundle | null>(null);
+  bundleRef.current = bundle;
   const refresh = useCallback(async (): Promise<MeBundle | null> => {
     if (!token) { setBundle(null); return null; }
+    const seq = (seqRef.current += 1);
     setLoading(true);
-    try { const next = await fetchMeBundle(token); setBundle(next); return next; } catch { return bundle; } finally { setLoading(false); }
+    try {
+      const next = await fetchMeBundle(token);
+      if (seqRef.current !== seq) return next;
+      setBundle(next);
+      return next;
+    } catch {
+      if (seqRef.current !== seq) return null;
+      return bundleRef.current;
+    } finally {
+      if (seqRef.current === seq) setLoading(false);
+    }
   }, [token]);
   useEffect(() => { if (token) void refresh(); else setBundle(null); }, [token, refresh]);
   const activateVehicle = useCallback(async (profileId: string | null) => {
     if (!token) return;
     const res = await apiActivateVehicle({profileId}, token);
-    setBundle((prev) => {
-      if (!prev) return prev;
-      const active = res.profileId ? prev.vehicles.find((vehicle) => vehicle.id === res.profileId) ?? null : null;
-      return {...prev, activeVehicle: active};
-    });
-  }, [token]);
+    const active = res.profileId ? bundleRef.current?.vehicles.find((vehicle) => vehicle.id === res.profileId) ?? null : null;
+    if (res.profileId && !active) {
+      await refresh();
+      return;
+    }
+    setBundle((prev) => (prev ? {...prev, activeVehicle: active} : prev));
+  }, [token, refresh]);
   const markOnboarded = useCallback(async (service: string) => {
     if (!token) return;
     const res = await apiSetOnboarded({service}, token);

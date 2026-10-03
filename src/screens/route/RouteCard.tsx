@@ -72,7 +72,7 @@ export default function RouteCard(props: Props) {
         <Pressable style={[styles.input, styles.vehicleCompact, {borderColor: theme.border}]} onPress={props.onOpenVehicle}>
           <View style={styles.vehicleBtnRow}>
             <MaterialCommunityIcons name={vehicleIcon(props.activeVehicle?.type)} size={20} color={theme.primary} />
-            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? vehicleMeta(props.activeVehicle.baseWidth, props.activeVehicle.baseHeight, null, t) : t.route.selectVehicle}</Text>
+            <Text style={[styles.vehicleBtnText, {color: props.activeVehicle ? theme.text : theme.muted}]} numberOfLines={1}>{props.activeVehicle ? vehicleMeta(props.activeVehicle.baseWidth, props.activeVehicle.baseHeight) : t.route.selectVehicle}</Text>
             <MaterialIcons name="expand-more" size={20} color={theme.muted} />
           </View>
         </Pressable>
@@ -90,7 +90,7 @@ export default function RouteCard(props: Props) {
           <View style={styles.warnBox}>
             <Text style={[styles.warnTitle, {color: theme.danger}]}>{t.route.widthBlocked}</Text>
             {props.widthBlocks.map((w) => (
-              <Text key={w.segmentId} style={{color: theme.text}}>{w.segmentId} ({w.baseWidth}m)</Text>
+              <Text key={w.segmentId} style={{color: theme.text}}>{t.route.widthNarrow} · {w.baseWidth} m</Text>
             ))}
           </View>
         </View>
@@ -103,9 +103,6 @@ export default function RouteCard(props: Props) {
 const styles = StyleSheet.create({
   card: {width: "100%", borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
   row: {flexDirection: "row", gap: 8, alignItems: "center"},
-  vehicleRow: {flexDirection: "row", gap: 8, alignItems: "center"},
-  vehicleHalf: {flex: 1, minWidth: 0},
-  vehicleSpacer: {flex: 1},
   stopVehicleRow: {flexDirection: "row", gap: 8, alignItems: "center"},
   stopGroup: {flexDirection: "row", flexWrap: "wrap", gap: 8, flex: 1, alignItems: "center"},
   plusBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
@@ -125,7 +122,6 @@ const styles = StyleSheet.create({
   saveBtn: {borderWidth: 1, backgroundColor: "transparent"},
   disabled: {opacity: 0.6},
   primaryText: {color: "#fff", fontWeight: "700"},
-  error: {fontSize: 13},
   resultCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, borderStyle: "dashed"},
   warnBox: {gap: 2},
   warnTitle: {fontSize: 13, fontWeight: "700"},

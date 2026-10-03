@@ -77,6 +77,7 @@ export async function startDuckHold(textLength: number): Promise<void> {
       void releaseDuckHold(true);
     }, textLength * DUCK_MIN_MS_PER_CHAR + DUCK_GRACE_MS);
   } catch {
+    duckHolds = Math.max(0, duckHolds - 1);
     return;
   }
 }

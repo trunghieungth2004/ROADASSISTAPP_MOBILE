@@ -17,7 +17,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
       const next = saved === "dark" || saved === "light" ? saved : systemMode;
       setMode(next);
       Appearance.setColorScheme(next);
-    });
+    }).catch(() => undefined);
     return () => { mounted = false; };
   }, [systemMode]);
   const toggle = () => {

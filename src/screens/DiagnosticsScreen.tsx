@@ -1,21 +1,14 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text} from "../components/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import {darkTheme, lightTheme} from "../theme";
-import type {Strings} from "../i18n/en";
 import {ALL_DIAG_TABS, CHECK_DEFS, type CheckStatus, type DiagTab} from "../services/diagnostics";
 import {clearCaptured, getCaptured, isRecording, startRecording, stopRecording, subscribeCaptured, type CapturedLine} from "../services/consoleCapture";
-
-type Props = {
-  t: Strings;
-  authToken: string | null;
-  onClose: () => void;
-};
-
-type Entry = {status: CheckStatus; detail: string};
+import {useNavigation} from "@react-navigation/native";
+import {useAuth} from "../context/AuthContext";
+import {useStrings} from "../context/LanguageContext";
 
 const TABS: {id: DiagTab | "logs"; labelKey: string; icon: string}[] = [
   {id: "push", labelKey: "diagTabPush", icon: "notifications"},
@@ -25,10 +18,14 @@ const TABS: {id: DiagTab | "logs"; labelKey: string; icon: string}[] = [
   {id: "logs", labelKey: "diagTabLogs", icon: "terminal"},
 ];
 
-export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
+type Entry = {status: CheckStatus; detail: string};
+
+export default function DiagnosticsScreen() {
+  const {t} = useStrings();
+  const {token: authToken} = useAuth();
+  const navigation = useNavigation();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<DiagTab | "logs">("push");
   const [selected, setSelected] = useState<DiagTab[]>(["push", "location", "audio", "network"]);
   const [results, setResults] = useState<Record<string, Entry>>({});
@@ -37,7 +34,19 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
   const [lines, setLines] = useState<CapturedLine[]>(() => getCaptured());
   const [recording, setRecording] = useState(isRecording());
   const [logCopied, setLogCopied] = useState(false);
+  const aliveRef = useRef(true);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => subscribeCaptured(setLines), []);
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      aliveRef.current = false;
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
+  useEffect(() => {
+    navigation.setOptions({title: t.more.diagnostics});
+  }, [navigation, t]);
   const onToggleRecord = (): void => {
     if (isRecording()) {
       stopRecording();
@@ -52,12 +61,17 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
     clearCaptured();
     setLines([]);
   };
+  const later = (fn: () => void, ms: number): void => {
+    timersRef.current.push(setTimeout(() => {
+      if (aliveRef.current) fn();
+    }, ms));
+  };
   const onCopyLogs = (): void => {
     const text = lines.map((l) => `${new Date(l.at).toISOString()} [${l.level}] ${l.text}`).join("\n");
     void Clipboard.setStringAsync(text).then((ok) => {
-      if (ok) {
+      if (ok && aliveRef.current) {
         setLogCopied(true);
-        setTimeout(() => setLogCopied(false), 2000);
+        later(() => setLogCopied(false), 2000);
       }
     });
   };
@@ -73,31 +87,36 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
     setBusy(true);
     setCopied(false);
     void (async () => {
-      for (const section of ALL_DIAG_TABS) {
-        if (!selected.includes(section)) continue;
-        const defs = CHECK_DEFS.filter((d) => d.tab === section);
-        setResults((prev) => {
-          const next = {...prev};
-          for (const d of defs) next[d.id] = {status: "running", detail: ""};
-          return next;
-        });
-        const settled = await Promise.all(
-          defs.map(async (d) => {
-            try {
-              const r = await d.run(authToken);
-              return {id: d.id, status: r.ok ? "pass" : "fail", detail: r.detail} as Entry & {id: string};
-            } catch (err) {
-              return {id: d.id, status: "fail", detail: err instanceof Error ? err.message : String(err)} as Entry & {id: string};
-            }
-          }),
-        );
-        setResults((prev) => {
-          const next = {...prev};
-          for (const s of settled) next[s.id] = {status: s.status, detail: s.detail};
-          return next;
-        });
+      try {
+        for (const section of ALL_DIAG_TABS) {
+          if (!aliveRef.current) return;
+          if (!selected.includes(section)) continue;
+          const defs = CHECK_DEFS.filter((d) => d.tab === section);
+          setResults((prev) => {
+            const next = {...prev};
+            for (const d of defs) next[d.id] = {status: "running", detail: ""};
+            return next;
+          });
+          const settled = await Promise.all(
+            defs.map(async (d) => {
+              try {
+                const r = await d.run(authToken);
+                return {id: d.id, status: r.ok ? "pass" : "fail", detail: r.detail} as Entry & {id: string};
+              } catch (err) {
+                return {id: d.id, status: "fail", detail: err instanceof Error ? err.message : String(err)} as Entry & {id: string};
+              }
+            }),
+          );
+          if (!aliveRef.current) return;
+          setResults((prev) => {
+            const next = {...prev};
+            for (const s of settled) next[s.id] = {status: s.status, detail: s.detail};
+            return next;
+          });
+        }
+      } finally {
+        if (aliveRef.current) setBusy(false);
       }
-      setBusy(false);
     })();
   };
   const summary = (): string => {
@@ -110,22 +129,16 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
   };
   const onCopy = (): void => {
     void Clipboard.setStringAsync(summary()).then((ok) => {
-      if (ok) {
+      if (ok && aliveRef.current) {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        later(() => setCopied(false), 2000);
       }
     });
   };
   const statusColor = (s: CheckStatus): string =>
     s === "pass" ? "#16a34a" : s === "fail" ? theme.danger : s === "running" ? theme.primary : theme.muted;
   return (
-    <View style={[styles.root, {backgroundColor: theme.paper, paddingTop: insets.top + 12}]}>
-      <View style={styles.headRow}>
-        <Text style={[styles.title, {color: theme.text}]}>{t.more.diagnostics}</Text>
-        <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.common.close}>
-          <MaterialIcons name="close" size={22} color={theme.text} />
-        </Pressable>
-      </View>
+    <View style={[styles.root, {backgroundColor: theme.paper}]}>
       {tab !== "logs" ? (
       <View style={styles.runBar}>
         <Pressable style={styles.masterRow} onPress={toggleAll} accessibilityRole="checkbox" accessibilityState={{checked: selected.length === 4}} accessibilityLabel={t.more.diagSelectAll}>
@@ -192,7 +205,7 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
                 <Text style={[styles.rowLabel, {color: theme.text}]}>{labelOf(d.labelKey)}</Text>
                 {r.detail !== "" ? <Text style={[styles.rowDetail, {color: theme.muted}]}>{r.detail}</Text> : null}
               </View>
-              <Text style={[styles.rowStatus, {color: statusColor(r.status)}]}>{r.status.toUpperCase()}</Text>
+              <Text style={[styles.rowStatus, {color: statusColor(r.status)}]}>{r.status === "pass" ? t.more.diagPass : r.status === "fail" ? t.more.diagFail : r.status === "running" ? t.more.diagRunning : t.more.diagPending}</Text>
             </View>
           );
         })}
@@ -216,10 +229,7 @@ export default function DiagnosticsScreen({t, authToken, onClose}: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  headRow: {flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8},
-  title: {flex: 1, fontSize: 18, fontWeight: "700"},
-  closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
+  root: {flex: 1, paddingTop: 12},
   runBar: {flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 12},
   masterRow: {flex: 1, flexDirection: "row", alignItems: "center", gap: 8},
   masterText: {fontSize: 14, fontWeight: "700"},

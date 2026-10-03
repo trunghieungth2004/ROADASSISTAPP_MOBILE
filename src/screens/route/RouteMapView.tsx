@@ -1,12 +1,12 @@
 import type {RefObject} from "react";
-import {useEffect, useRef, type MutableRefObject} from "react";
+import {useEffect, useRef, useState, type MutableRefObject} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/AppText";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/StyledLayer";
-import {maptilerStyleUrlFor} from "../../map/style";
+import {bundledMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/MapPinImages";
 import {Fab} from "../../components/Fab";
 import type {AppTheme} from "../../theme";
@@ -20,7 +20,6 @@ import type {Flag} from "../../api/flags";
 
 type Props = {
   t: Strings;
-  lang: string;
   theme: AppTheme;
   cameraRef: RefObject<CameraRef | null>;
   routes: RouteOption[];
@@ -52,6 +51,7 @@ type Props = {
 };
 
 export default function RouteMapView(props: Props) {
+  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
   const {t, theme} = props;
   const insets = useSafeAreaInsets();
   const touchRef = useRef({stamp: 0});
@@ -72,7 +72,7 @@ export default function RouteMapView(props: Props) {
           if (e.nativeEvent.touches.length > 1) touchRef.current = {stamp: Date.now()};
         }}
       >
-      <Map style={StyleSheet.absoluteFill} mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => props.onMapReady()}>
+      <Map style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => props.onMapReady()}>
         <Camera ref={props.cameraRef} initialViewState={{center: HCMC_CENTER, zoom: 13}} />
         <Images images={{
           "a-dot": require("../../../assets/map/a-dot.png"),
@@ -144,7 +144,7 @@ export default function RouteMapView(props: Props) {
                     ) : meta.best ? (
                       <MaterialIcons name="check-circle" size={16} color={selected ? "#fff" : theme.primary} />
                     ) : null}
-                    <Text style={{color: selected ? "#fff" : theme.text, fontWeight: "700"}}>{i + 1} · {(r.distanceMeters / 1000).toFixed(1)} {t.route.km} · {Math.round(r.durationSeconds / 60)} {t.route.min}{meta.hazards > 0 ? ` · ${meta.hazards}` : ""}</Text>
+                    <Text style={{color: selected ? "#fff" : theme.text, fontWeight: "700"}}>{i + 1} · {((r.distanceMeters ?? 0) / 1000).toFixed(1)} {t.route.km} · {Math.round((r.durationSeconds ?? 0) / 60)} {t.route.min}{meta.hazards > 0 ? ` · ${meta.hazards}` : ""}</Text>
                   </View>
                 </Pressable>
               );

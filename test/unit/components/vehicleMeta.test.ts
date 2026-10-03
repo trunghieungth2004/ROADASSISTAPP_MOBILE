@@ -11,11 +11,8 @@ test("unknown types fall back to the raw value", () => {
   expect(vehicleTypeName("HOVERBOARD", en)).toBe("HOVERBOARD");
 });
 
-test("meta shows dimensions alone without tow", () => {
-  expect(vehicleMeta(0.7, 1.1, null, en)).toBe("0.7 × 1.1 m");
-  expect(vehicleMeta(0.7, 1.1, undefined, en)).toBe("0.7 × 1.1 m");
-});
-
-test("meta appends the translated tow designation", () => {
-  expect(vehicleMeta(1.9, 1.5, "VAN", en)).toBe("1.9 × 1.5 m · Tow vehicle: Van");
+test("meta shows dimensions", () => {
+  expect(vehicleMeta(0.7, 1.1)).toBe("0.7 × 1.1 m");
+  expect(vehicleMeta(1.9, 1.5)).toBe("1.9 × 1.5 m");
+  expect(en.vehicle.types.VAN).toBe("Van");
 });

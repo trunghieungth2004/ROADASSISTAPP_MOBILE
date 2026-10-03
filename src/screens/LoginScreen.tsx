@@ -13,7 +13,7 @@ import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ScreenContainer";
 import Snack from "../components/Snack";
-import {snackAbove} from "../components/snackOffset";
+import {SNACK_GAP} from "../components/snackOffset";
 export default function LoginScreen() {
   const {t} = useStrings();
   const {signIn} = useAuth();
@@ -84,7 +84,7 @@ export default function LoginScreen() {
         </Pressable>
       </ScrollView>
       </KeyboardAvoidingView>
-      <Snack message={error} severity="error" sticky bottom={snackAbove(insets.bottom, 24)} dangerColor={theme.danger} onHide={() => setError(null)} />
+      <Snack message={error} severity="error" sticky bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={() => setError(null)} />
     </ScreenContainer>
   );
 }

@@ -4,6 +4,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {darkTheme, lightTheme, type AppTheme} from "../theme";
 import Snack from "../components/Snack";
+import {SNACK_GAP} from "../components/snackOffset";
 import type {Strings} from "../i18n/en";
 import type {AppPermissionStates, PermissionState} from "../services/permissions";
 
@@ -103,7 +104,7 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
           <Text style={styles.doneText}>{t.more.gateDone}</Text>
         </Pressable>
       </ScrollView>
-      <Snack message={grantError} severity="error" sticky bottom={insets.bottom + 16} dangerColor={theme.danger} onHide={onHideGrantError} />
+      <Snack message={grantError} severity="error" sticky bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={onHideGrantError} />
     </View>
   );
 }

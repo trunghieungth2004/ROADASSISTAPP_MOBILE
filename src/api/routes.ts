@@ -48,8 +48,8 @@ export type RouteStep = {
 export type RouteOption = {
   source: string;
   geometry: RouteGeometry;
-  distanceMeters: number;
-  durationSeconds: number;
+  distanceMeters?: number;
+  durationSeconds?: number;
   hazards?: HazardZone[];
   warnings?: unknown[];
   steps?: RouteStep[];
@@ -60,8 +60,22 @@ export type RouteResult = {
   routes: RouteOption[];
 };
 
-export function findRoute(payload: RouteRequest, token: string): Promise<RouteResult> {
-  return api.post<RouteResult>("/routes", payload, token);
+function hasUsableGeometry(value: unknown): value is RouteGeometry {
+  if (!value || typeof value !== "object") return false;
+  const coords = (value as {coordinates?: unknown}).coordinates;
+  return Array.isArray(coords) && coords.length > 0;
+}
+
+function normalizeRouteOption(route: RouteOption): RouteOption {
+  if (!hasUsableGeometry(route.geometry)) {
+    throw new Error("Route has no usable geometry");
+  }
+  return route;
+}
+
+export async function findRoute(payload: RouteRequest, token: string): Promise<RouteResult> {
+  const result = await api.post<RouteResult>("/routes", payload, token);
+  return {...result, routes: (result.routes ?? []).map(normalizeRouteOption)};
 }
 
 export type SavedRouteSummary = {
@@ -93,7 +107,7 @@ export type SaveRoutePayload = {
   distanceMeters?: number;
   durationSeconds?: number;
   source?: string;
-  geometry?: RouteGeometry;
+  geometry: RouteGeometry;
 };
 
 export function saveRoute(payload: SaveRoutePayload, token: string): Promise<{id: string}> {
@@ -108,8 +122,8 @@ export function getSavedRoute(routeId: string, token: string): Promise<SavedRout
   return api.post<SavedRoute>("/routes/saved/one", {routeId}, token);
 }
 
-export function renameSavedRoute(routeId: string, name: string, token: string): Promise<{updated: number}> {
-  return api.put<{updated: number}>("/routes/saved", {routeId, name}, token);
+export function renameSavedRoute(routeId: string, name: string, token: string): Promise<{renamed: number}> {
+  return api.put<{renamed: number}>("/routes/saved", {routeId, name}, token);
 }
 
 export function deleteSavedRoute(routeId: string, token: string): Promise<{deleted: number}> {

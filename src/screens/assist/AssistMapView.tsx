@@ -1,25 +1,25 @@
 import {StyleSheet, View} from "react-native";
 import {Camera, GeoJSONSource, Images, Map, type CameraRef} from "@maplibre/maplibre-react-native";
 import type {RefObject} from "react";
+import {useState} from "react";
 import StyledLayer from "../../components/StyledLayer";
-import {maptilerStyleUrlFor} from "../../map/style";
+import {bundledMapStyle} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
-import type {Shop} from "../../api/shops";
+import type {Provider} from "../../api/providers";
 import type {RouteOption} from "../../api/routes";
 import {HCMC_CENTER, type Point} from "../route/types";
 import {pointFeature} from "../route/routeGeo";
 
 type Props = {
-  lang: string;
   theme: AppTheme;
   cameraRef: RefObject<CameraRef | null>;
   gps: Point | null;
   dest: Point | null;
   mine: DispatchTicket[];
   nearby: DispatchTicket[];
-  shops: Shop[];
-  selectedShop: Shop | null;
+  shops: Provider[];
+  selectedShop: Provider | null;
   walkRoute: RouteOption | null;
   onMapReady: () => void;
   onPickTicket: (id: string) => void;
@@ -27,12 +27,13 @@ type Props = {
 };
 
 export default function AssistMapView(props: Props) {
+  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
   const {theme} = props;
   return (
     <View style={StyleSheet.absoluteFill}>
       <Map
         style={StyleSheet.absoluteFill}
-        mapStyle={maptilerStyleUrlFor(props.lang) ?? "https://demotiles.maplibre.org/style.json"}
+        mapStyle={mapStyle}
         logo={false}
         attribution={false}
         androidView="texture"

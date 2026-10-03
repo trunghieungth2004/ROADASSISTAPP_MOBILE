@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {flagActions, formatUntil, joinMeta, type UntilStrings} from "../../../../src/screens/hazards/flagActions";
+import {flagActions, flagOverlayActions, formatUntil, joinMeta, type UntilStrings} from "../../../../src/screens/hazards/flagActions";
 
 const until: UntilStrings = {expiresIn: "Expires in {n}", expired: "Expired"};
 
@@ -42,4 +42,78 @@ test("formatUntil reports expired and remaining time", () => {
   expect(formatUntil(now + 30 * 60000, now, until)).toBe("Expires in 30m");
   expect(formatUntil(now + 5 * 3600000, now, until)).toBe("Expires in 5h");
   expect(formatUntil(now + 3 * 86400000, now, until)).toBe("Expires in 3d");
+});
+
+test("flagOverlayActions maps confirm plus deny to footer actions", () => {
+  const seen: string[] = [];
+  const actions = flagOverlayActions(
+    "f1",
+    "1",
+    false,
+    false,
+    false,
+    false,
+    {confirm: "Confirm", deny: "Deny", remove: "Remove"},
+    {onConfirm: (id) => { seen.push(`confirm:${id}`); }, onDeny: (id) => { seen.push(`deny:${id}`); }, onRemove: (id) => { seen.push(`remove:${id}`); }},
+  );
+  expect(actions.map((a) => a.label)).toEqual(["Confirm", "Deny"]);
+  expect(actions[0].tone).toBe("primary");
+  expect(actions[0].outline).toBeUndefined();
+  expect(actions[1].tone).toBe("danger");
+  expect(actions[1].outline).toBe(true);
+  actions[0].onPress();
+  actions[1].onPress();
+  expect(seen).toEqual(["confirm:f1", "deny:f1"]);
+});
+
+test("flagOverlayActions maps own suggested reports to a danger remove", () => {
+  const actions = flagOverlayActions(
+    "f2",
+    "1",
+    true,
+    false,
+    false,
+    true,
+    {confirm: "Confirm", deny: "Deny", remove: "Remove"},
+    {onConfirm: () => undefined, onDeny: () => undefined, onRemove: () => undefined},
+  );
+  expect(actions.map((a) => a.label)).toEqual(["Remove"]);
+  expect(actions[0].tone).toBe("danger");
+  expect(actions[0].busy).toBe(true);
+});
+
+test("flagOverlayActions hides voted and denied actions and locks locked reports", () => {
+  const voted = flagOverlayActions(
+    "f3",
+    "1",
+    false,
+    true,
+    false,
+    false,
+    {confirm: "Confirm", deny: "Deny", remove: "Remove"},
+    {onConfirm: () => undefined, onDeny: () => undefined, onRemove: () => undefined},
+  );
+  expect(voted.map((a) => a.label)).toEqual(["Deny"]);
+  const denied = flagOverlayActions(
+    "f3",
+    "1",
+    false,
+    false,
+    true,
+    false,
+    {confirm: "Confirm", deny: "Deny", remove: "Remove"},
+    {onConfirm: () => undefined, onDeny: () => undefined, onRemove: () => undefined},
+  );
+  expect(denied.map((a) => a.label)).toEqual(["Confirm"]);
+  const locked = flagOverlayActions(
+    "f4",
+    "3",
+    true,
+    false,
+    false,
+    false,
+    {confirm: "Confirm", deny: "Deny", remove: "Remove"},
+    {onConfirm: () => undefined, onDeny: () => undefined, onRemove: () => undefined},
+  );
+  expect(locked).toEqual([]);
 });

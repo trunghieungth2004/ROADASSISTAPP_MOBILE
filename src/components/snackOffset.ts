@@ -1,5 +1,7 @@
 export const SNACK_GAP = 12;
 
-export function snackAbove(base: number, anchorHeight: number, gap: number = SNACK_GAP): number {
-  return base + anchorHeight + gap;
+export const TAB_BAR_HEIGHT = 64;
+
+export function snackAboveTabs(insetsBottom: number): number {
+  return insetsBottom + TAB_BAR_HEIGHT + SNACK_GAP;
 }

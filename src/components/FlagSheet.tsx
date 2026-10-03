@@ -1,14 +1,41 @@
 import {useState} from "react";
-import {Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Image, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "./AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {FlagType} from "../api/flags";
+import {formatPoint} from "../api/places";
 import {darkTheme, lightTheme} from "../theme";
 import {hazardKind} from "./hazardStyle";
 import type {Strings} from "../i18n/en";
 
 export type FlagReport = {type: FlagType; radiusMeters: number; note?: string};
-type Props = {t: Strings; lat: number; lng: number; busy: boolean; centered?: boolean; onClose: () => void; onSubmit: (report: FlagReport) => void};
+
+export type FlagDraftState = {
+  type: FlagType;
+  radiusMeters: number;
+  note: string;
+  setType: (next: FlagType) => void;
+  setRadiusMeters: (next: number) => void;
+  setNote: (next: string) => void;
+  build: () => FlagReport;
+};
+
+export function useFlagDraft(): FlagDraftState {
+  const [type, setType] = useState<FlagType>("FLOOD");
+  const [radiusMeters, setRadiusMeters] = useState(50);
+  const [note, setNote] = useState("");
+  return {
+    type,
+    radiusMeters,
+    note,
+    setType,
+    setRadiusMeters,
+    setNote,
+    build: () => ({type, radiusMeters, note: note.trim() || undefined}),
+  };
+}
+
+type Props = {t: Strings; lat: number; lng: number; draft: FlagDraftState};
 
 const TYPES: {id: FlagType; icon: "flood" | "car-crash" | "construction"}[] = [
   {id: "FLOOD", icon: "flood"},
@@ -24,43 +51,25 @@ const PREVIEW: Record<FlagType, number> = {
   OBSTRUCTION: require("../../assets/map/pin-obstruction-1.png"),
 };
 
-export default function FlagSheet({t, lat, lng, busy, centered, onClose, onSubmit}: Props) {
+export default function FlagSheet({t, lat, lng, draft}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const [type, setType] = useState<FlagType>("FLOOD");
-  const [radiusMeters, setRadiusMeters] = useState(50);
-  const [note, setNote] = useState("");
-  const submit = (): void => {
-    Keyboard.dismiss();
-    onSubmit({type, radiusMeters, note: note.trim() || undefined});
-  };
-  const close = (): void => {
-    Keyboard.dismiss();
-    onClose();
-  };
-  void lat;
-  void lng;
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
     <View style={styles.body}>
-      <View style={styles.headRow}>
-        <Image source={PREVIEW[type]} style={styles.preview} />
-        <Text style={[styles.title, {color: theme.text}]}>{t.flag.reportTitle}</Text>
-      </View>
-      <View style={styles.headRow}>
-        <Text style={[styles.title, {color: theme.text}]}>{t.flag.reportTitle}</Text>
+      <View style={styles.locRow}>
+        <Image source={PREVIEW[draft.type]} style={styles.preview} />
+        <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(lat, lng)}</Text>
       </View>
       <Text style={[styles.label, {color: theme.text}]}>{t.flag.type}</Text>
       <View style={styles.typeRow}>
         {TYPES.map((o) => {
           const kind = hazardKind(o.id);
-          const active = type === o.id;
+          const active = draft.type === o.id;
           return (
             <Pressable
               key={o.id}
               style={[styles.typeBtn, {borderColor: active ? kind.color : theme.border, backgroundColor: active ? `${kind.color}22` : "transparent"}]}
-              onPress={() => setType(o.id)}
+              onPress={() => draft.setType(o.id)}
             >
               <MaterialIcons name={o.icon} size={20} color={active ? kind.color : theme.muted} />
               <Text style={[styles.typeText, {color: active ? kind.color : theme.text}]} numberOfLines={1}>
@@ -75,8 +84,8 @@ export default function FlagSheet({t, lat, lng, busy, centered, onClose, onSubmi
           <Text style={[styles.label, {color: theme.text}]}>{t.flag.note}</Text>
           <TextInput
             style={[styles.input, {borderColor: theme.border, color: theme.text}]}
-            value={note}
-            onChangeText={setNote}
+            value={draft.note}
+            onChangeText={draft.setNote}
             maxLength={280}
           />
         </View>
@@ -86,44 +95,24 @@ export default function FlagSheet({t, lat, lng, busy, centered, onClose, onSubmi
             {RADII.map((r) => (
               <Pressable
                 key={r}
-                style={[styles.radiusChip, {borderColor: radiusMeters === r ? theme.primary : theme.border, backgroundColor: radiusMeters === r ? `${theme.primary}22` : "transparent"}]}
-                onPress={() => setRadiusMeters(r)}
+                style={[styles.radiusChip, {borderColor: draft.radiusMeters === r ? theme.primary : theme.border, backgroundColor: draft.radiusMeters === r ? `${theme.primary}22` : "transparent"}]}
+                onPress={() => draft.setRadiusMeters(r)}
               >
-                <Text style={[styles.radiusText, {color: radiusMeters === r ? theme.primary : theme.text}]}>{r}</Text>
+                <Text style={[styles.radiusText, {color: draft.radiusMeters === r ? theme.primary : theme.text}]}>{r}</Text>
               </Pressable>
             ))}
           </View>
         </View>
       </View>
-      <View style={styles.actionRow}>
-        <Pressable
-          style={[styles.submit, styles.actionFlex, {backgroundColor: theme.primary}, busy && styles.disabled]}
-          disabled={busy}
-          onPress={submit}
-        >
-          <Text style={styles.submitText}>{t.flag.submit}</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.submit, styles.actionFlex, styles.cancelBtn, {borderColor: theme.border, backgroundColor: theme.paper}, busy && styles.disabled]}
-          disabled={busy}
-          onPress={close}
-        >
-          <Text style={[styles.submitText, {color: theme.text}]}>{t.common.close}</Text>
-        </Pressable>
-      </View>
     </View>
-    </View>
-    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   body: {gap: 8, width: "100%"},
-  sheet: {borderRadius: 20, borderWidth: 1, padding: 12, gap: 8, maxHeight: "85%"},
-  card: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 8, width: "100%"},
-  headRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  locRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  coords: {fontSize: 12, flex: 1},
   preview: {width: 40, height: 40},
-  title: {flex: 1, fontSize: 16, fontWeight: "700"},
   label: {fontSize: 13, fontWeight: "700"},
   typeRow: {flexDirection: "row", gap: 8},
   typeBtn: {flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 4, minWidth: 0},
@@ -134,10 +123,4 @@ const styles = StyleSheet.create({
   radiusRow: {flexDirection: "row", gap: 4},
   radiusChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 2, flex: 1, minWidth: 0, alignItems: "center"},
   radiusText: {fontSize: 11, fontWeight: "700"},
-  actionRow: {flexDirection: "row", gap: 8},
-  actionFlex: {flex: 1},
-  cancelBtn: {borderWidth: 1, backgroundColor: "transparent"},
-  submit: {borderRadius: 8, padding: 10, alignItems: "center"},
-  submitText: {color: "#fff", fontWeight: "700"},
-  disabled: {opacity: 0.6},
 });

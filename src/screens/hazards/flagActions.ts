@@ -1,3 +1,5 @@
+import type {OverlayAction} from "../../components/overlay/Overlay";
+
 export type FlagAction = "confirm" | "deny" | "remove" | "locked";
 
 export function flagActions(status: string, isOwn: boolean): FlagAction[] {
@@ -21,4 +23,38 @@ export function formatUntil(expiresMs: number | null | undefined, nowMs: number,
   const hours = Math.floor(mins / 60);
   if (hours < 48) return s.expiresIn.replace("{n}", `${hours}h`);
   return s.expiresIn.replace("{n}", `${Math.floor(hours / 24)}d`);
+}
+
+export type FlagActionLabels = {confirm: string; deny: string; remove: string};
+
+export type FlagActionHandlers = {
+  onConfirm: (flagId: string) => void;
+  onDeny: (flagId: string) => void;
+  onRemove: (flagId: string) => void;
+};
+
+export function flagOverlayActions(
+  flagId: string,
+  status: string,
+  isOwn: boolean,
+  voted: boolean,
+  denied: boolean,
+  busy: boolean,
+  labels: FlagActionLabels,
+  handlers: FlagActionHandlers,
+): OverlayAction[] {
+  const actions = flagActions(status, isOwn);
+  const canConfirm = actions.includes("confirm") && !voted;
+  const canDeny = actions.includes("deny") && !denied;
+  const canRemove = actions.includes("remove");
+  const out: OverlayAction[] = [];
+  if (canRemove) {
+    out.push({label: labels.remove, tone: "danger", busy, onPress: () => handlers.onRemove(flagId)});
+  } else if (canConfirm) {
+    out.push({label: labels.confirm, tone: "primary", busy, onPress: () => handlers.onConfirm(flagId)});
+  }
+  if (canDeny) {
+    out.push({label: labels.deny, tone: "danger", outline: true, busy, onPress: () => handlers.onDeny(flagId)});
+  }
+  return out;
 }

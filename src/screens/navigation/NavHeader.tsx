@@ -45,7 +45,7 @@ export default function NavHeader(props: Props) {
             </View>
           ) : null}
         </View>
-        <Pressable style={[styles.circleBtn, {borderColor: theme.border}]} onPress={props.onOpenList} accessibilityRole="button" accessibilityLabel="Turn list">
+        <Pressable style={[styles.circleBtn, {borderColor: theme.border}]} onPress={props.onOpenList} accessibilityRole="button" accessibilityLabel={props.t.nav.turnList}>
           <MaterialIcons name="list" size={22} color={theme.text} />
         </Pressable>
       </View>
