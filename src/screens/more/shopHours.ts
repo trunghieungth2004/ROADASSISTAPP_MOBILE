@@ -61,3 +61,44 @@ export function validateWeek(week: WeekHours): boolean {
   }
   return true;
 }
+
+export function formatTimeInput(prev: string, next: string): string {
+  const prevDigits = prev.replace(/\D/g, "");
+  const digits = next.replace(/\D/g, "").slice(0, 4);
+  if (next.length < prev.length) {
+    return digits.length <= 2 ? digits : `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  }
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `${digits.padStart(2, "0")}:`;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+export function fillWeek(open: string, close: string): WeekHours {
+  const week = emptyWeek();
+  for (const day of DOW) week[day] = {enabled: true, open, close};
+  return week;
+}
+
+export function fillWeekdays(open: string, close: string): WeekHours {
+  const week = emptyWeek();
+  for (const day of DOW) {
+    if (day === "SUN") continue;
+    week[day] = {enabled: true, open, close};
+  }
+  return week;
+}
+
+export function isOvernight(open: string, close: string): boolean {
+  if (!isValidTime(open) || !isValidTime(close)) return false;
+  return close < open;
+}
+
+export function summarizeWeek(week: WeekHours, dayNames: Record<Day, string>, mixedTemplate: string): string | null {
+  const enabled = DOW.filter((day) => week[day].enabled);
+  if (enabled.length === 0) return null;
+  const first = week[enabled[0]];
+  const uniform = enabled.every((day) => week[day].open === first.open && week[day].close === first.close);
+  if (!uniform) return mixedTemplate.replace("{n}", String(enabled.length));
+  const range = enabled.length === 1 ? dayNames[enabled[0]] : `${dayNames[enabled[0]]}–${dayNames[enabled[enabled.length - 1]]}`;
+  return `${range} · ${first.open}–${first.close}`;
+}

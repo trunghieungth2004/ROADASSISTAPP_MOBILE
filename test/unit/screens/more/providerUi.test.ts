@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {missingKinds, providerPill, providerStatusLabel, switchEnabled} from "../../../../src/screens/more/providerUi";
+import {missingKinds, operatedKinds, providerPill, providerStatusLabel, switchEnabled} from "../../../../src/screens/more/providerUi";
 import {en} from "../../../../src/i18n/en";
 
 test("status label prefers suspension over status", () => {
@@ -30,4 +30,14 @@ test("cta visibility is per kind, not per list", () => {
   expect(missingKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: false, tow: true});
   expect(missingKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: true, tow: true});
   expect(missingKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: true, tow: false});
+  expect(missingKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: true, tow: true});
+  expect(missingKinds([{kind: "SHOP", status: "PENDING"}])).toEqual({shop: false, tow: true});
+});
+
+test("operated kinds ignore denied records", () => {
+  expect(operatedKinds([])).toEqual({shop: false, tow: false});
+  expect(operatedKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: true, tow: false});
+  expect(operatedKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: false, tow: false});
+  expect(operatedKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: false, tow: true});
+  expect(operatedKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: false, tow: false});
 });

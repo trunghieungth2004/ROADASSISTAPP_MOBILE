@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {isStaleForRefresh, pickFeedback} from "../../../src/components/feedback";
+import {isStaleForRefresh, pickFeedback} from "../../../src/components/ui/feedback";
 
 test("failures surface as errors, successes as confirms", () => {
   expect(pickFeedback("failure")).toBe("error");

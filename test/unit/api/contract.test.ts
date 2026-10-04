@@ -4,11 +4,13 @@ import {
   acceptTicket,
   cancelTicket,
   createTicket,
+  feedTickets,
   getTicket,
   myTickets,
   nearTickets,
   updateTicketStatus,
 } from "../../../src/api/dispatch";
+import {ratingsByTicket, submitRating} from "../../../src/api/ratings";
 import {
   confirmFlag,
   denyFlag,
@@ -47,6 +49,7 @@ import {
   setOnboarded,
   setVolunteerAvailability,
   updateProfile,
+  updateUserServices,
   volunteerHeartbeat,
 } from "../../../src/api/users";
 import {
@@ -64,6 +67,9 @@ const calls: Call[] = [
   {fn: () => register({email: "a@b.c", password: "secret123", phone: "+84123456789"}), method: "POST", path: "/users/register"},
   {fn: () => createTicket({ticketType: "SOS", lat: 1, lng: 2}, T), method: "POST", path: "/dispatch"},
   {fn: () => myTickets(T), method: "POST", path: "/dispatch/mine"},
+  {fn: () => feedTickets(undefined, T), method: "POST", path: "/dispatch/feed"},
+  {fn: () => ratingsByTicket("t1", T), method: "POST", path: "/ratings/by-ticket"},
+  {fn: () => submitRating({targetId: "v1", targetKind: "VOLUNTEER", ticketId: "t1", score: 5}, T), method: "POST", path: "/ratings"},
   {fn: () => getTicket("t1", T), method: "POST", path: "/dispatch/one"},
   {fn: () => cancelTicket("t1", T), method: "PUT", path: "/dispatch/status"},
   {fn: () => nearTickets(1, 2, T), method: "POST", path: "/dispatch/near"},
@@ -96,6 +102,7 @@ const calls: Call[] = [
   {fn: () => deleteSavedRoute("r1", T), method: "POST", path: "/routes/unsave"},
   {fn: () => fetchMeBundle(T), method: "POST", path: "/users/me"},
   {fn: () => setOnboarded({service: "RIDER"}, T), method: "PUT", path: "/users/onboard"},
+  {fn: () => updateUserServices({targetUserId: "u1", revoke: ["VOLUNTEER"]}, T), method: "PUT", path: "/users/services"},
   {fn: () => setActiveVehicle({profileId: "p1"}, T), method: "PUT", path: "/users/activeVehicle"},
   {fn: () => updateProfile({displayName: "A"}, T), method: "PUT", path: "/users/profile"},
   {fn: () => setVolunteerAvailability({available: true}, T), method: "PUT", path: "/users/volunteer"},

@@ -1,7 +1,7 @@
 import {useEffect, useState, type ReactNode} from "react";
 import {ActivityIndicator, AppState, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {createBottomTabNavigator, type BottomTabBarProps} from "@react-navigation/bottom-tabs";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -140,7 +140,7 @@ function OnboardingGate() {
       if (token) {
         if (shop) {
           try {
-            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {})}, token);
+            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createShopFailed} ${toMessage(err)}`);
           }

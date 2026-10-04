@@ -1,6 +1,6 @@
 import {Pressable, StyleSheet, View} from "react-native";
-import {AppText as Text} from "../../components/AppText";
-import StatusRow from "../../components/StatusRow";
+import {AppText as Text} from "../../components/ui/AppText";
+import StatusRow from "../../components/ui/StatusRow";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
@@ -16,12 +16,16 @@ type Props = {
   hasPos: boolean;
   onExit: () => void;
   onOpenList: () => void;
+  onHeight?: (h: number) => void;
 };
 
 export default function NavHeader(props: Props) {
   const {t, theme} = props;
   return (
-    <View style={[styles.header, {backgroundColor: theme.paper, borderColor: theme.border, paddingTop: props.topPad}]}>
+    <View
+      style={[styles.header, {backgroundColor: theme.paper, borderColor: theme.border, paddingTop: props.topPad}]}
+      onLayout={props.onHeight ? (e) => props.onHeight?.(e.nativeEvent.layout.height) : undefined}
+    >
       <View style={styles.headerRow}>
         <Pressable style={[styles.circleBtn, {borderColor: theme.border}]} onPress={props.onExit} accessibilityRole="button" accessibilityLabel={t.nav.exitNav}>
           <MaterialIcons name="close" size={22} color={theme.text} />

@@ -1,4 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {api, fetchWithTimeout} from "./client";
+import {CACHE_TTL_MS, cacheDel, withCache} from "../services/cache";
 import {config} from "../config";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 
@@ -156,6 +158,8 @@ export async function searchMapPlaces(query: string, lang: string, limit = 12): 
 }
 
 export async function reverseLabel(lat: number, lng: number, lang: string, signal?: AbortSignal): Promise<string> {
+  const cached = await geoGet(lat, lng, lang);
+  if (cached !== null) return cached;
   if (!config.maptilerKey) return formatPoint(lat, lng);
   try {
     const params = new URLSearchParams({
@@ -166,9 +170,67 @@ export async function reverseLabel(lat: number, lng: number, lang: string, signa
     const res = await fetchWithTimeout(`https://api.maptiler.com/geocoding/${lng},${lat}.json?${params}`, signal ? {signal} : {});
     if (!res.ok) return formatPoint(lat, lng);
     const body = (await res.json()) as {features?: MaptilerFeature[]};
-    return body.features?.[0]?.place_name ?? formatPoint(lat, lng);
+    const label = body.features?.[0]?.place_name ?? formatPoint(lat, lng);
+    void geoPut(lat, lng, lang, label);
+    return label;
   } catch {
     return formatPoint(lat, lng);
+  }
+}
+
+export async function clearGeocodeCache(): Promise<void> {
+  geoMem.clear();
+  try {
+    await AsyncStorage.removeItem(GEO_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
+
+const GEO_STORAGE_KEY = "roadassist.geocodeCache";
+const GEO_MAX = 300;
+
+const geoMem = new Map<string, string>();
+let geoLoaded = false;
+
+function geoKey(lat: number, lng: number, lang: string): string {
+  return `${lat.toFixed(5)},${lng.toFixed(5)},${lang === "vi" ? "vi" : "en"}`;
+}
+
+async function geoLoad(): Promise<void> {
+  if (geoLoaded) return;
+  geoLoaded = true;
+  try {
+    const raw = await AsyncStorage.getItem(GEO_STORAGE_KEY);
+    if (!raw) return;
+    const entries = JSON.parse(raw) as Array<[string, string]>;
+    if (!Array.isArray(entries)) return;
+    for (const [k, v] of entries.slice(-GEO_MAX)) {
+      if (typeof k === "string" && typeof v === "string") geoMem.set(k, v);
+    }
+  } catch {
+    return;
+  }
+}
+
+async function geoGet(lat: number, lng: number, lang: string): Promise<string | null> {
+  const hit = geoMem.get(geoKey(lat, lng, lang));
+  if (hit) return hit;
+  await geoLoad();
+  return geoMem.get(geoKey(lat, lng, lang)) ?? null;
+}
+
+async function geoPut(lat: number, lng: number, lang: string, label: string): Promise<void> {
+  geoMem.set(geoKey(lat, lng, lang), label);
+  while (geoMem.size > GEO_MAX) {
+    const oldest = geoMem.keys().next();
+    if (oldest.done) break;
+    geoMem.delete(oldest.value);
+  }
+  try {
+    await AsyncStorage.setItem(GEO_STORAGE_KEY, JSON.stringify([...geoMem.entries()].slice(-GEO_MAX)));
+  } catch {
+    return;
   }
 }
 
@@ -190,14 +252,20 @@ export async function searchDirectory(query: string, token: string, limit = 5): 
 }
 
 export async function savePlace(payload: {label: string; lat: number; lng: number}, token: string): Promise<SavedPlace> {
-  return api.post<SavedPlace>("/places/save", payload, token);
+  const saved = await api.post<SavedPlace>("/places/save", payload, token);
+  cacheDel(`savedPlaces:${token}`);
+  return saved;
 }
 
-export async function listSavedPlaces(token: string): Promise<SavedPlace[]> {
-  const hits = await api.post<SavedPlace[]>("/places/saved", {}, token);
-  return hits ?? [];
+export function listSavedPlaces(token: string): Promise<SavedPlace[]> {
+  return withCache(`savedPlaces:${token}`, CACHE_TTL_MS.savedPlaces, async () => {
+    const hits = await api.post<SavedPlace[]>("/places/saved", {}, token);
+    return hits ?? [];
+  });
 }
 
 export async function removeSavedPlace(placeId: string, token: string): Promise<{deleted: number}> {
-  return api.post<{deleted: number}>("/places/unsave", {placeId}, token);
+  const res = await api.post<{deleted: number}>("/places/unsave", {placeId}, token);
+  cacheDel(`savedPlaces:${token}`);
+  return res;
 }

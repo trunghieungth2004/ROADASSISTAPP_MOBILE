@@ -22,6 +22,6 @@ export function midOf(coords: [number, number][]): [number, number] | null {
   if (coords.length === 0) return null;
   return coords[Math.floor(coords.length / 2)] ?? null;
 }
-export function pointFeature(lng: number, lat: number) {
-  return {type: "Feature" as const, geometry: {type: "Point" as const, coordinates: [lng, lat] as [number, number]}, properties: {}};
+export function pointFeature(lng: number, lat: number, properties?: Record<string, string>) {
+  return {type: "Feature" as const, geometry: {type: "Point" as const, coordinates: [lng, lat] as [number, number]}, properties: properties ?? {}};
 }

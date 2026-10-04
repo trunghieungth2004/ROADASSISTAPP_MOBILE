@@ -26,8 +26,22 @@ async function ensureMode(): Promise<void> {
   await setAudioModeAsync({playsInSilentMode: true, interruptionMode: "duckOthers"});
 }
 
-export async function playEventSound(name: EventSound): Promise<void> {
+export async function warmAudio(): Promise<void> {
   try {
+    await ensureMode();
+    for (const name of Object.keys(SOURCES) as EventSound[]) {
+      if (!players.has(name)) {
+        const player = createAudioPlayer(SOURCES[name]);
+        player.volume = 1;
+        players.set(name, player);
+      }
+    }
+  } catch {
+    return;
+  }
+}
+
+export async function playEventSound(name: EventSound): Promise<void> {  try {
     await ensureMode();
     let player = players.get(name);
     if (!player) {

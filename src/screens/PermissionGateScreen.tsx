@@ -1,10 +1,10 @@
 import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {darkTheme, lightTheme, type AppTheme} from "../theme";
-import Snack from "../components/Snack";
-import {SNACK_GAP} from "../components/snackOffset";
+import Snack from "../components/ui/Snack";
+import {SNACK_GAP} from "../components/ui/snackOffset";
 import type {Strings} from "../i18n/en";
 import type {AppPermissionStates, PermissionState} from "../services/permissions";
 

@@ -1,13 +1,13 @@
 import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
-import {AppText as Text} from "../../components/AppText";
-import StatusRow from "../../components/StatusRow";
+import {AppText as Text} from "../../components/ui/AppText";
+import StatusRow from "../../components/ui/StatusRow";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {HazardZone, RouteOption, WidthBlock} from "../../api/routes";
 import type {MeVehicle} from "../../api/users";
 import {formatPoint} from "../../api/places";
-import {vehicleMeta} from "../../components/vehicleMeta";
+import {vehicleMeta} from "../../components/vehicles/vehicleMeta";
 import {MAX_STOPS, type Point, type SearchField, type Stop} from "./types";
 import {vehicleIcon} from "./routeGeo";
 import {useStopLabels} from "./useStopLabels";
@@ -83,7 +83,7 @@ export default function RouteCard(props: Props) {
           <Pressable style={[styles.primary, styles.saveBtn, {borderColor: theme.primary}, props.busy && styles.disabled]} disabled={props.busy} onPress={props.onSave}><Text style={[styles.primaryText, {color: theme.primary}]}>{t.route.saveRoute}</Text></Pressable>
         </View>
       ) : props.busy ? (
-        <StatusRow theme={theme} text={t.route.findingRoute} />
+        <StatusRow theme={theme} text={t.route.findingRoute} compact />
       ) : null}
       {props.widthBlocks.length > 0 ? (
         <View style={[styles.resultCard, {borderColor: theme.border}]}>

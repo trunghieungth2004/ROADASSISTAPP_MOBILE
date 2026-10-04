@@ -2,9 +2,9 @@ import type {RefObject} from "react";
 import {useState} from "react";
 import {StyleSheet} from "react-native";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
-import StyledLayer from "../../components/StyledLayer";
+import StyledLayer from "../../components/map/StyledLayer";
 import {bundledMapStyle} from "../../map/style";
-import FlagPinImages from "../../components/MapPinImages";
+import FlagPinImages from "../../components/flags/MapPinImages";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
 import type {Flag} from "../../api/flags";
@@ -23,6 +23,8 @@ type Props = {
   flagsPos: {lat: number; lng: number} | null;
   flagsToken: string | null;
   flagsKey: number;
+  flagsForceKey: number;
+  flagsSeeds: Flag[];
   flagsUid: string | null;
   flagsVoted: Set<string>;
   flagsDenied: Set<string>;
@@ -87,7 +89,7 @@ export default function NavMapView(props: Props) {
           <StyledLayer type="symbol" id="nav-b-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
         </GeoJSONSource>
       ) : null}
-        <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />
+        <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} forceKey={props.flagsForceKey} seedFlags={props.flagsSeeds} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />
     </Map>
   );
 }

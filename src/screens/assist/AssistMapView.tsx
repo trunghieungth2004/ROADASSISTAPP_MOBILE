@@ -2,7 +2,7 @@ import {StyleSheet, View} from "react-native";
 import {Camera, GeoJSONSource, Images, Map, type CameraRef} from "@maplibre/maplibre-react-native";
 import type {RefObject} from "react";
 import {useState} from "react";
-import StyledLayer from "../../components/StyledLayer";
+import StyledLayer from "../../components/map/StyledLayer";
 import {bundledMapStyle} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
@@ -20,6 +20,7 @@ type Props = {
   nearby: DispatchTicket[];
   shops: Provider[];
   selectedShop: Provider | null;
+  selectedShopLabel: string | null;
   walkRoute: RouteOption | null;
   onMapReady: () => void;
   onPickTicket: (id: string) => void;
@@ -44,6 +45,9 @@ export default function AssistMapView(props: Props) {
           images={{
             "a-dot": require("../../../assets/map/a-dot.png"),
             "b-dot": require("../../../assets/map/b-dot.png"),
+            "shop-pin": require("../../../assets/map/shop-pin.png"),
+            "shop-pin-closed": require("../../../assets/map/shop-pin-closed.png"),
+            "shop-pin-unknown": require("../../../assets/map/shop-pin-unknown.png"),
           }}
         />
         {props.walkRoute ? <GeoJSONSource id="assist-walk-casing" data={{type: "Feature", geometry: props.walkRoute.geometry, properties: {}}}><StyledLayer type="line" id="assist-walk-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
@@ -90,15 +94,26 @@ export default function AssistMapView(props: Props) {
             onPress={() => props.onPickShop(shop.id)}
           >
             <StyledLayer
-              type="circle"
-              id={`assist-shop-dot-${shop.id}`}
-              style={{circleRadius: 8, circleColor: theme.primary, circleStrokeColor: "#ffffff", circleStrokeWidth: 3}}
+              type="symbol"
+              id={`assist-shop-icon-${shop.id}`}
+              style={{iconImage: shop.openNow === false ? "shop-pin-closed" : shop.openNow === true ? "shop-pin" : "shop-pin-unknown", iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
             />
           </GeoJSONSource>
         ))}
         {props.selectedShop ? (
-          <GeoJSONSource id="assist-shop-sel" data={pointFeature(props.selectedShop.lng, props.selectedShop.lat)}>
-            <StyledLayer type="symbol" id="assist-shop-sel-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
+          <GeoJSONSource id="assist-shop-sel" data={pointFeature(props.selectedShop.lng, props.selectedShop.lat, props.selectedShopLabel ? {walkLabel: props.selectedShopLabel} : undefined)}>
+            <StyledLayer
+              type="symbol"
+              id="assist-shop-sel-icon"
+              style={{iconImage: props.selectedShop.openNow === false ? "shop-pin-closed" : props.selectedShop.openNow === true ? "shop-pin" : "shop-pin-unknown", iconSize: 0.6, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
+            />
+            {props.selectedShopLabel ? (
+              <StyledLayer
+                type="symbol"
+                id="assist-shop-sel-label"
+                style={{textField: ["get", "walkLabel"], textSize: 12, textAnchor: "top", textOffset: [0, -1.6], textFont: ["Roboto Regular"], textColor: "#0f172a", textHaloColor: theme.paper, textHaloWidth: 1.6, textAllowOverlap: true, textIgnorePlacement: true}}
+              />
+            ) : null}
           </GeoJSONSource>
         ) : null}
       </Map>

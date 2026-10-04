@@ -31,12 +31,33 @@ export class ApiError extends Error {
 }
 
 export function toMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
+  if (err instanceof ApiError) {
+    const detail = firstErrorDetail(err.errors);
+    return detail ? `${err.message}: ${detail}` : err.message;
+  }
   if (err instanceof Error) return err.message;
   return "Something went wrong";
 }
 
+function firstErrorDetail(errors: unknown): string | null {
+  if (Array.isArray(errors)) {
+    const first = errors[0];
+    if (typeof first === "string" && first !== "") return first;
+  }
+  return null;
+}
+
 export const REQUEST_TIMEOUT_MS = 12000;
+
+const inflight = new Map<string, Promise<unknown>>();
+
+function dedupKey(method: string, path: string, body: string | undefined, token?: string): string {
+  return `${method} ${path} ${body ?? ""} ${token ?? ""}`;
+}
+
+export function clearInflight(): void {
+  inflight.clear();
+}
 
 export async function fetchWithTimeout(input: string, init: RequestInit = {}, ms: number = REQUEST_TIMEOUT_MS): Promise<Response> {
   const ctrl = new AbortController();
@@ -52,6 +73,21 @@ export async function fetchWithTimeout(input: string, init: RequestInit = {}, ms
 }
 
 async function request<T>(path: string, init: RequestInit, token?: string): Promise<T> {
+  const method = init.method ?? "GET";
+  const bodyText = typeof init.body === "string" ? init.body : "";
+  const key = dedupKey(method, path, bodyText, token);
+  const pending = inflight.get(key);
+  if (pending) return pending as Promise<T>;
+  const task = runRequest<T>(path, init, token);
+  inflight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inflight.delete(key);
+  }
+}
+
+async function runRequest<T>(path: string, init: RequestInit, token?: string): Promise<T> {
   let res = await send(path, init, token);
   if (res.status === 401 && tokenRefresher) {
     const fresh = await tokenRefresher().catch(() => null);

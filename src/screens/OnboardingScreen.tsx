@@ -1,18 +1,22 @@
 import {useState} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {toMessage} from "../api/client";
 import {formatPoint} from "../api/places";
+import {getFix} from "../services/geo";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import type {Strings} from "../i18n/en";
 import {darkTheme, lightTheme} from "../theme";
 import {TOW_TYPES, validateTowDraft} from "../services/towPlates";
+import {DOW, buildOpenHours, emptyWeek, summarizeWeek, type Day, type WeekHours} from "./more/shopHours";
 import PlaceSearchScreen from "./PlaceSearchScreen";
+import MapPickOverlay from "../components/map/MapPickOverlay";
+import ShopHoursEditor from "../components/providers/ShopHoursEditor";
 import Overlay from "../components/overlay/Overlay";
 
-export type ShopDraft = {name: string; lat: number; lng: number; label?: string};
+export type ShopDraft = {name: string; lat: number; lng: number; label?: string; openHours?: string};
 
 export type TowDraft = {name: string; plate: string; vehicleType: string; width: string; lat: number; lng: number};
 
@@ -47,12 +51,20 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [shopName, setShopName] = useState("");
   const [shopPoint, setShopPoint] = useState<{lat: number; lng: number; label?: string} | null>(null);
   const [shopSearch, setShopSearch] = useState(false);
+  const [shopMap, setShopMap] = useState(false);
+  const [week, setWeek] = useState<WeekHours>(() => emptyWeek());
+  const [hoursOpen, setHoursOpen] = useState(false);
+  function setDay(day: Day, patch: {enabled?: boolean; open?: string; close?: string}): void {
+    setWeek((prev) => ({...prev, [day]: {...prev[day], ...patch}}));
+  }
+  const hoursSummary = summarizeWeek(week, t.provider.days, t.provider.hoursMixed);
   const [towOpen, setTowOpen] = useState(false);
   const [towName, setTowName] = useState("");
   const [plate, setPlate] = useState("");
   const [towType, setTowType] = useState<string>("VAN");
   const [width, setWidth] = useState("");
   const [towPoint, setTowPoint] = useState<{lat: number; lng: number} | null>(null);
+  const [towSearch, setTowSearch] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [locBusy, setLocBusy] = useState(false);
   async function stampTowPosition(): Promise<void> {
@@ -62,8 +74,8 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
     try {
       const {status} = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error(t.nav.locationDenied);
-      const pos = await Location.getCurrentPositionAsync({});
-      setTowPoint({lat: pos.coords.latitude, lng: pos.coords.longitude});
+      const pos = await getFix();
+      setTowPoint({lat: pos.lat, lng: pos.lng});
     } catch (err) {
       setFieldError(toMessage(err));
     } finally {
@@ -73,6 +85,14 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   function onPickShopPlace(place: Place): void {
     setShopPoint({lat: place.lat, lng: place.lng, label: place.label});
     setShopSearch(false);
+  }
+  function onConfirmShopMap(lat: number, lng: number, label: string): void {
+    setShopPoint({lat, lng, label});
+    setShopMap(false);
+  }
+  function onPickTowPlace(place: Place): void {
+    setTowPoint({lat: place.lat, lng: place.lng});
+    setTowSearch(false);
   }
   function onContinue(): void {
     if (busy) return;
@@ -87,7 +107,12 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
         setFieldError(t.provider.invalidLocation);
         return;
       }
-      shop = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {})};
+      const hours = buildOpenHours(week);
+      if (DOW.some((day) => week[day].enabled) && !hours) {
+        setFieldError(t.provider.invalidHours);
+        return;
+      }
+      shop = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {}), ...(hours ? {openHours: hours} : {})};
     }
     let tow: TowDraft | null = null;
     if (towOpen) {
@@ -149,6 +174,9 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
             <Pressable disabled={busy} onPress={() => setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
               <Text style={{color: shopPoint ? theme.text : theme.muted}} numberOfLines={1}>{shopPoint ? (shopPoint.label ?? formatPoint(shopPoint.lat, shopPoint.lng)) : t.provider.addressUnset}</Text>
             </Pressable>
+            <Pressable disabled={busy} onPress={() => setHoursOpen(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.hours}>
+              <Text style={{color: hoursSummary ? theme.text : theme.muted}} numberOfLines={1}>{hoursSummary ? `${t.provider.hours} — ${hoursSummary}` : `${t.provider.hours} — ${t.provider.hoursNotSet}`}</Text>
+            </Pressable>
           </View>
         ) : null}
         {hasTow ? (
@@ -175,6 +203,9 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
               ))}
             </View>
             <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={width} onChangeText={setWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
+            <Pressable disabled={busy} onPress={() => setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
+              <Text style={{color: towPoint ? theme.text : theme.muted}} numberOfLines={1}>{towPoint ? formatPoint(towPoint.lat, towPoint.lng) : t.provider.towAddressUnset}</Text>
+            </Pressable>
             <Pressable disabled={busy || locBusy} onPress={() => void stampTowPosition()} style={[styles.chip, {borderColor: theme.primary}, locBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.provider.useLocation}>
               {locBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary}}>{t.provider.useLocation}</Text>}
             </Pressable>
@@ -199,8 +230,36 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
           title={t.provider.shopAddress}
           placeholder={t.provider.shopAddress}
           onPick={onPickShopPlace}
+          onPickOnMap={() => {
+            setShopSearch(false);
+            setShopMap(true);
+          }}
           onClose={() => setShopSearch(false)}
         />
+      </Overlay>
+      <Overlay visible={shopMap} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setShopMap(false)}>
+        <MapPickOverlay
+          t={t}
+          lang={lang}
+          title={t.provider.shopAddress}
+          initial={shopPoint}
+          onPick={onConfirmShopMap}
+          onClose={() => setShopMap(false)}
+        />
+      </Overlay>
+      <Overlay visible={towSearch} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setTowSearch(false)}>
+        <PlaceSearchScreen
+          t={t}
+          token={token ?? undefined}
+          lang={lang}
+          title={t.provider.towAddress}
+          placeholder={t.provider.towAddress}
+          onPick={onPickTowPlace}
+          onClose={() => setTowSearch(false)}
+        />
+      </Overlay>
+      <Overlay visible={hoursOpen} variant="sheet" title={t.provider.hours} closeLabel={t.common.cancel} onClose={() => setHoursOpen(false)}>
+        <ShopHoursEditor t={t} week={week} setDay={setDay} />
       </Overlay>
     </View>
   );

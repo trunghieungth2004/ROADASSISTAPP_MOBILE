@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import {darkTheme, lightTheme} from "../theme";

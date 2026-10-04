@@ -1,8 +1,9 @@
 import {useCallback, useEffect, useRef, useState, type MutableRefObject} from "react";
+import {useIsFocused} from "@react-navigation/native";
 import {flagsNear, type Flag} from "../../api/flags";
 import type {CamState} from "./types";
 import {HCMC_CENTER} from "./types";
-import FlagMapLayers from "../../components/FlagMapLayers";
+import FlagMapLayers from "../../components/flags/FlagMapLayers";
 
 type Props = {
   camRef: MutableRefObject<CamState>;
@@ -28,6 +29,7 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
   pickRef.current = onPick;
   const handlePick = useCallback((f: Flag) => pickRef.current(f), []);
   const lastFetchRef = useRef<{lat: number; lng: number} | null>(null);
+  const routeFocused = useIsFocused();
   const fetchAt = useCallback(async (c: [number, number], key: string, alive: () => boolean): Promise<void> => {
     try {
       const list = await flagsNear(c[1], c[0], RADIUS, key);
@@ -40,8 +42,8 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
     }
   }, []);
   useEffect(() => {
-    if (!token) {
-      setFlags([]);
+    if (!token || !routeFocused) {
+      if (!token) setFlags([]);
       return;
     }
     let alive = true;
@@ -61,11 +63,11 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
       alive = false;
       clearInterval(timer);
     };
-  }, [camRef, token, refreshKey, fetchAt]);
+  }, [camRef, token, refreshKey, fetchAt, routeFocused]);
   useEffect(() => {
     let mounted = true;
     const unsub = subscribeRegionDid(() => {
-      if (!mounted || !token) return;
+      if (!mounted || !token || !routeFocused) return;
       const c = camRef.current?.center ?? HCMC_CENTER;
       const last = lastFetchRef.current;
       if (last) {
@@ -79,7 +81,7 @@ export default function RouteFlags({camRef, token, refreshKey, onPick, subscribe
       mounted = false;
       unsub();
     };
-  }, [camRef, token, subscribeRegionDid, fetchAt]);
+  }, [camRef, token, subscribeRegionDid, fetchAt, routeFocused]);
   if (!token) return null;
   return <FlagMapLayers flags={flags} onPick={handlePick} />;
 }

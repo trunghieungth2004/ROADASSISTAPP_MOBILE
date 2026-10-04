@@ -43,8 +43,23 @@ export function missingKinds(
   providers: {kind: string; status: string}[],
 ): {shop: boolean; tow: boolean} {
   return {
-    shop: !providers.some((p) => p.kind === "SHOP"),
+    shop: !providers.some(
+      (p) => p.kind === "SHOP" && p.status !== "DENIED",
+    ),
     tow: !providers.some(
+      (p) => p.kind === "TOW" && p.status !== "DENIED",
+    ),
+  };
+}
+
+export function operatedKinds(
+  providers: {kind: string; status: string}[],
+): {shop: boolean; tow: boolean} {
+  return {
+    shop: providers.some(
+      (p) => p.kind === "SHOP" && p.status !== "DENIED",
+    ),
+    tow: providers.some(
       (p) => p.kind === "TOW" && p.status !== "DENIED",
     ),
   };
@@ -53,6 +68,10 @@ export function missingKinds(
 export function providerRowSubtitle(provider: Provider, t: Strings): string {
   if (provider.kind === "TOW" && typeof provider.plate === "string") {
     return provider.plate;
+  }
+  if (provider.kind === "SHOP" && Array.isArray(provider.vehicleClasses) && provider.vehicleClasses.length > 0 && provider.vehicleClasses.length < 2) {
+    const only = provider.vehicleClasses[0];
+    return `${providerStatusLabel(provider, t)} · ${only === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike}`;
   }
   return providerStatusLabel(provider, t);
 }

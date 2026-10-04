@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {vehicleMeta, vehicleTypeName} from "../../../src/components/vehicleMeta";
+import {vehicleMeta, vehicleTypeName} from "../../../src/components/vehicles/vehicleMeta";
 import {en} from "../../../src/i18n/en";
 
 test("known types resolve to their translated names", () => {

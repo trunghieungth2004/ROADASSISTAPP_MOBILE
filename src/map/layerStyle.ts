@@ -25,13 +25,17 @@ const MAPPING = {
   textAnchor: {bucket: "layout", key: "text-anchor"},
   textAllowOverlap: {bucket: "layout", key: "text-allow-overlap"},
   textIgnorePlacement: {bucket: "layout", key: "text-ignore-placement"},
+  textOffset: {bucket: "layout", key: "text-offset"},
+  textFont: {bucket: "layout", key: "text-font"},
+  textHaloColor: {bucket: "layout", key: "text-halo-color"},
+  textHaloWidth: {bucket: "layout", key: "text-halo-width"},
 } as const satisfies Record<string, {bucket: Bucket; key: string}>;
 
-export type FlatLayerStyle = {[K in keyof typeof MAPPING]?: string | number | boolean};
+export type FlatLayerStyle = {[K in keyof typeof MAPPING]?: string | number | boolean | number[] | string[]};
 
-export function splitLayerStyle(style: FlatLayerStyle): {paint: Record<string, string | number | boolean>; layout: Record<string, string | number | boolean>} {
-  const paint: Record<string, string | number | boolean> = {};
-  const layout: Record<string, string | number | boolean> = {};
+export function splitLayerStyle(style: FlatLayerStyle): {paint: Record<string, string | number | boolean | number[] | string[]>; layout: Record<string, string | number | boolean | number[] | string[]>} {
+  const paint: Record<string, string | number | boolean | number[] | string[]> = {};
+  const layout: Record<string, string | number | boolean | number[] | string[]> = {};
   for (const [camel, value] of Object.entries(style)) {
     const mapped = (MAPPING as Record<string, {bucket: Bucket; key: string}>)[camel];
     if (!mapped || value === undefined) continue;

@@ -1,12 +1,14 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {flagsNear, type Flag} from "../../api/flags";
-import FlagMapLayers from "../../components/FlagMapLayers";
+import FlagMapLayers from "../../components/flags/FlagMapLayers";
 import {distBetween} from "./navUtils";
 
 type Props = {
   pos: {lat: number; lng: number} | null;
   token: string | null;
   refreshKey: number;
+  forceKey: number;
+  seedFlags: Flag[];
   uid: string | null;
   votedIds: Set<string>;
   deniedIds: Set<string>;
@@ -17,12 +19,14 @@ type Props = {
 };
 
 const RADIUS = 3000;
-const MIN_MOVE = 500;
+const MIN_MOVE = 150;
 const HEARTBEAT_MS = 60000;
 const POPUP_METERS = 150;
 const POPUP_EXIT_METERS = 225;
 
-export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedIds, suppressAuto, arrived, onPick, onAutoFlag}: Props) {
+export const NAV_NEAR_RADIUS_M = RADIUS;
+
+export default function NavFlags({pos, token, refreshKey, forceKey, seedFlags, uid, votedIds, deniedIds, suppressAuto, arrived, onPick, onAutoFlag}: Props) {
   const [flags, setFlags] = useState<Flag[]>([]);
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
@@ -30,6 +34,7 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
   const autoRef = useRef(onAutoFlag);
   autoRef.current = onAutoFlag;
   const lastRef = useRef<{lat: number; lng: number; at: number} | null>(null);
+  const forceRef = useRef(forceKey);
   const shownRef = useRef(new Set<string>());
   const openIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -40,11 +45,15 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
     let alive = true;
     const key = token;
     const p = pos;
-    const last = lastRef.current;
-    const moved = last
-      ? Math.hypot((p.lat - last.lat) * 111320, (p.lng - last.lng) * 111320 * Math.cos((p.lat * Math.PI) / 180))
-      : Number.POSITIVE_INFINITY;
-    if (moved < MIN_MOVE && last && Date.now() - last.at < HEARTBEAT_MS) return;
+    const forced = forceKey !== forceRef.current;
+    forceRef.current = forceKey;
+    if (!forced) {
+      const last = lastRef.current;
+      const moved = last
+        ? Math.hypot((p.lat - last.lat) * 111320, (p.lng - last.lng) * 111320 * Math.cos((p.lat * Math.PI) / 180))
+        : Number.POSITIVE_INFINITY;
+      if (moved < MIN_MOVE && last && Date.now() - last.at < HEARTBEAT_MS) return;
+    }
     lastRef.current = {lat: p.lat, lng: p.lng, at: Date.now()};
     void (async () => {
       try {
@@ -57,11 +66,17 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
     return () => {
       alive = false;
     };
-  }, [pos, token, refreshKey]);
+  }, [pos, token, refreshKey, forceKey]);
+  const merged = useMemo(() => {
+    if (seedFlags.length === 0) return flags;
+    const byId = new Map(flags.map((f) => [f.id, f]));
+    for (const s of seedFlags) byId.set(s.id, s);
+    return [...byId.values()];
+  }, [flags, seedFlags]);
   useEffect(() => {
     if (!pos) return;
     if (openIdRef.current) {
-      const open = flags.find((f) => f.id === openIdRef.current);
+      const open = merged.find((f) => f.id === openIdRef.current);
       const d = open ? distBetween(pos, {lat: open.lat, lng: open.lng}) : Number.POSITIVE_INFINITY;
       if (!open || d > POPUP_EXIT_METERS || open.status !== "1") {
         openIdRef.current = null;
@@ -78,7 +93,7 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
       !shownRef.current.has(f.id);
     let best: Flag | null = null;
     let bestDist = POPUP_METERS;
-    for (const f of flags) {
+    for (const f of merged) {
       if (!eligible(f)) continue;
       const d = distBetween(pos, {lat: f.lat, lng: f.lng});
       if (d < bestDist) {
@@ -91,7 +106,7 @@ export default function NavFlags({pos, token, refreshKey, uid, votedIds, deniedI
       openIdRef.current = best.id;
       autoRef.current(best);
     }
-  }, [flags, pos, uid, votedIds, deniedIds, suppressAuto, arrived]);
+  }, [merged, pos, uid, votedIds, deniedIds, suppressAuto, arrived]);
   if (!token) return null;
-  return <FlagMapLayers flags={flags} onPick={handlePick} />;
+  return <FlagMapLayers flags={merged} onPick={handlePick} />;
 }

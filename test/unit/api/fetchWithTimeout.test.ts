@@ -1,5 +1,5 @@
 import {afterEach, expect, jest, test} from "@jest/globals";
-import {fetchWithTimeout} from "../../../src/api/client";
+import {ApiError, fetchWithTimeout, toMessage} from "../../../src/api/client";
 
 const realFetch = globalThis.fetch;
 
@@ -36,4 +36,12 @@ test("propagates an external abort", async () => {
   const pending = fetchWithTimeout("https://example.com/cancel", {signal: ctrl.signal}, 5000);
   ctrl.abort();
   await expect(pending).rejects.toThrow("aborted");
+});
+
+test("toMessage appends the first server error detail", () => {
+  expect(toMessage(new ApiError("Validation failed", 400, ['"vehicleType" must be one of [SCOOTER]']))).toBe(
+    'Validation failed: "vehicleType" must be one of [SCOOTER]',
+  );
+  expect(toMessage(new ApiError("Validation failed", 400, []))).toBe("Validation failed");
+  expect(toMessage(new ApiError("Validation failed", 400))).toBe("Validation failed");
 });

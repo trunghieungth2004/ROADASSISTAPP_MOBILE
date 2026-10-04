@@ -90,6 +90,83 @@ speech cancelled on exit. Hazards and narrow sections within 300 m
 along-route trigger banner + voice. Turn-list sheet shows all maneuvers
 with live "in X m". Screen stays awake via `expo-keep-awake`.
 
+Hazard pins come from `/flags/near` on a 150 m / 60 s throttle; a hazard
+push can force an immediate refresh or seed a pin straight from the payload
+with no fetch at all. Full model in `PUSH.md` ("Hazard pin refresh model").
+
+## Assist screen (`src/screens/AssistScreen.tsx`, `src/screens/assist/`)
+
+One map, one top-anchored card, three mutually exclusive sections switched by a
+segmented control (`AssistSectionTabs`, tab semantics): `Request` (type icons,
+note, request button), `Shops` (map-icon browse + name search), `Records`
+(unified in/out list, see below). Car riders see no Shops tab — `MECHANIC` /
+`WALK_IN` are bike-only server-side, so the tab would be a dead end. Sections
+live in `src/screens/assist/` (`RequestSection`, `ShopsSection`,
+`RecordsSection`, `StatusStepper`, `RatingSheet`); the screen keeps map, FABs,
+active-job overlay, snack, and dialogs.
+
+Status is a vertical stepper (`StatusStepper`): SOS/TOW show
+Pending → Matched → Arrived → Resolved, walk-in shows
+Pending → Accepted → In progress → Ready → Resolved, declined/expired collapse
+to a flat line with the reason. Active-job actions come from the shared
+`riderActionsFor` map in `src/api/dispatch.ts`. Cancelling asks for
+confirmation (terminal server-side); rating submits straight through (the
+server upserts). A 404 on rate means the row vanished under the BE expiry
+sweep, so the sheet closes with a notice instead of an error.
+
+Tapping a shop pin opens `ShopDetailSheet`: open badge, closing badge
+(`closesInMinutes`, annotate-only), vehicle-class chips, rating line (hollow
+stars under 3 ratings, count always shown), and Walk here / Route from here /
+Report / **I'm here**. `I'm here` posts a `WALK_IN` ticket and jumps to
+Records. Name search debounces 250 ms, fires only on non-empty queries, and
+uses a 10 km ceiling against the 2 km browse cycler.
+
+## Records: one in/out list, no shop console
+
+Records merges both sides of every ticket into a single newest-first list fed
+by `POST /dispatch/feed`, which stamps each row server-side
+(`direction: "in" | "out"` — the server knows operator UIDs, so it cannot
+misclassify). `All / In / Out` pills (`recordFilter.ts`, same pattern as the
+hazard filter) split the list; each row carries a direction arrow (accented
+for the rarer inbound side, neutral for outbound) with an Incoming/Outgoing
+accessibility label. There is no separate shop/tow console route: outbound
+rows keep Cancel (dialog) / Rate, inbound rows act inline — Accept, Decline
+with a required reason + optional note (no dialog, it is not destructive),
+work-order editor (free-text work plus integer-VND quote/final, `400` closed
+renders inline), reply bound to the real rating id via
+`POST /ratings/by-ticket` (the old console passed the ticket id and always
+404'd), and Rate-the-rider through the shared sheet.
+
+## Services & roles
+
+Licenses vs records: `users.services` holds only `RIDER`/`VOLUNTEER`
+(`PUT /users/onboard` self-serves those two; anything else is a `400`).
+`SHOP`/`TOW` are provider records, never licenses, so the More badge row
+derives them from `myProviders` (`operatedKinds`, `DENIED` excluded) beside
+the license chips. Un-checking Volunteer revokes via
+`PUT /users/services` (self may only drop its own `VOLUNTEER`; the rider
+license is irrevocable and admins keep the full grant/revoke path).
+A `DENIED` record of either kind reads as missing, so re-applying stays
+possible from the Services screen.
+
+## Client caching
+
+Three tiers, sized to the data:
+
+- `api/client.ts` — in-flight dedup on `method + path + body + token`.
+  Concurrent identical requests share one promise; different body or token
+  never merges. Nothing stale is ever served.
+- `services/cache.ts` — TTL memory cache with token-scoped keys:
+  `flagsNear` 5 s, `nearTickets` 10 s, `myFlags` / `myTickets` /
+  `nearProviders` 15 s, `savedPlaces` / `savedRoutes` / `myProviders` 30 s.
+  Every write callsite invalidates its own lists; `AuthContext.signOut` and
+  the Firebase null-session path clear the whole cache. Loosening a TTL
+  raises request volume roughly linearly with speed — re-measure after.
+- Persisted geocode cache (`api/places.ts`) — reverse-geocode labels only.
+  MapTiler is metered and a lat/lng label never changes, so this is the one
+  cache that earns persistence: memory + AsyncStorage, 300 entries, survives
+  restart. Never applied to auth'd user data.
+
 ## Saved routes + feedback
 
 Bookmark Fab opens `SavedRoutesSheet` (list/open inline-rename/delete);

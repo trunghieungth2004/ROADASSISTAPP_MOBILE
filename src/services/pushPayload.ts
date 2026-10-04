@@ -14,6 +14,7 @@ export type DispatchPushData = {
   lat?: number;
   lng?: number;
   status?: string;
+  declineReason?: string;
 };
 
 function num(v: unknown): number | undefined {
@@ -45,5 +46,6 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
     lat: num(d.lat),
     lng: num(d.lng),
     status: typeof d.status === "string" ? d.status : undefined,
+    declineReason: typeof d.declineReason === "string" ? d.declineReason : undefined,
   };
 }

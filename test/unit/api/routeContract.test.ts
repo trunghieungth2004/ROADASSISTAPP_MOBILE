@@ -65,3 +65,32 @@ test("renameSavedRoute hits the saved route endpoint", async () => {
     restoreFetch();
   }
 });
+
+test("findRoute drops out-of-set vehicleType instead of sending a 400", async () => {
+  let seen: Record<string, unknown> = {};
+  globalThis.fetch = (jest.fn(async (_url: string, init?: RequestInit) => {
+    seen = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return okEnvelope({cached: false, routes: [route]});
+  }) as unknown) as typeof fetch;
+  try {
+    await findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7, vehicleType: "HORSE", width: Number.NaN}, "tok");
+  } finally {
+    restoreFetch();
+  }
+  expect(seen).not.toHaveProperty("vehicleType");
+  expect(seen).not.toHaveProperty("width");
+});
+
+test("findRoute keeps valid vehicleType and width", async () => {
+  let seen: Record<string, unknown> = {};
+  globalThis.fetch = (jest.fn(async (_url: string, init?: RequestInit) => {
+    seen = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return okEnvelope({cached: false, routes: [route]});
+  }) as unknown) as typeof fetch;
+  try {
+    await findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7, vehicleType: "SCOOTER", width: 0.7}, "tok");
+  } finally {
+    restoreFetch();
+  }
+  expect(seen).toMatchObject({vehicleType: "SCOOTER", width: 0.7});
+});

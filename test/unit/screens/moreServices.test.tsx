@@ -33,6 +33,7 @@ const mockNavigate = jest.fn();
 jest.mock("@react-navigation/native", () => ({
   useNavigation: () => ({navigate: mockNavigate, setOptions: () => undefined}),
   useFocusEffect: () => undefined,
+  useIsFocused: () => true,
 }));
 
 const metrics: Metrics = {

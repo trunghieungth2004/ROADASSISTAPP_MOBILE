@@ -5,12 +5,12 @@ import {Modal, ScrollView, Text} from "react-native";
 import Overlay from "../../../src/components/overlay/Overlay";
 import OnboardingScreen from "../../../src/screens/OnboardingScreen";
 import TurnListSheet from "../../../src/screens/navigation/TurnListSheet";
-import VehiclePickerSheet from "../../../src/components/VehiclePickerSheet";
-import FlagDetailSheet from "../../../src/components/FlagDetailSheet";
-import FlagReportDialog from "../../../src/components/FlagReportDialog";
-import VehicleCreateDialog from "../../../src/components/VehicleCreateDialog";
-import SaveRouteDialog from "../../../src/components/SaveRouteDialog";
-import SavedRoutesSheet from "../../../src/components/SavedRoutesSheet";
+import VehiclePickerSheet from "../../../src/components/vehicles/VehiclePickerSheet";
+import FlagDetailSheet from "../../../src/components/flags/FlagDetailSheet";
+import FlagReportDialog from "../../../src/components/flags/FlagReportDialog";
+import VehicleCreateDialog from "../../../src/components/vehicles/VehicleCreateDialog";
+import SaveRouteDialog from "../../../src/components/routes/SaveRouteDialog";
+import SavedRoutesSheet from "../../../src/components/routes/SavedRoutesSheet";
 import {en} from "../../../src/i18n/en";
 import {darkTheme} from "../../../src/theme";
 
@@ -175,6 +175,16 @@ test("flag report dialog exposes its submit as a footer action", () => {
   expect(modal.props.visible).toBe(true);
   const actions = rendered.root.findAll((n) => n.props?.accessibilityLabel === en.flag.submit);
   expect(actions.length).toBeGreaterThan(0);
+  rendered.unmount();
+});
+
+test("flag report dialog shows fully with no scroller", () => {
+  const rendered = mount(
+    <FlagReportDialog t={en} lat={1} lng={2} onClose={() => undefined} onSubmit={() => undefined} />,
+  );
+  const actions = rendered.root.findAll((n) => n.props?.accessibilityLabel === en.flag.submit);
+  expect(actions.length).toBeGreaterThan(0);
+  expect(scrollViews(rendered).length).toBe(0);
   rendered.unmount();
 });
 

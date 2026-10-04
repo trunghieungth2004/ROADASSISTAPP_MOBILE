@@ -17,9 +17,10 @@ BE `documentation/PIPELINE.md`; this file covers the mobile side.
 `services/push.ts`, native FCM tokens via `getDevicePushTokenAsync` (never
 Expo push tokens — the BE sends through the Admin SDK directly).
 `App.tsx:PushSync` registers on login (`POST /push/register`);
-`AuthContext.signOut` unregisters best-effort. Registration never depends on
-notification permission — denied permission degrades to foreground-only
-updates. Tokens are deduped per uid in `AsyncStorage`.
+`AuthContext.signOut` unregisters best-effort. Registration is
+permission-independent: a denied notification permission degrades to
+foreground-only updates, never to an unregistered token. Tokens are deduped
+per uid in `AsyncStorage`.
 
 ## Handling
 
@@ -29,16 +30,51 @@ updates. Tokens are deduped per uid in `AsyncStorage`.
 - Route screen: pins refresh plus a silent no-fit route refetch, so the
   hazard count (derived from route warnings) updates on its own. Skipped
   while navigation is open.
-- Navigation: fetch the full flag (`POST /flags/get`, expired/rejected
-  return `404` → dropped), silently refresh the route so the count updates,
-  speak "spotted" plus the detail line, and show `HazardAlertModal` with
-  **View** (focus camera + open the detail sheet), **Reroute** (confirm-flow
-  reroute), **Dismiss** (per-flag suppression). Suppressed while the turn
-  list, report sheet, or detail sheet is open; the pending alert flushes
-  when they close. Own reports and already-voted flags update pins but never
-  pop the modal.
+- Navigation: hazard pins come from the payload, not a refetch. A **suggested** alert (`"1"`) carrying coordinates builds a `Flag` straight from the push data and seeds it into the pin layer — no `POST /flags/get`, so the pin lands on the push frame. **Confirmed / locked** alerts (`"2"` / `"3"`) still fetch once, because those auto-reroute and need fresh status. A push with no coordinates falls back to `POST /flags/get`. Then the route silently refetches so the hazard count updates, the app speaks "spotted" plus the detail line, and shows `HazardAlertModal` with **View** (focus camera + open the detail sheet), **Reroute** (confirm-flow reroute), **Dismiss** (per-flag suppression). Suppressed while the turn list, report sheet, or detail sheet is open; the pending alert flushes when they close. Own reports and already-voted flags update pins but never pop the modal. Trade-off: payload status is enqueue-time, not delivery-time. `deliverHazardPush` re-reads the flag server-side and skips non-pushable states, so the window is small — and it applies only to suggested alerts.
 - Every nav hazard alert also fires a local heads-up notification (type +
   distance) so the shade buzzes with the app open.
+
+## Dispatch pushes
+
+`subscribeDispatchPush` matches on `ticketId` (deduped per ticket for 120 s).
+The Assist screen reloads (tickets + feed) on every receipt and refetches the
+active ticket when the payload carries a status; a `WALK_IN` payload
+additionally focuses the Records tab. The payload shape (`ticketId`,
+`ticketType`, `status`, `declineReason`) is parsed in
+`services/pushPayload.ts` — the server sends all four on status pushes, so the
+decline reason renders in the Records row even before the refetch lands.
+Sweep-cancelled walk-ins now push too (`CANCELLED` body), so an expired row
+announces itself instead of silently vanishing.
+
+Tap-from-killed-state is drained explicitly: `drainDispatchLaunch` /
+`drainHazardLaunch` read `getLastNotificationResponseAsync` once per tap
+(session-deduped, so remounts never replay) and feed the same handlers as the
+live subscriptions. Assist, Route, Hazards, and Navigation all drain on
+mount.
+
+## Hazard pin refresh model
+
+Three independent mechanisms drive one `NavFlags` component
+(`screens/navigation/NavFlags.tsx`):
+
+| Mechanism | Trigger | Gate |
+|---|---|---|
+| `refreshKey` | confirm / deny / report / remove | throttled: 150 m moved **or** 60 s elapsed |
+| `forceKey` | hazard push only | bypasses the throttle entirely |
+| `seedFlags` | hazard push payload | merged over fetched results, push wins on id collision |
+
+The throttle gate exists to suppress polling, not authoritative push events —
+that is why push uses its own counter instead of loosening the shared one.
+`150 m` is a driving number (the old `500 m` suited deliberate map panning);
+traffic impact is small because `flagsNear` sits behind a 5 s client cache and
+a 10 s server cache.
+
+Seeds are capped at 12, expire after 5 min, and are dropped on removed-push
+and on `POST /flags/unflag`. A `/flags/near` prefetch at the seed position
+fires on nav start, warming both cache tiers before the first `NavFlags`
+fetch. Note push coverage is route-crossing by design (BE decides targets
+from `active_routes`), so the 3 km proximity poll still covers near-but-
+off-route hazards — neither side is redundant.
 
 ## Hazard card and type system
 

@@ -45,6 +45,10 @@ export function setOnboarded(payload: {service: string}, token: string): Promise
   return api.put<OnboardResult>("/users/onboard", payload, token);
 }
 
+export function updateUserServices(payload: {targetUserId: string; grant?: string[]; revoke?: string[]}, token: string): Promise<OnboardResult> {
+  return api.put<OnboardResult>("/users/services", payload, token);
+}
+
 export function setActiveVehicle(payload: {profileId: string | null}, token: string): Promise<{updated: number; profileId: string | null}> {
   return api.put<{updated: number; profileId: string | null}>("/users/activeVehicle", payload, token);
 }

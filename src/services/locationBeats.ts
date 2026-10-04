@@ -1,12 +1,12 @@
 import {useEffect, useRef} from "react";
 import * as Location from "expo-location";
+import {getFix} from "./geo";
 
 export async function capturePosition(): Promise<{lat: number; lng: number} | null> {
   try {
     const {status} = await Location.getForegroundPermissionsAsync();
     if (status !== "granted") return null;
-    const pos = await Location.getCurrentPositionAsync({});
-    return {lat: pos.coords.latitude, lng: pos.coords.longitude};
+    return await getFix({timeoutMs: 5000});
   } catch {
     return null;
   }

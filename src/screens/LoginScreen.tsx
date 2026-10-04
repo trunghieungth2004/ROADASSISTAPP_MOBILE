@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {signInWithEmailAndPassword} from "firebase/auth";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -11,9 +11,9 @@ import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
-import ScreenContainer from "../components/ScreenContainer";
-import Snack from "../components/Snack";
-import {SNACK_GAP} from "../components/snackOffset";
+import ScreenContainer from "../components/ui/ScreenContainer";
+import Snack from "../components/ui/Snack";
+import {SNACK_GAP} from "../components/ui/snackOffset";
 export default function LoginScreen() {
   const {t} = useStrings();
   const {signIn} = useAuth();

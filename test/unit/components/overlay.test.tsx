@@ -78,20 +78,32 @@ test("dialog renders the title and header slots", () => {
   rendered.unmount();
 });
 
-test("dialog footer offers cancel below the body", () => {
+test("dialog footer offers cancel on its own row below the actions and body", () => {
   const rendered = mount(
-    <Overlay visible variant="dialog" title={en.saved.title} closeLabel={en.common.cancel} onClose={() => undefined}>
+    <Overlay
+      visible
+      variant="dialog"
+      title={en.saved.title}
+      closeLabel={en.common.cancel}
+      onClose={() => undefined}
+      actions={[{label: en.common.save, tone: "primary", onPress: () => undefined}]}
+    >
       <Text>body</Text>
     </Overlay>,
   );
   const order = rendered.root.findAll(() => true);
   const bodyIndex = order.findIndex((n) => n.type === ScrollView);
+  const saveIndexes = order
+    .map((n, i) => (n.props?.accessibilityLabel === en.common.save ? i : -1))
+    .filter((i) => i >= 0);
   const cancelIndexes = order
     .map((n, i) => (n.props?.accessibilityLabel === en.common.cancel ? i : -1))
     .filter((i) => i >= 0);
   expect(bodyIndex).toBeGreaterThanOrEqual(0);
+  expect(saveIndexes.length).toBeGreaterThan(0);
   expect(cancelIndexes.length).toBeGreaterThan(0);
-  expect(cancelIndexes[cancelIndexes.length - 1]).toBeGreaterThan(bodyIndex);
+  expect(saveIndexes[saveIndexes.length - 1]).toBeGreaterThan(bodyIndex);
+  expect(cancelIndexes[cancelIndexes.length - 1]).toBeGreaterThan(saveIndexes[saveIndexes.length - 1]);
   rendered.unmount();
 });
 

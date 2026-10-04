@@ -1,22 +1,22 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {FlatList, Pressable, RefreshControl, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
 import * as Location from "expo-location";
-import ScreenContainer from "../components/ScreenContainer";
-import Snack from "../components/Snack";
+import ScreenContainer from "../components/ui/ScreenContainer";
+import Snack from "../components/ui/Snack";
 import Overlay from "../components/overlay/Overlay";
 import {flagOverlayActions} from "./hazards/flagActions";
-import {hazardKind} from "../components/hazardStyle";
-import {flagStatusColor, flagStatusLabel} from "../components/flagStatus";
-import FlagDetailSheet from "../components/FlagDetailSheet";
-import StatusRow from "../components/StatusRow";
-import {Fab} from "../components/Fab";
-import {snackAboveTabs} from "../components/snackOffset";
-import {isStaleForRefresh} from "../components/feedback";
-import {ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
+import {hazardKind} from "../components/flags/hazardStyle";
+import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
+import FlagDetailSheet from "../components/flags/FlagDetailSheet";
+import StatusRow from "../components/ui/StatusRow";
+import {Fab} from "../components/ui/Fab";
+import {snackBottom} from "../components/ui/snackOffset";
+import {isStaleForRefresh} from "../components/ui/feedback";
+import {drainHazardLaunch, ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
@@ -56,14 +56,18 @@ export default function HazardScreen() {
   );
   useEffect(() => {
     ensurePushConfigured();
-    return subscribeHazardPush((data: HazardPushData) => {
+    const onHazard = (data: HazardPushData): void => {
       if (data.removed) {
         removeMineLocal(data.flagId);
         setSelected((cur) => (cur?.id === data.flagId ? null : cur));
       }
       lastRefreshRef.current = Date.now();
       refreshMine();
-    }, "hazards");
+    };
+    void drainHazardLaunch().then((drained) => {
+      if (drained) onHazard(drained);
+    });
+    return subscribeHazardPush(onHazard, "hazards");
   }, [refreshMine, removeMineLocal]);
   useEffect(() => {
     let alive = true;
@@ -159,9 +163,9 @@ export default function HazardScreen() {
         )}
       </View>
       {mine.error ? (
-        <Snack message={mine.error} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={mine.clearError} />
+        <Snack message={mine.error} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={mine.clearError} />
       ) : (
-        <Snack message={snack} severity="confirm" bottom={snackAboveTabs(insets.bottom)} accentColor={theme.primary} onHide={() => setSnack(null)} />
+        <Snack message={snack} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setSnack(null)} />
       )}
       {selected ? (
         <Overlay

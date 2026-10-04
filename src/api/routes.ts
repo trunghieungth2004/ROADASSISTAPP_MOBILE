@@ -1,4 +1,5 @@
 import {api} from "./client";
+import {CACHE_TTL_MS, cacheClear, cacheDel, withCache} from "../services/cache";
 
 export type LatLng = {
   lat: number;
@@ -73,8 +74,15 @@ function normalizeRouteOption(route: RouteOption): RouteOption {
   return route;
 }
 
+const VEHICLE_TYPES = ["SCOOTER", "CUB", "MANUAL", "CAR", "VAN", "TRUCK"] as const;
+
 export async function findRoute(payload: RouteRequest, token: string): Promise<RouteResult> {
-  const result = await api.post<RouteResult>("/routes", payload, token);
+  const {vehicleType, width, ...rest} = payload;
+  const result = await api.post<RouteResult>("/routes", {
+    ...rest,
+    ...(typeof vehicleType === "string" && (VEHICLE_TYPES as readonly string[]).includes(vehicleType) ? {vehicleType} : {}),
+    ...(typeof width === "number" && Number.isFinite(width) ? {width} : {}),
+  }, token);
   return {...result, routes: (result.routes ?? []).map(normalizeRouteOption)};
 }
 
@@ -110,24 +118,37 @@ export type SaveRoutePayload = {
   geometry: RouteGeometry;
 };
 
-export function saveRoute(payload: SaveRoutePayload, token: string): Promise<{id: string}> {
-  return api.post<{id: string}>("/routes/save", payload, token);
+export async function saveRoute(payload: SaveRoutePayload, token: string): Promise<{id: string}> {
+  const res = await api.post<{id: string}>("/routes/save", payload, token);
+  cacheDel(`savedRoutes:${token}`);
+  return res;
 }
 
 export function listSavedRoutes(token: string): Promise<SavedRouteSummary[]> {
-  return api.post<SavedRouteSummary[]>("/routes/saved", {}, token);
+  return withCache(`savedRoutes:${token}`, CACHE_TTL_MS.savedRoutes, () => api.post<SavedRouteSummary[]>("/routes/saved", {}, token));
 }
 
 export function getSavedRoute(routeId: string, token: string): Promise<SavedRoute> {
-  return api.post<SavedRoute>("/routes/saved/one", {routeId}, token);
+  return withCache(`savedRoute:${token}:${routeId}`, CACHE_TTL_MS.savedRoute, () => api.post<SavedRoute>("/routes/saved/one", {routeId}, token));
 }
 
-export function renameSavedRoute(routeId: string, name: string, token: string): Promise<{renamed: number}> {
-  return api.put<{renamed: number}>("/routes/saved", {routeId, name}, token);
+export async function renameSavedRoute(routeId: string, name: string, token: string): Promise<{renamed: number}> {
+  const res = await api.put<{renamed: number}>("/routes/saved", {routeId, name}, token);
+  cacheDel(`savedRoutes:${token}`);
+  cacheDel(`savedRoute:${token}:${routeId}`);
+  return res;
 }
 
-export function deleteSavedRoute(routeId: string, token: string): Promise<{deleted: number}> {
-  return api.post<{deleted: number}>("/routes/unsave", {routeId}, token);
+export async function deleteSavedRoute(routeId: string, token: string): Promise<{deleted: number}> {
+  const res = await api.post<{deleted: number}>("/routes/unsave", {routeId}, token);
+  cacheDel(`savedRoutes:${token}`);
+  cacheDel(`savedRoute:${token}:${routeId}`);
+  return res;
+}
+
+export function invalidateSavedRoutes(token: string): void {
+  cacheClear(`savedRoutes:${token}`);
+  cacheClear(`savedRoute:${token}:`);
 }
 
 export function isHazardZone(e: unknown): e is HazardZone {

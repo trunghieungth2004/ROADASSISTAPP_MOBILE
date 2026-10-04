@@ -3,12 +3,13 @@ import {useEffect, useRef, useState, type MutableRefObject} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {AppText as Text} from "../../components/AppText";
+import {AppText as Text} from "../../components/ui/AppText";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
-import StyledLayer from "../../components/StyledLayer";
+import StyledLayer from "../../components/map/StyledLayer";
 import {bundledMapStyle} from "../../map/style";
-import FlagPinImages from "../../components/MapPinImages";
-import {Fab} from "../../components/Fab";
+import FlagPinImages from "../../components/flags/MapPinImages";
+import {Fab} from "../../components/ui/Fab";
+import {FAB_SIZE} from "./fabLayout";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {RouteOption} from "../../api/routes";
@@ -85,8 +86,8 @@ export default function RouteMapView(props: Props) {
         {props.routes.map((r, i) => i === props.selectedIndex ? null : (
           <GeoJSONSource key={`route-${i}`} id={`route-${i}`} data={{type: "Feature", geometry: r.geometry, properties: {}}}><StyledLayer type="line" id={`routeLine-${i}`} beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource>
         ))}
-        {props.result ? <GeoJSONSource id="route-casing" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id="routeLine-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
-        {props.result ? <GeoJSONSource id="route" data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id="routeLine" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result ? <GeoJSONSource key={`route-main-casing-${props.selectedIndex}`} id={`route-main-casing-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-casing-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result ? <GeoJSONSource key={`route-main-${props.selectedIndex}`} id={`route-main-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
         {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
           <GeoJSONSource id="route-hazard-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
             <StyledLayer type="line" id="route-hazard-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />
@@ -154,8 +155,8 @@ export default function RouteMapView(props: Props) {
       ) : null}
       {props.dragging ? <View style={StyleSheet.absoluteFill} {...props.dragPan.panHandlers} /> : null}
       {props.pickingFor ? (
-        <Fab theme={theme} variant="danger" size={36} label={t.common.close} onPress={props.onCancelPick} style={{position: "absolute", left: 12, top: insets.top + 12, zIndex: 10, elevation: 4}}>
-          <MaterialIcons name="close" size={20} color="#fff" />
+        <Fab theme={theme} variant="danger" size={FAB_SIZE} label={t.common.close} onPress={props.onCancelPick} style={{position: "absolute", left: 12, top: insets.top + 12, zIndex: 10, elevation: 4}}>
+          <MaterialIcons name="close" size={22} color="#fff" />
         </Fab>
       ) : null}
       {props.pickingFor && props.pickBusy ? (

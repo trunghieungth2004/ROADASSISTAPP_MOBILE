@@ -3,8 +3,8 @@ import {StyleSheet, View} from "react-native";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
 import {bundledMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
-import FlagMapLayers from "../../components/FlagMapLayers";
-import FlagPinImages from "../../components/MapPinImages";
+import FlagMapLayers from "../../components/flags/FlagMapLayers";
+import FlagPinImages from "../../components/flags/MapPinImages";
 import {HCMC_CENTER} from "../route/types";
 import {shouldAutoFit} from "../route/cameraIntent";
 

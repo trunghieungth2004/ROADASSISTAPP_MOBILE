@@ -1,10 +1,11 @@
 import {useState, type ComponentProps} from "react";
 import {ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import {usePlaceSearch, type Place} from "../components/place-search";
+import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
@@ -51,9 +52,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
     try {
       const {status} = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error("Location denied");
-      const pos = await Location.getCurrentPositionAsync({});
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+      const {lat, lng} = await getFix({maxAgeMs: 30000, requiredAccuracyMeters: 200, timeoutMs: 4000, staleFallback: false});
       const label = await search.resolvePoint(lat, lng);
       onPick({label, lat, lng, source: "map"});
     } catch (err) {

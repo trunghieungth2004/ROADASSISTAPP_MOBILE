@@ -1,5 +1,5 @@
 import {expect, jest, test} from "@jest/globals";
-import {formatPoint, reverseLabel, searchMapPlaces} from "../../../src/api/places";
+import {clearGeocodeCache, formatPoint, reverseLabel, searchMapPlaces} from "../../../src/api/places";
 import {config} from "../../../src/config";
 
 const realFetch = globalThis.fetch;
@@ -13,6 +13,7 @@ function restoreFetch(): void {
 }
 
 test("reverseLabel returns the first feature name", async () => {
+  await clearGeocodeCache();
   globalThis.fetch = (jest.fn(async () => jsonResponse({features: [{place_name: "434 Vinh Vien"}]})) as unknown) as typeof fetch;
   try {
     await expect(reverseLabel(10.75, 106.65, "en")).resolves.toBe("434 Vinh Vien");
@@ -21,7 +22,21 @@ test("reverseLabel returns the first feature name", async () => {
   }
 });
 
+test("reverseLabel serves the second lookup from cache", async () => {
+  await clearGeocodeCache();
+  const spy = jest.fn(async () => jsonResponse({features: [{place_name: "Cached Street"}]}));
+  globalThis.fetch = (spy as unknown) as typeof fetch;
+  try {
+    await expect(reverseLabel(10.76, 106.66, "en")).resolves.toBe("Cached Street");
+    await expect(reverseLabel(10.76, 106.66, "en")).resolves.toBe("Cached Street");
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("reverseLabel falls back to coordinates on bad status", async () => {
+  await clearGeocodeCache();
   globalThis.fetch = (jest.fn(async () => jsonResponse({}, false)) as unknown) as typeof fetch;
   try {
     await expect(reverseLabel(10.75, 106.65, "en")).resolves.toBe(formatPoint(10.75, 106.65));
@@ -31,6 +46,7 @@ test("reverseLabel falls back to coordinates on bad status", async () => {
 });
 
 test("reverseLabel falls back to coordinates on network failure", async () => {
+  await clearGeocodeCache();
   globalThis.fetch = (jest.fn(async () => {
     throw new Error("down");
   }) as unknown) as typeof fetch;
@@ -42,6 +58,7 @@ test("reverseLabel falls back to coordinates on network failure", async () => {
 });
 
 test("reverseLabel falls back to coordinates without a key", async () => {
+  await clearGeocodeCache();
   const prev = config.maptilerKey;
   jest.replaceProperty(config, "maptilerKey", "");
   try {

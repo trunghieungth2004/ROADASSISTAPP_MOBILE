@@ -1,0 +1,115 @@
+import {memo, useMemo} from "react";
+import {GeoJSONSource} from "@maplibre/maplibre-react-native";
+import StyledLayer from "../map/StyledLayer";
+import type {Flag} from "../../api/flags";
+import {flagStatusColor} from "./flagStatus";
+
+type Props = {flags: Flag[]; onPick: (flag: Flag) => void};
+
+const TYPES = ["accident", "flood", "obstruction"];
+
+function typeKey(type: string | undefined): string | null {
+  if (!type) return null;
+  const lower = type.toLowerCase();
+  return (TYPES as string[]).includes(lower) ? lower : null;
+}
+
+function pinIcon(flag: {type?: string; status: string}): string {
+  const t = typeKey(flag.type);
+  const s = bucket(flag.status);
+  if (t && s !== "0") return `pin-${t}-${s}`;
+  return s === "0" ? "flag-0" : `flag-${s}`;
+}
+
+function ring(lat: number, lng: number, radiusMeters: number): [number, number][] {
+  const pts: [number, number][] = [];
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  for (let i = 0; i < 32; i++) {
+    const a = (2 * Math.PI * i) / 32;
+    pts.push([lng + (radiusMeters * Math.sin(a)) / (111320 * cosLat), lat + (radiusMeters * Math.cos(a)) / 111320]);
+  }
+  pts.push(pts[0]);
+  return pts;
+}
+
+function bucket(status: string): string {
+  return status === "1" || status === "2" || status === "3" ? status : "0";
+}
+
+type FillFC = {
+  type: "FeatureCollection";
+  features: {type: "Feature"; geometry: {type: "Polygon"; coordinates: [number, number][][]}; properties: Record<string, never>}[];
+};
+
+type DotFC = {
+  type: "FeatureCollection";
+  features: {type: "Feature"; geometry: {type: "Point"; coordinates: [number, number]}; properties: {id: string}}[];
+};
+
+type Grouped = {status: string; icon: string; fills: FillFC; dots: DotFC; ids: string[]; pick: (id: string | undefined) => void};
+
+function FlagMapLayers({flags, onPick}: Props) {
+  const groups = useMemo<Grouped[]>(() => {
+    const byId = new Map(flags.map((f) => [f.id, f]));
+    const pick = (id: string | undefined): void => {
+      if (!id) return;
+      const hit = byId.get(id);
+      if (hit) onPick(hit);
+    };
+    const byIcon = new Map<string, Flag[]>();
+    for (const f of flags) {
+      const icon = pinIcon(f);
+      const arr = byIcon.get(icon) ?? [];
+      arr.push(f);
+      byIcon.set(icon, arr);
+    }
+    return [...byIcon.entries()].map(([icon, list]) => {
+      const fills: FillFC = {
+        type: "FeatureCollection",
+        features: list.map((f) => ({
+          type: "Feature",
+          geometry: {type: "Polygon", coordinates: [ring(f.lat, f.lng, f.radiusMeters ?? 200)]},
+          properties: {},
+        })),
+      };
+      const dots: DotFC = {
+        type: "FeatureCollection",
+        features: list.map((f) => ({
+          type: "Feature",
+          geometry: {type: "Point", coordinates: [f.lng, f.lat]},
+          properties: {id: f.id},
+        })),
+      };
+      return {status: bucket(list[0].status), icon, fills, dots, ids: list.map((f) => f.id), pick};
+    });
+  }, [flags, onPick]);
+  return (
+    <>
+      {groups.map((g) => (
+          <GeoJSONSource key={`flag-fill-${g.icon}`} id={`flag-fill-${g.icon}`} data={g.fills}>
+            <StyledLayer type="fill" id={`flag-fill-${g.icon}`} style={{fillColor: flagStatusColor(g.status === "0" ? "x" : g.status), fillOpacity: 0.25}} />
+          </GeoJSONSource>
+      ))}
+      {groups.map((g) => (
+          <GeoJSONSource
+            key={`flag-dot-${g.icon}`}
+            id={`flag-dot-${g.icon}`}
+            data={g.dots}
+            onPress={(e: unknown) => {
+              const features = (e as {nativeEvent?: {features?: {properties?: {id?: string}}[]}}).nativeEvent?.features;
+              g.pick(features?.[0]?.properties?.id);
+            }}
+          >
+            <StyledLayer
+              type="symbol"
+              id={`flag-dot-${g.icon}`}
+              style={{iconImage: g.icon, iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
+            />
+          </GeoJSONSource>
+        ),
+      )}
+    </>
+  );
+}
+
+export default memo(FlagMapLayers);

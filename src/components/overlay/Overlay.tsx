@@ -2,7 +2,7 @@ import type {ReactNode} from "react";
 import {ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {AppText as Text} from "../AppText";
+import {AppText as Text} from "../ui/AppText";
 import {darkTheme, lightTheme} from "../../theme";
 
 export type OverlayVariant = "fullScreen" | "dialog" | "sheet";
@@ -106,10 +106,6 @@ export default function Overlay({visible, variant, title, leading, right, closeL
   }
   const footed = actions && actions.length > 0;
   const scrolls = scrollable ?? true;
-  const dialogActions: OverlayAction[] = [
-    {label: closeLabel, tone: "neutral", outline: true, onPress: onClose},
-    ...(actions ?? []),
-  ];
   const body = scrolls ? (
     <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
       {children}
@@ -150,7 +146,15 @@ export default function Overlay({visible, variant, title, leading, right, closeL
           <View style={[styles.dialog, !scrolls && styles.dialogFree, {backgroundColor: theme.paper}]}>
             <Header title={title} leading={leading} right={right} />
             {body}
-            <Footer actions={dialogActions} />
+            {footed ? <Footer actions={actions} /> : null}
+            <Pressable
+              style={[styles.cancelRow, {borderColor: theme.border}]}
+              onPress={() => dismissAnd(onClose)}
+              accessibilityRole="button"
+              accessibilityLabel={closeLabel}
+            >
+              <Text style={[styles.actionText, {color: theme.text}]}>{closeLabel}</Text>
+            </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -175,5 +179,6 @@ const styles = StyleSheet.create({
   actionRow: {flexDirection: "row", gap: 8},
   actionBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
   actionText: {fontWeight: "700"},
+  cancelRow: {borderWidth: 1, borderRadius: 8, padding: 10, alignItems: "center"},
   disabled: {opacity: 0.6},
 });

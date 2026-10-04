@@ -1,5 +1,5 @@
 import {ActivityIndicator, View, Pressable, StyleSheet, useColorScheme} from "react-native";
-import {AppText as Text, AppTextInput as TextInput} from "../AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {darkTheme, lightTheme} from "../../theme";
 import type {Place} from "./PlaceSearch.types";
 import type {PlaceSearch} from "./usePlaceSearch";

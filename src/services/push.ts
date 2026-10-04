@@ -62,8 +62,6 @@ export function ensurePushConfigured(): void {
 export async function syncPushToken(authToken: string | null, uid: string | null): Promise<boolean> {
   if (!authToken || !uid || Platform.OS === "web") return false;
   try {
-    const perms = await Notifications.getPermissionsAsync();
-    if (!perms.granted) return false;
     const device = (await Notifications.getDevicePushTokenAsync()).data ?? "";
     if (device === "") return false;
     const prev = await AsyncStorage.multiGet([DEVICE_KEY, OWNER_KEY]);
@@ -125,6 +123,44 @@ export async function getLastPush(): Promise<{flagId: string; at: number} | null
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {flagId: string; at: number};
     if (typeof parsed.flagId !== "string" || typeof parsed.at !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+let drainedLaunch: string | null = null;
+
+function launchKey(data: {ticketId?: string; flagId?: string}, at: number | undefined): string | null {
+  const id = data.ticketId ?? data.flagId;
+  if (!id || at === undefined) return null;
+  return `${id}:${at}`;
+}
+
+export async function drainDispatchLaunch(): Promise<DispatchPushData | null> {
+  try {
+    const res = await Notifications.getLastNotificationResponseAsync();
+    const at = res?.notification.date;
+    const parsed = parseDispatchPush(res?.notification.request.content.data);
+    if (!parsed) return null;
+    const key = launchKey(parsed, at);
+    if (key === null || drainedLaunch === key) return null;
+    drainedLaunch = key;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function drainHazardLaunch(): Promise<HazardPushData | null> {
+  try {
+    const res = await Notifications.getLastNotificationResponseAsync();
+    const at = res?.notification.date;
+    const parsed = parseHazardPush(res?.notification.request.content.data);
+    if (!parsed) return null;
+    const key = launchKey(parsed, at);
+    if (key === null || drainedLaunch === key) return null;
+    drainedLaunch = key;
     return parsed;
   } catch {
     return null;

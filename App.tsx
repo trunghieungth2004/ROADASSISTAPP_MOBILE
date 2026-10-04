@@ -8,13 +8,14 @@ import {LanguageProvider} from "./src/context/LanguageContext";
 import {ProfileProvider} from "./src/context/ProfileContext";
 import {ThemeProvider, useThemeMode} from "./src/context/ThemeContext";
 import {NavSessionProvider} from "./src/context/NavSessionContext";
-import {APP_FONTS} from "./src/components/AppText";
+import {APP_FONTS} from "./src/components/ui/AppText";
 import {darkTheme, lightTheme} from "./src/theme";
 import Tabs from "./src/navigation/Tabs";
 import NavigationScreen from "./src/screens/NavigationScreen";
 import DiagnosticsScreen from "./src/screens/DiagnosticsScreen";
 import {useEffect} from "react";
 import {ensurePushConfigured, syncPushToken} from "./src/services/push";
+import {warmAudio} from "./src/services/sound";
 
 const Stack = createNativeStackNavigator();
 
@@ -22,6 +23,7 @@ function PushSync() {
   const {token, uid} = useAuth();
   useEffect(() => {
     ensurePushConfigured();
+    void warmAudio();
     void syncPushToken(token, uid);
   }, [token, uid]);
   return null;

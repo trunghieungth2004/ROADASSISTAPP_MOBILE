@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import * as Speech from "expo-speech";
 import {startDuckHold, stopDuckHold} from "../../services/sound";
 
@@ -11,6 +11,8 @@ export function useNavVoice(lang: string, onError?: () => void): {
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const voiceRef = useRef<string | undefined>(undefined);
+  const voiceReadyRef = useRef<Promise<boolean> | null>(null);
+  const startedRef = useRef(false);
   const errorRef = useRef(onError);
   errorRef.current = onError;
   const lastReportRef = useRef(0);
@@ -22,6 +24,16 @@ export function useNavVoice(lang: string, onError?: () => void): {
   };
   const speak = (text: string): void => {
     if (mutedRef.current) return;
+    startedRef.current = false;
+    void (async () => {
+      try {
+        await (voiceReadyRef.current ?? Promise.resolve(false));
+      } catch {}
+      if (mutedRef.current) return;
+      attempt(text, true, true);
+    })();
+  };
+  const attempt = (text: string, withVoice: boolean, retryAllowed: boolean): void => {
     try {
       void Speech.stop();
     } catch {}
@@ -33,11 +45,14 @@ export function useNavVoice(lang: string, onError?: () => void): {
       language: lang === "vi" ? "vi-VN" : "en-US",
       rate: lang === "vi" ? 0.95 : 1.0,
     };
-    const attempt = (withVoice: boolean): void => {
+    const retry = (withVoiceNext: boolean): void => {
       try {
-        const opts = withVoice && voiceRef.current ? {...base, voice: voiceRef.current} : base;
+        const opts = withVoiceNext && voiceRef.current ? {...base, voice: voiceRef.current} : base;
         const result = Speech.speak(text, {
           ...opts,
+          onStart: () => {
+            startedRef.current = true;
+          },
           onDone: () => {
             endDuck();
           },
@@ -45,9 +60,9 @@ export function useNavVoice(lang: string, onError?: () => void): {
             endDuck();
           },
           onError: () => {
-            if (withVoice) {
+            if (withVoiceNext) {
               voiceRef.current = undefined;
-              attempt(false);
+              retry(false);
             } else {
               endDuck();
               report();
@@ -63,10 +78,17 @@ export function useNavVoice(lang: string, onError?: () => void): {
         report();
       }
     };
-    attempt(true);
+    retry(withVoice);
+    if (retryAllowed) {
+      setTimeout(() => {
+        if (!startedRef.current && !mutedRef.current) {
+          endDuck();
+          retry(false);
+        }
+      }, 1500);
+    }
   };
-  async function resolveVoice(): Promise<boolean> {
-    try {
+  async function resolveVoice(): Promise<boolean> {    try {
       const voices = await Speech.getAvailableVoicesAsync();
       const prefs = lang === "vi" ? ["vi-vn", "vi"] : ["en-us", "en"];
       const norm = (s: string): string => s.toLowerCase().replace("_", "-");
@@ -85,8 +107,10 @@ export function useNavVoice(lang: string, onError?: () => void): {
       return false;
     }
   }
-  const toggleMute = (): void => {
-    const next = !muted;
+  useEffect(() => {
+    voiceReadyRef.current = resolveVoice();
+  }, []);
+  const toggleMute = (): void => {    const next = !muted;
     setMuted(next);
     mutedRef.current = next;
     if (next) {

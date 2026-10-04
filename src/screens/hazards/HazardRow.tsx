@@ -1,12 +1,12 @@
 import {useEffect, useState} from "react";
 import {Pressable, StyleSheet, View} from "react-native";
-import {AppText as Text} from "../../components/AppText";
+import {AppText as Text} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {FLAG_CONSENSUS_THRESHOLD, type Flag} from "../../api/flags";
 import {reverseLabel} from "../../api/places";
-import {flagStatusColor, flagStatusLabel} from "../../components/flagStatus";
-import {hazardKind} from "../../components/hazardStyle";
-import {Fab} from "../../components/Fab";
+import {flagStatusColor, flagStatusLabel} from "../../components/flags/flagStatus";
+import {hazardKind} from "../../components/flags/hazardStyle";
+import {Fab} from "../../components/ui/Fab";
 import {flagTypeLabel} from "../../i18n/labels";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";

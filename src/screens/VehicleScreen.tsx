@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
 import {FlatList, Pressable, RefreshControl, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {listProfiles, type VehicleProfile} from "../api/vehicles";
@@ -9,13 +9,13 @@ import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
-import ScreenContainer from "../components/ScreenContainer";
-import Snack from "../components/Snack";
-import StatusRow from "../components/StatusRow";
-import {snackAboveTabs} from "../components/snackOffset";
-import VehicleCreateDialog from "../components/VehicleCreateDialog";
-import RideSetupDialog from "../components/RideSetupDialog";
-import {vehicleMeta, vehicleTypeName} from "../components/vehicleMeta";
+import ScreenContainer from "../components/ui/ScreenContainer";
+import Snack from "../components/ui/Snack";
+import StatusRow from "../components/ui/StatusRow";
+import {snackBottom} from "../components/ui/snackOffset";
+import VehicleCreateDialog from "../components/vehicles/VehicleCreateDialog";
+import RideSetupDialog from "../components/vehicles/RideSetupDialog";
+import {vehicleMeta, vehicleTypeName} from "../components/vehicles/vehicleMeta";
 import {vehicleIcon} from "./route/routeGeo";
 
 export default function VehicleScreen() {
@@ -120,9 +120,9 @@ export default function VehicleScreen() {
         )}
       </View>
       {error ? (
-        <Snack message={error} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
+        <Snack message={error} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (
-        <Snack message={notice} severity="confirm" bottom={snackAboveTabs(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+        <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
       {createOpen ? (
         <VehicleCreateDialog

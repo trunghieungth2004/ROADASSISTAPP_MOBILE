@@ -1,4 +1,5 @@
 import {api} from "./client";
+import {CACHE_TTL_MS, cacheClear, cacheDel, withCache} from "../services/cache";
 
 export type FlagType = "ACCIDENT" | "FLOOD" | "OBSTRUCTION";
 
@@ -85,24 +86,35 @@ export type SubmitFlagPayload = {
   radiusMeters?: number;
 };
 
-export function submitFlag(payload: SubmitFlagPayload, token: string): Promise<{id: string; status: string}> {
-  return api.post<{id: string; status: string}>("/flags", payload, token);
+export async function submitFlag(payload: SubmitFlagPayload, token: string): Promise<{id: string; status: string}> {
+  const res = await api.post<{id: string; status: string}>("/flags", payload, token);
+  cacheClear(`flagsNear:${token}:`);
+  cacheDel(`flagsMine:${token}`);
+  return res;
 }
 
-export function confirmFlag(flagId: string, token: string): Promise<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}> {
-  return api.post<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}>("/flags/confirm", {flagId}, token);
+export async function confirmFlag(flagId: string, token: string): Promise<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}> {
+  const res = await api.post<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}>("/flags/confirm", {flagId}, token);
+  cacheClear(`flagsNear:${token}:`);
+  return res;
 }
 
-export function denyFlag(flagId: string, token: string): Promise<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}> {
-  return api.post<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}>("/flags/deny", {flagId}, token);
+export async function denyFlag(flagId: string, token: string): Promise<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}> {
+  const res = await api.post<{id: string; voteCount: number; status: string; alreadyVoted?: boolean}>("/flags/deny", {flagId}, token);
+  cacheClear(`flagsNear:${token}:`);
+  return res;
 }
 
-export function unflag(flagId: string, token: string): Promise<{unflagged: number}> {
-  return api.post<{unflagged: number}>("/flags/unflag", {flagId}, token);
+export async function unflag(flagId: string, token: string): Promise<{unflagged: number}> {
+  const res = await api.post<{unflagged: number}>("/flags/unflag", {flagId}, token);
+  cacheClear(`flagsNear:${token}:`);
+  cacheDel(`flagsMine:${token}`);
+  return res;
 }
 
 export async function flagsNear(lat: number, lng: number, radiusMeters: number, token: string): Promise<Flag[]> {
-  const list = await api.post<FlagWire[]>("/flags/near", {lat, lng, radiusMeters}, token);
+  const key = `flagsNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters}`;
+  const list = await withCache(key, CACHE_TTL_MS.flagsNear, () => api.post<FlagWire[]>("/flags/near", {lat, lng, radiusMeters}, token));
   const now = Date.now();
   return list.map(toFlag).filter((flag) => !isExpired(flag, now));
 }
@@ -113,7 +125,7 @@ export async function getFlag(flagId: string, token: string): Promise<Flag | nul
 }
 
 export async function myFlags(token: string): Promise<Flag[]> {
-  const list = await api.post<FlagWire[]>("/flags/mine", {}, token);
+  const list = await withCache(`flagsMine:${token}`, CACHE_TTL_MS.flagsMine, () => api.post<FlagWire[]>("/flags/mine", {}, token));
   const now = Date.now();
   return list.map(toFlag).filter((flag) => !isExpired(flag, now));
 }

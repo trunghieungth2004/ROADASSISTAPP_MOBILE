@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
-import {AppText as Text} from "../components/AppText";
+import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useKeepAwake} from "expo-keep-awake";
@@ -9,9 +9,9 @@ import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useNavSession} from "../context/NavSessionContext";
 import Overlay from "../components/overlay/Overlay";
-import {flagStatusColor, flagStatusLabel} from "../components/flagStatus";
+import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
 import type {RouteOption} from "../api/routes";
-import {confirmFlag, denyFlag, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
+import {confirmFlag, denyFlag, flagsNear, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {toMessage} from "../api/client";
 import {markDenied, markVoted} from "../storage/votedFlags";
 import {darkTheme, lightTheme} from "../theme";
@@ -21,19 +21,20 @@ import {useNavTracking} from "./navigation/useNavTracking";
 import {distBetween, formatDist, turnLabel} from "./navigation/navUtils";
 import {clearNavShade, updateNavShade} from "../services/navShade";
 import NavMapView from "./navigation/NavMapView";
+import {NAV_NEAR_RADIUS_M} from "./navigation/NavFlags";
 import NavHeader from "./navigation/NavHeader";
 import TurnListSheet from "./navigation/TurnListSheet";
-import {Fab, FabColumn} from "../components/Fab";
-import {SNACK_GAP} from "../components/snackOffset";
-import FlagDetailSheet from "../components/FlagDetailSheet";
-import {hazardKind} from "../components/hazardStyle";
+import {Fab, FabColumn} from "../components/ui/Fab";
+import {SNACK_GAP} from "../components/ui/snackOffset";
+import FlagDetailSheet from "../components/flags/FlagDetailSheet";
+import {hazardKind} from "../components/flags/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
-import {ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHazardPush, type HazardPushData} from "../services/push";
+import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {playEventSound} from "../services/sound";
-import Snack from "../components/Snack";
-import {pickFeedback} from "../components/feedback";
-import FlagReportDialog from "../components/FlagReportDialog";
-import type {FlagReport} from "../components/FlagSheet";
+import Snack from "../components/ui/Snack";
+import {pickFeedback} from "../components/ui/feedback";
+import FlagReportDialog from "../components/flags/FlagReportDialog";
+import type {FlagReport} from "../components/flags/FlagSheet";
 import {flagOverlayActions} from "./hazards/flagActions";
 
 type Props = {
@@ -108,6 +109,11 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   const [listOpen, setListOpen] = useState(false);
   const [reportAt, setReportAt] = useState<{lat: number; lng: number} | null>(null);
   const [flagsKey, setFlagsKey] = useState(0);
+  const [flagsForceKey, setFlagsForceKey] = useState(0);
+  const [pushSeeds, setPushSeeds] = useState<{flag: Flag; at: number}[]>([]);
+  const SEED_TTL_MS = 300000;
+  const SEED_MAX = 12;
+  const seedList = useMemo(() => pushSeeds.map((s) => s.flag), [pushSeeds]);
   const [topCards, setTopCards] = useState<{flag: Flag; addedAt: number}[]>([]);
   const [nowTs, setNowTs] = useState(Date.now());
   const [headerH, setHeaderH] = useState(0);
@@ -220,6 +226,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     try {
       await unflag(flagId, token);
       closeFlag();
+      dropSeed(flagId);
       setFlagsKey((k) => k + 1);
       voice.speak(t.flag.removedMsg);
     } catch (err) {
@@ -231,49 +238,55 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
       setFlagBusy(false);
     }
   }
-  async function showAlertForFlag(flagId: string): Promise<void> {
+  function dropSeed(flagId: string): void {
+    setPushSeeds((prev) => prev.filter((s) => s.flag.id !== flagId));
+  }
+  function seedFromPush(data: HazardPushData): Flag | null {
+    if (typeof data.lat !== "number" || typeof data.lng !== "number") return null;
+    const seed: Flag = {id: data.flagId, type: data.type ?? "", lat: data.lat, lng: data.lng, status: data.status ?? "1", ...(typeof data.radiusMeters === "number" ? {radiusMeters: data.radiusMeters} : {})};
+    const now = Date.now();
+    setPushSeeds((prev) => [{flag: seed, at: now}, ...prev.filter((s) => s.flag.id !== seed.id && now - s.at < SEED_TTL_MS)].slice(0, SEED_MAX));
+    return seed;
+  }
+  async function showAlertForFlag(data: HazardPushData): Promise<void> {
+    const seed = seedFromPush(data);
+    setFlagsForceKey((k) => k + 1);
+    void nav.refreshRouteQuiet();
     const key = tokenRef.current;
     if (!key) {
       return;
     }
-    let flag: Flag | null;
-    try {
-      flag = await getFlag(flagId, key);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setFetchError(toMessage(err));
-      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
-      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
+    if (votedRef.current.has(data.flagId) || deniedRef.current.has(data.flagId)) {
       return;
     }
-    if (!aliveRef.current) return;
+    const pushConfirmed = data.status === "2" || data.status === "3";
+    let flag: Flag | null = seed;
+    if (!seed || pushConfirmed) {
+      try {
+        flag = await getFlag(data.flagId, key);
+      } catch (err) {
+        if (!aliveRef.current) return;
+        setFetchError(toMessage(err));
+        if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+        fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
+        return;
+      }
+      if (!aliveRef.current) return;
+    }
     const me = uidRef.current;
-    setFlagsKey((k) => k + 1);
     if (!flag) {
       return;
     }
     if (me != null && flag.reporterId === me) {
       return;
     }
-    if (votedRef.current.has(flag.id) || deniedRef.current.has(flag.id)) {
-      return;
-    }
     const confirmedPush = flag.status === "2" || flag.status === "3";
-    const progM = nav.progress?.progressMeters ?? 0;
-    let routeToGo: number | null = null;
-    if (!confirmedPush) {
-      const res = await nav.refreshRouteQuiet();
-      if (!aliveRef.current) return;
-      const match = res?.warnings.find((w) => w.flagId === flag.id) ?? null;
-      if (match) routeToGo = Math.max(0, match.distanceMeters - progM);
-    }
+    const p = posRef.current;
+    const straightToGo = p ? distBetween(p, {lat: flag.lat, lng: flag.lng}) : null;
+    const dist = straightToGo !== null ? formatDist(straightToGo, t.route.km, t.nav.m) : null;
     let rerouted = false;
     if (confirmedPush) rerouted = await nav.rerouteForConfirm();
     if (!aliveRef.current) return;
-    const p = posRef.current;
-    const straightToGo = p ? distBetween(p, {lat: flag.lat, lng: flag.lng}) : null;
-    const useToGo = routeToGo ?? straightToGo;
-    const dist = useToGo !== null ? formatDist(useToGo, t.route.km, t.nav.m) : null;
     const now = Date.now();
     setTopCards((prev) => [{flag, addedAt: now}, ...prev.filter((c) => c.flag.id !== flag.id)].slice(0, MAX_TOP_CARDS));
     if (confirmedPush) {
@@ -290,6 +303,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   }
   const onRemovedPush = (flagId: string): void => {
     setTopCards((prev) => prev.filter((c) => c.flag.id !== flagId));
+    dropSeed(flagId);
     if (selectedFlag?.id === flagId) closeFlag();
     setFlagsKey((k) => k + 1);
     void nav.refreshRouteQuiet();
@@ -354,13 +368,18 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   useEffect(() => {
     ensurePushConfigured();
     setNavForeground(true);
-    const unsub = subscribeHazardPush((data: HazardPushData) => {
+    void flagsNear(seed.lat, seed.lng, NAV_NEAR_RADIUS_M, token).catch(() => undefined);
+    const onHazard = (data: HazardPushData): void => {
       if (data.removed) {
         onRemovedPush(data.flagId);
         return;
       }
-      void showAlertForFlag(data.flagId);
-    }, "nav");
+      void showAlertForFlag(data);
+    };
+    void drainHazardLaunch().then((drained) => {
+      if (drained) onHazard(drained);
+    });
+    const unsub = subscribeHazardPush(onHazard, "nav");
     return () => {
       setNavForeground(false);
       unsub();
@@ -390,6 +409,8 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
         flagsPos={nav.pos}
         flagsToken={token}
         flagsKey={flagsKey}
+        flagsForceKey={flagsForceKey}
+        flagsSeeds={seedList}
         flagsUid={uid}
         flagsVoted={votedIds}
         flagsDenied={deniedIds}
@@ -399,19 +420,18 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
         onAutoFlag={onAutoFlag}
         onRegionChanging={nav.onRegionChanging}
       />
-      <View onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
-        <NavHeader
-          t={t}
-          theme={theme}
-          topPad={insets.top + 12}
-          next={nav.next}
-          arrived={nav.arrived}
-          rerouting={nav.rerouting}
-          hasPos={nav.pos !== null}
-          onExit={onExit}
-          onOpenList={() => setListOpen(true)}
-        />
-      </View>
+      <NavHeader
+        t={t}
+        theme={theme}
+        topPad={insets.top + 12}
+        next={nav.next}
+        arrived={nav.arrived}
+        rerouting={nav.rerouting}
+        hasPos={nav.pos !== null}
+        onExit={onExit}
+        onOpenList={() => setListOpen(true)}
+        onHeight={setHeaderH}
+      />
       {topCards.length > 0 ? (
         <View style={[styles.topStack, {top: headerH + 8}]} pointerEvents="box-none">
           {topCards.map((c) => {

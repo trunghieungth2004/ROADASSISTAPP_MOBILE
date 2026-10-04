@@ -5,9 +5,12 @@ jest.mock("@maplibre/maplibre-react-native", () => {
     React.createElement(name, props, props.children);
   return {
     MapView: stub("MapView"),
+    Map: stub("Map"),
     Camera: stub("Camera"),
     PointAnnotation: stub("PointAnnotation"),
     ShapeSource: stub("ShapeSource"),
+    GeoJSONSource: stub("GeoJSONSource"),
+    Layer: stub("Layer"),
     SymbolLayer: stub("SymbolLayer"),
     LineLayer: stub("LineLayer"),
     FillLayer: stub("FillLayer"),
@@ -16,9 +19,12 @@ jest.mock("@maplibre/maplibre-react-native", () => {
 });
 
 jest.mock("expo-location", () => ({
+  Accuracy: {Lowest: 1, Low: 2, Balanced: 3, High: 4, Highest: 5, BestForNavigation: 6},
   requestForegroundPermissionsAsync: jest.fn(async () => ({status: "granted"})),
   getForegroundPermissionsAsync: jest.fn(async () => ({status: "granted"})),
   getCurrentPositionAsync: jest.fn(async () => ({coords: {latitude: 10.7, longitude: 106.6}})),
+  getLastKnownPositionAsync: jest.fn(async () => null),
+  hasServicesEnabledAsync: jest.fn(async () => true),
   watchPositionAsync: jest.fn(async () => ({remove: jest.fn()})),
 }));
 

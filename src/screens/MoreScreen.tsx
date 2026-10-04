@@ -1,25 +1,25 @@
 import {useCallback, useState} from "react";
 import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
-import {AppText as Text, AppTextInput as TextInput} from "../components/AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {useFocusEffect, useNavigation} from "@react-navigation/native";
+import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {setVolunteerAvailability, updateProfile, volunteerHeartbeat} from "../api/users";
+import {setVolunteerAvailability, updateProfile, updateUserServices, volunteerHeartbeat} from "../api/users";
 import {capturePosition, useLocationBeat} from "../services/locationBeats";
-import {missingKinds, providerPill, providerRowSubtitle, serviceLabel, switchEnabled} from "./more/providerUi";
+import {missingKinds, operatedKinds, providerPill, providerRowSubtitle, serviceLabel, switchEnabled} from "./more/providerUi";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
-import ScreenContainer from "../components/ScreenContainer";
-import Snack from "../components/Snack";
-import {snackAboveTabs} from "../components/snackOffset";
+import ScreenContainer from "../components/ui/ScreenContainer";
+import Snack from "../components/ui/Snack";
+import {snackBottom} from "../components/ui/snackOffset";
 import {myFlags} from "../api/flags";
 import {createProvider, myProviders, updateProvider, type Provider} from "../api/providers";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
 import type {ShopDraft, TowDraft} from "./OnboardingScreen";
-import ProviderFormDialog from "../components/ProviderFormDialog";
+import ProviderFormDialog from "../components/providers/ProviderFormDialog";
 import OnboardingScreen from "./OnboardingScreen";
 import Overlay from "../components/overlay/Overlay";
 import {useThemeMode} from "../context/ThemeContext";
@@ -111,7 +111,8 @@ export default function MoreScreen() {
     }
   }
   const volunteerOn = user?.volunteerAvailable === true;
-  useLocationBeat(!!token && volunteerOn, 5 * 60 * 1000, async () => {
+  const moreFocused = useIsFocused();
+  useLocationBeat(!!token && volunteerOn && moreFocused, 5 * 60 * 1000, async () => {
     if (!token) return;
     const pos = await capturePosition();
     if (!pos) return;
@@ -167,11 +168,17 @@ export default function MoreScreen() {
         if (tow.name.trim() === "") throw new Error(t.provider.invalidName);
         if (validateTowDraft({plate: tow.plate, vehicleType: tow.vehicleType, width: tow.width})) throw new Error(t.tow.invalid);
       }
-      for (const service of selected) await markOnboarded(service);
+      const held = user?.services ?? [];
+      for (const service of selected) {
+        if (!held.includes(service)) await markOnboarded(service);
+      }
+      if (token && uid && held.includes("VOLUNTEER") && !selected.includes("VOLUNTEER")) {
+        await updateUserServices({targetUserId: uid, revoke: ["VOLUNTEER"]}, token);
+      }
       if (token) {
         if (shop) {
           try {
-            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {})}, token);
+            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createShopFailed} ${toMessage(err)}`);
           }
@@ -206,6 +213,7 @@ export default function MoreScreen() {
     }
   }
   const missing = missingKinds(providers);
+  const operated = operatedKinds(providers);
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
@@ -223,6 +231,8 @@ export default function MoreScreen() {
               <View style={styles.badgeRow}>
                 <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.more.roleUser}</Text></View>
                 {services.map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
+                {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
+                {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
               </View>
             </View>
           </View>
@@ -423,11 +433,11 @@ export default function MoreScreen() {
         </View>
       </ScrollView>
       {volError ? (
-        <Snack message={volError} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
+        <Snack message={volError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
       ) : providerError ? (
-        <Snack message={providerError} severity="error" sticky bottom={snackAboveTabs(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
+        <Snack message={providerError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
       ) : (
-        <Snack message={notice} severity="confirm" bottom={snackAboveTabs(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+        <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
     </ScreenContainer>
   );
