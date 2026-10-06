@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
@@ -9,6 +9,8 @@ import {toMessage} from "../../api/client";
 import {getFix} from "../../services/geo";
 import {darkTheme, lightTheme} from "../../theme";
 import {bundledMapStyle} from "../../map/style";
+import MapStyleVeil from "./MapStyleVeil";
+import {useStyleVeil} from "./useStyleVeil";
 import {HCMC_CENTER} from "../../screens/route/types";
 import type {Strings} from "../../i18n/en";
 
@@ -33,7 +35,8 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
+  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const [center, setCenter] = useState<[number, number]>(initial ? [initial.lng, initial.lat] : HCMC_CENTER);
   const [busy, setBusy] = useState(false);
@@ -85,9 +88,11 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
             const next = readCenter(e);
             if (next) setCenter(next);
           }}
+          onDidFinishLoadingStyle={onStyleLoaded}
         >
           <Camera ref={cameraRef} initialViewState={{center, zoom: 15}} />
         </Map>
+        <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
         <View style={styles.crosshair} pointerEvents="none">
           <MaterialIcons name="place" size={40} color={theme.primary} />
         </View>

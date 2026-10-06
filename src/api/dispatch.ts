@@ -24,7 +24,19 @@ export type RiderAction = "arrived" | "resolved" | "cancel";
 
 export type FeedDirection = "in" | "out";
 
-export type FeedTicket = DispatchTicket & {direction: FeedDirection};
+export type FeedTicket = DispatchTicket & {
+  direction: FeedDirection;
+  otherParty?: {
+    id: string;
+    name: string;
+    kind: string;
+    label?: string;
+    openNow?: boolean;
+    ratingAvg?: number;
+    ratingCount?: number;
+  } | null;
+  statusHistory?: {status: string; at: string; by: string}[];
+};
 
 export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as const;
 

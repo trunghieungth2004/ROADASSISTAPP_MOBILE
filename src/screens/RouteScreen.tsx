@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, BackHandler, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, AppState, BackHandler, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation, useIsFocused} from "@react-navigation/native";
 import {AppText as Text} from "../components/ui/AppText";
@@ -43,12 +43,13 @@ import VehiclePickerSheet from "../components/vehicles/VehiclePickerSheet";
 import {Fab, FabColumn} from "../components/ui/Fab";
 import {FAB_SIZE, rightColumnBottom} from "./route/fabLayout";
 import {snackBottom} from "../components/ui/snackOffset";
+import {ROUTE_RETOUCH_MS, touchCapReached} from "./route/routeFresh";
 
 export default function RouteScreen() {
   const {t, lang} = useStrings();
   const {token, uid} = useAuth();
   const navigation = useNavigation();
-  const {vehicles, activeVehicle, activateVehicle} = useProfile();
+  const {vehicles, activeVehicle, activateVehicle, hasVehicle} = useProfile();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -94,6 +95,11 @@ export default function RouteScreen() {
   const [hazardFocusIdx, setHazardFocusIdx] = useState(-1);
   const [hazardHighlight, setHazardHighlight] = useState<[number, number][] | null>(null);
   const [cardH, setCardH] = useState(0);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [checking, setChecking] = useState(false);
+  const [appActive, setAppActive] = useState(true);
+  const [retouchStart, setRetouchStart] = useState<number | null>(null);
   const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   function fitRouteGeometry(coords: [number, number][]) {
@@ -113,6 +119,8 @@ export default function RouteScreen() {
       setSelectedIndex(0);
       setHazardFocusIdx(-1);
       setHazardHighlight(null);
+      setCheckedAt(Date.now());
+      setRetouchStart(Date.now());
       if (fit && next[0]) fitRouteGeometry(next[0].geometry.coordinates);
       return next;
     } catch (err) {
@@ -155,6 +163,7 @@ export default function RouteScreen() {
       setSelectedIndex(0);
       setHazardFocusIdx(-1);
       setHazardHighlight(null);
+      setCheckedAt(Date.now());
       const after = next[0] ? JSON.stringify(next[0].geometry.coordinates) : before;
       setSnack(after !== before ? t.flag.rerouted : t.route.hazardUpdated);
     } catch {
@@ -316,6 +325,26 @@ export default function RouteScreen() {
   const quietRef = useRef(refreshRoutesQuiet);
   quietRef.current = refreshRoutesQuiet;
   useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      setAppActive(state === "active");
+    });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!routeTabFocused || !result) return;
+    const clock = setInterval(() => setNowMs(Date.now()), 60000);
+    return () => clearInterval(clock);
+  }, [routeTabFocused, result !== null]);
+  useEffect(() => {
+    if (!routeTabFocused || !appActive || !result || busy || starting || searchingFor || pickingFor || !token) return;
+    const timer = setInterval(() => {
+      if (checking || touchCapReached(retouchStart, Date.now())) return;
+      setChecking(true);
+      void quietRef.current().finally(() => setChecking(false));
+    }, ROUTE_RETOUCH_MS);
+    return () => clearInterval(timer);
+  }, [routeTabFocused, appActive, result !== null, busy, starting, searchingFor, pickingFor, token, checking, retouchStart]);
+  useEffect(() => {
     ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
       setFlagsKey((k) => k + 1);
@@ -473,6 +502,8 @@ export default function RouteScreen() {
     }
   }
   function onClear(): void {
+    setCheckedAt(null);
+    setRetouchStart(null);
     setOrigin(null);
     setDest(null);
     setOriginText("");
@@ -549,6 +580,8 @@ export default function RouteScreen() {
       setSelectedIndex(0);
       setHazardFocusIdx(-1);
       setHazardHighlight(null);
+      setCheckedAt(null);
+      setRetouchStart(Date.now());
       fitRouteGeometry(saved.geometry.coordinates);
       setSavedOpen(false);
     } catch (err) {
@@ -641,6 +674,7 @@ export default function RouteScreen() {
           origin={origin}
           dest={dest}
           activeVehicle={activeVehicle}
+          hasVehicles={hasVehicle}
           busy={busy}
           starting={starting}
           hazardZones={hazardZones}
@@ -651,6 +685,14 @@ export default function RouteScreen() {
           onOpenVehicle={() => setVehicleOpen(true)}
           onStart={() => void onStart()}
           onSave={() => void onSave()}
+          checkedAt={checkedAt}
+          nowMs={nowMs}
+          checking={checking}
+          onRefreshAlerts={() => {
+            if (checking) return;
+            setChecking(true);
+            void quietRef.current().finally(() => setChecking(false));
+          }}
         />
         </View>
       </View>
@@ -658,7 +700,7 @@ export default function RouteScreen() {
       ) : null}
       {vehicleOpen ? (
         <Overlay visible variant="sheet" title={t.vehicle.title} closeLabel={t.common.cancel} onClose={() => setVehicleOpen(false)}>
-          <VehiclePickerSheet t={t} theme={theme} token={token} activeId={activeVehicle?.id ?? null} onPick={(id) => void onVehiclePress(id)} />
+          <VehiclePickerSheet t={t} theme={theme} token={token} activeId={activeVehicle?.id ?? null} onPick={(id) => void onVehiclePress(id)} onAddVehicle={() => { setVehicleOpen(false); navigation.navigate("Vehicle" as never); }} />
         </Overlay>
       ) : null}
       {searchingFor ? (

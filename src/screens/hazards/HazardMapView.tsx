@@ -1,10 +1,13 @@
-import {useEffect, useRef, useState} from "react";
-import {StyleSheet, View} from "react-native";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {StyleSheet, View, useColorScheme} from "react-native";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
 import {bundledMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
 import FlagMapLayers from "../../components/flags/FlagMapLayers";
 import FlagPinImages from "../../components/flags/MapPinImages";
+import MapStyleVeil from "../../components/map/MapStyleVeil";
+import {useStyleVeil} from "../../components/map/useStyleVeil";
+import {darkTheme, lightTheme} from "../../theme";
 import {HCMC_CENTER} from "../route/types";
 import {shouldAutoFit} from "../route/cameraIntent";
 
@@ -15,7 +18,10 @@ type Props = {
 };
 
 export default function HazardMapView(props: Props) {
-  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
+  const scheme = useColorScheme();
+  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const {veiled, onStyleLoaded} = useStyleVeil(scheme);
+  const veilBackground = scheme === "dark" ? darkTheme.background : lightTheme.background;
   const cameraRef = useRef<CameraRef | null>(null);
   const pendingRef = useRef<{lat: number; lng: number} | null>(null);
   const fittedRef = useRef(false);
@@ -54,12 +60,13 @@ export default function HazardMapView(props: Props) {
         logo={false}
         attribution={false}
         androidView="texture"
-        onDidFinishLoadingStyle={drainPending}
+        onDidFinishLoadingStyle={() => { drainPending(); onStyleLoaded(); }}
       >
         <Camera ref={cameraRef} initialViewState={{center: initial, zoom: 12}} />
         <FlagPinImages />
         <FlagMapLayers flags={props.flags} onPick={props.onPickFlag} />
       </Map>
+      <MapStyleVeil visible={veiled} backgroundColor={veilBackground} />
     </View>
   );
 }

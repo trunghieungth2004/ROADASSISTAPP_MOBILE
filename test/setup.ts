@@ -11,6 +11,7 @@ jest.mock("@maplibre/maplibre-react-native", () => {
     ShapeSource: stub("ShapeSource"),
     GeoJSONSource: stub("GeoJSONSource"),
     Layer: stub("Layer"),
+    Marker: stub("Marker"),
     SymbolLayer: stub("SymbolLayer"),
     LineLayer: stub("LineLayer"),
     FillLayer: stub("FillLayer"),

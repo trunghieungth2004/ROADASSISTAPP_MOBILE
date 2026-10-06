@@ -88,6 +88,13 @@ export function useNavVoice(lang: string, onError?: () => void): {
       }, 1500);
     }
   };
+  async function warmEngine(): Promise<void> {
+    try {
+      await Speech.speak(" ", {language: lang === "vi" ? "vi-VN" : "en-US", volume: 0});
+    } catch {
+      return;
+    }
+  }
   async function resolveVoice(): Promise<boolean> {    try {
       const voices = await Speech.getAvailableVoicesAsync();
       const prefs = lang === "vi" ? ["vi-vn", "vi"] : ["en-us", "en"];
@@ -98,9 +105,11 @@ export function useNavVoice(lang: string, onError?: () => void): {
         voiceRef.current = (
           cands.find((v) => v.quality === Speech.VoiceQuality.Enhanced) ?? cands[0]
         ).identifier;
+        await warmEngine();
         return true;
       }
       voiceRef.current = undefined;
+      await warmEngine();
       return false;
     } catch {
       voiceRef.current = undefined;

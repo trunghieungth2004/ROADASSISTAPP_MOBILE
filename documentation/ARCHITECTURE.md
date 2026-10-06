@@ -1,7 +1,22 @@
 # RoadAssist Mobile — Architecture
 
 Expo (SDK 57) + React Native, New Architecture. Maps via
-`@maplibre/maplibre-react-native` v11 (MapTiler `streets-v4` style),
+`@maplibre/maplibre-react-native` v11 (vendored MapTiler styles:
+`streets-v4` light, `streets-dark-v4` dark — same planet tileset, key
+injected at runtime by `buildMapStyle`, so no secret ships in the JSON).
+All five map views (`Route`/`Assist`/`Hazards`/`Nav`/`MapPickOverlay`)
+pick the style from `useColorScheme()` via `bundledMapStyle(scheme)` and
+re-resolve it on scheme change, so toggling the app theme (which pushes
+through `Appearance.setColorScheme`) swaps the basemap live with the
+camera untouched. Swaps are masked by `MapStyleVeil`
+(`src/components/map/`): a theme-background veil raised by `useStyleVeil`
+on every post-load scheme change and faded out on
+`onDidFinishLoadingStyle` (2 s fallback clear), so the eye sees a short
+fade instead of the old basemap lingering; styles are memoized per scheme
+in `style.ts`, so toggles swap stable references without re-parsing. Both styles carry a `Ferry labels` layer, which is the
+`beforeId` anchor for route lines. Overlay colors are theme-driven
+(`theme.primary` adapts per scheme); the dark landmass is navy, so the
+grey unselected-route line and white highlight casing stay legible.
 backend over HTTPS (`src/api/*`), Firebase Auth, i18n `en`/`vi`
 (`src/i18n`), Roboto bundled via `expo-font` + `@expo-google-fonts/roboto`
 (applied globally through `src/components/AppText.tsx`).
@@ -32,12 +47,16 @@ Single `MapView`, layer order is load-bearing (later mounts paint on top):
    can never cover markers regardless of mount order
 3. A/B dots, stop dots, route pills, reshape handle (all overlap-allowed)
 
-Route pills are one centered `SymbolLayer` each (capsule `iconImage` +
-`textField`), `iconSize: 1` with `iconTextFit: "both"` so the capsule
-stretches around labels like `2.4 km · 38 min` (no order number on-map;
-the top pill bar keeps numbers for switching alternatives). Pill geometry
-is offset north of route-mid by zoom-derived latitude delta
-(`PILL_LIFT_PX`); icon/text share one anchor with zero offsets.
+The selected route carries a mid-route pill: a native-anchored `Marker`
+capsule (`RouteMidPill`, same capsule language as `ShopPill` — `theme.primary`
+background, white bold label, no hardcoded colors so both schemes follow the
+app main color) showing `2.4 km · 38 min` for the selected result only. It
+anchors at `selectedMid` (index midpoint from `midOf`, already computed for
+the reshape handle) with a bottom anchor and upward offset so it floats above
+the line, eats no taps (`pointerEvents="none"`), and hides while dragging or
+pick-on-map is armed. The top pill bar keeps numbers for switching
+alternatives, and renders a single informational pill when only one option
+exists.
 
 Marker drag is manual, not `PointAnnotation` (the native default pin cannot
 be hidden): tap arms the nearest marker within `ARM_RADIUS`, a full-screen
@@ -97,13 +116,22 @@ with no fetch at all. Full model in `PUSH.md` ("Hazard pin refresh model").
 ## Assist screen (`src/screens/AssistScreen.tsx`, `src/screens/assist/`)
 
 One map, one top-anchored card, three mutually exclusive sections switched by a
-segmented control (`AssistSectionTabs`, tab semantics): `Request` (type icons,
-note, request button), `Shops` (map-icon browse + name search), `Records`
-(unified in/out list, see below). Car riders see no Shops tab — `MECHANIC` /
-`WALK_IN` are bike-only server-side, so the tab would be a dead end. Sections
-live in `src/screens/assist/` (`RequestSection`, `ShopsSection`,
+segmented control (`AssistSectionTabs`, tab semantics): `Request` (icon-only
+type buttons — the `MECHANIC` button expands shop browse inline: map-icon
+pins + name search; `SOS`/`TOW` open a ticket dialog with note field,
+drop-off picker for tow, and Send; nothing preselected) and `Records`
+(unified in/out list, see below). The type row ends in a compact vehicle
+button (glyph only) opening the shared picker: neutral border when set,
+danger dot when the fleet exists but nothing is active, dashed border + plus
+when there is no vehicle at all (`vehicleButtonState`, mirrored on Route's
+compact button). The dialog replaces the old inline note + request button:
+one extra tap that ends pocket-dial dispatches.
+Car riders see no `MECHANIC` button — `MECHANIC` / `WALK_IN` are bike-only
+server-side, so it would be a dead end. Sections live in
+`src/screens/assist/` (`RequestSection`, `TicketSheet`, `ShopsSection`,
 `RecordsSection`, `StatusStepper`, `RatingSheet`); the screen keeps map, FABs,
-active-job overlay, snack, and dialogs.
+active-job overlay, snack, and dialogs. The TOW type button uses the `tow-truck` glyph
+(MaterialCommunityIcons — `local-shipping` read as delivery).
 
 Status is a vertical stepper (`StatusStepper`): SOS/TOW show
 Pending → Matched → Arrived → Resolved, walk-in shows
@@ -114,28 +142,58 @@ confirmation (terminal server-side); rating submits straight through (the
 server upserts). A 404 on rate means the row vanished under the BE expiry
 sweep, so the sheet closes with a notice instead of an error.
 
-Tapping a shop pin opens `ShopDetailSheet`: open badge, closing badge
-(`closesInMinutes`, annotate-only), vehicle-class chips, rating line (hollow
-stars under 3 ratings, count always shown), and Walk here / Route from here /
-Report / **I'm here**. `I'm here` posts a `WALK_IN` ticket and jumps to
-Records. Name search debounces 250 ms, fires only on non-empty queries, and
-uses a 10 km ceiling against the 2 km browse cycler.
+Tapping a shop pin opens `ShopDetailSheet`. All map art lives in
+`assets/map/` sorted by feature (`hazards/`, `navigation/`, `shops/`,
+`route/`) and generates from `tools/genIcons.py` at full 1x/2x/3x —
+regenerate rather than hand-editing; re-runs are no-op diffs. Every listed
+shop carries a `MarkerView` capsule above its pin (`ShopPill`, minutes-only
+`~N min` from haversine math, never a per-shop route call — the same RN
+capsule language as the route pills, primary variant when selected, tap
+opens the sheet). Native-anchored views: no sprite registration, no fit
+math, no per-value assets. The selected pin uses the same pill. The sheet
+shows a class pill beside the title (icons, defaults to both when
+undeclared) plus an open/closed status pill in the header, rating
+line (hollow stars under 3 ratings, count always shown), an icon row (walk /
+navigate / report, words kept as accessibility labels), and **I'm here** as
+the primary action — visible only within 200 m GPS (`IM_HERE_RADIUS_M`,
+`null` otherwise). Distance, minutes, and the closed warning live on the map
+pill, never repeated in the sheet.
+`I'm here` posts a `WALK_IN` ticket and jumps to Records. Name search
+debounces 250 ms, fires only on non-empty queries, and uses a 10 km ceiling
+against the 2 km browse cycler. Search and radius share one 50:50 filter row.
+The onboarding shop form carries the same
+vehicle-class chips, so fresh shops declare at signup.
 
-## Records: one in/out list, no shop console
+## Records: compact rows, detail sheet, ticket history
 
 Records merges both sides of every ticket into a single newest-first list fed
 by `POST /dispatch/feed`, which stamps each row server-side
-(`direction: "in" | "out"` — the server knows operator UIDs, so it cannot
-misclassify). `All / In / Out` pills (`recordFilter.ts`, same pattern as the
-hazard filter) split the list; each row carries a direction arrow (accented
-for the rarer inbound side, neutral for outbound) with an Incoming/Outgoing
-accessibility label. There is no separate shop/tow console route: outbound
-rows keep Cancel (dialog) / Rate, inbound rows act inline — Accept, Decline
-with a required reason + optional note (no dialog, it is not destructive),
-work-order editor (free-text work plus integer-VND quote/final, `400` closed
-renders inline), reply bound to the real rating id via
-`POST /ratings/by-ticket` (the old console passed the ticket id and always
-404'd), and Rate-the-rider through the shared sheet.
+(`direction: "in" | "out"` plus `otherParty` names — shop, volunteer handle,
+or rider display name; shop parties additionally carry `label`, `openNow`,
+`ratingAvg`, and `ratingCount` when the provider record holds them, resolved
+through `assignedShopId`, then the addressed `providerId`, then
+`destinationShopId`, so pending and declined tickets already name their shop).
+Rows are two lines: type + status pill (per-status
+color via `statusPillColor`), counterparty + relative date. No inline
+actions, and opening a row no longer touches map selection — the sheet is
+the only detail UI. Tapping a row opens `RecordDetailSheet` (bottom sheet,
+same language as shop details): type-only title with the status as a header
+pill, counterparty hero (direction chip, name,
+relative age), an enriched shop block (address label, open badge, stars)
+when the party carries it, a rider-location block (coords plus distance when
+GPS is available) on inbound rows, icon fact rows (coords, note, decline, VND
+amounts with separators), a vertical dot-and-connector timeline built from
+`statusHistory` (`StatusStepper` only for legacy rows without history), and
+the rating thread with reply. Committing actions (Rate, Accept, Cancel,
+Decline-send, work-save) live in `Overlay`'s pinned footer; forms (cancel
+confirm, decline reasons, work editor, reply) stay in the body on demand.
+Declining closes the sheet on success (errors keep it open for retry).
+
+## Hazard report form (`FlagSheet`)
+
+Compact type selector beside a multiline note field (50:50 row), radius
+chips below at 48 px minimum targets in a wrapping row — glove/rain usable.
+No new dependencies, no new copy.
 
 ## Services & roles
 

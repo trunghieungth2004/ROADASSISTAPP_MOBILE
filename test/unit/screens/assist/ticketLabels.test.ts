@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {declineReasonLabel, stageLabel, statusStages, statusTone, ticketStatusLabel, ticketTitle} from "../../../../src/screens/assist/ticketLabels";
+import {declineReasonLabel, stageLabel, statusPillColor, statusStages, statusTone, ticketStatusLabel, ticketTitle} from "../../../../src/screens/assist/ticketLabels";
 import {en} from "../../../../src/i18n/en";
 
 test("ticket titles use translated labels", () => {
@@ -31,4 +31,16 @@ test("new statuses resolve to translated labels", () => {
   expect(declineReasonLabel("PARTS_DELAY", en)).toBe(en.assist.declinePartsDelay);
   expect(declineReasonLabel("OTHER", en)).toBe(en.assist.declineOther);
   expect(declineReasonLabel("BOGUS", en)).toBe(en.assist.declineOther);
+});
+
+test("status pills carry one color per status", () => {
+  const theme = {primary: "#p", success: "#s", danger: "#d", muted: "#m"};
+  expect(statusPillColor("1", theme)).toBe("#f59e0b");
+  expect(statusPillColor("2", theme)).toBe("#p");
+  expect(statusPillColor("3", theme)).toBe("#0284c7");
+  expect(statusPillColor("6", theme)).toBe("#d97706");
+  expect(statusPillColor("7", theme)).toBe("#0d9488");
+  expect(statusPillColor("4", theme)).toBe("#s");
+  expect(statusPillColor("5", theme)).toBe("#m");
+  expect(statusPillColor("8", theme)).toBe("#d");
 });

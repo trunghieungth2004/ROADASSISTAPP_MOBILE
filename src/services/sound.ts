@@ -34,6 +34,7 @@ export async function warmAudio(): Promise<void> {
         const player = createAudioPlayer(SOURCES[name]);
         player.volume = 1;
         players.set(name, player);
+        await player.seekTo(0).catch(() => undefined);
       }
     }
   } catch {

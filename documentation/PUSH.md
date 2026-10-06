@@ -76,9 +76,21 @@ fetch. Note push coverage is route-crossing by design (BE decides targets
 from `active_routes`), so the 3 km proximity poll still covers near-but-
 off-route hazards — neither side is redundant.
 
+## Route freshness and silent re-touch
+
+A displayed-but-not-navigating route is a snapshot: `active_routes` TTL is
+30 min, so push coverage lapses past it with no server signal. The route
+card shows `Live alerts · <age>` while fresh and `Alerts paused — tap to
+refresh` past 25 min (`routeFresh.ts`), and tapping re-fires the quiet
+refetch (which re-arms the TTL as a side effect). While the Route tab stays
+focused **and the app is foregrounded**, the same quiet refetch fires on its
+own every 20 min for up to an hour per solved route — never in background,
+so parked phones can't become phantom trips that keep matching flags. Past
+the cap the chip falls back to paused and one tap resumes a fresh window.
+
 ## Hazard card and type system
 
-`components/hazardStyle.ts` maps each type to an icon + color (accident red,
+`components/flags/hazardStyle.ts` maps each type to an icon + color (accident red,
 flood blue, obstruction amber), shared by the nav card, the alert modal, and
 the detail sheet. The nav card sits above the distance/ETA bar, shows the
 nearest upcoming warning (or the focused one while cycling, tap cycles too)
@@ -89,7 +101,12 @@ along-route progress (computed server-side in `lineStringHitsCircles`).
 
 `services/sound.ts` on `expo-audio`: `hazard` / `reroute` / `arrived` WAVs
 in `assets/sound/` (`silence.wav` feeds the duck hold), duck-others audio
-mode so chimes cut through music. Voice holds ducking through a looped
+mode so chimes cut through music. Players are warmed at app start
+(`PushSync`) **and on navigation entry** — `unloadEventSounds` destroys them
+on nav exit, so without the nav warm the first hazard of every trip would
+play cold (creation + immediate play on an undecoded buffer silently no-ops).
+Warm seeks each player to force the decode; `playEventSound` then reuses the
+ready player. Voice holds ducking through a looped
 silent track started per utterance and released on done/stop/error plus a
 length-based force release — a stuck duck is impossible by construction.
 Mute governs speech only; event sounds always fire. One event, one sound:

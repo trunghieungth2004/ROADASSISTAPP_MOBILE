@@ -1,13 +1,15 @@
 import type {RefObject} from "react";
-import {useEffect, useRef, useState, type MutableRefObject} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
+import {useEffect, useMemo, useRef, useState, type MutableRefObject} from "react";
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme, type PanResponderInstance} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/ui/AppText";
-import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, Map, Marker, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/map/StyledLayer";
 import {bundledMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
+import MapStyleVeil from "../../components/map/MapStyleVeil";
+import {useStyleVeil} from "../../components/map/useStyleVeil";
 import {Fab} from "../../components/ui/Fab";
 import {FAB_SIZE} from "./fabLayout";
 import type {AppTheme} from "../../theme";
@@ -16,6 +18,7 @@ import type {RouteOption} from "../../api/routes";
 import {HCMC_CENTER, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
 import {pointFeature} from "./routeGeo";
 import {pillMeta} from "./routeSummary";
+import RouteMidPill from "./RouteMidPill";
 import RouteFlags from "./RouteFlags";
 import type {Flag} from "../../api/flags";
 
@@ -52,7 +55,9 @@ type Props = {
 };
 
 export default function RouteMapView(props: Props) {
-  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
+  const scheme = useColorScheme();
+  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const {t, theme} = props;
   const insets = useSafeAreaInsets();
   const touchRef = useRef({stamp: 0});
@@ -73,14 +78,14 @@ export default function RouteMapView(props: Props) {
           if (e.nativeEvent.touches.length > 1) touchRef.current = {stamp: Date.now()};
         }}
       >
-      <Map style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => props.onMapReady()}>
+      <Map style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => { props.onMapReady(); onStyleLoaded(); }}>
         <Camera ref={props.cameraRef} initialViewState={{center: HCMC_CENTER, zoom: 13}} />
         <Images images={{
-          "a-dot": require("../../../assets/map/a-dot.png"),
-          "b-dot": require("../../../assets/map/b-dot.png"),
-          "stop-dot": require("../../../assets/map/stop-dot.png"),
-          "handle2-dot": require("../../../assets/map/handle2-dot.png"),
-          "pin-preview": require("../../../assets/map/pin-preview.png"),
+          "a-dot": require("../../../assets/map/route/a-dot.png"),
+          "b-dot": require("../../../assets/map/route/b-dot.png"),
+          "stop-dot": require("../../../assets/map/route/stop-dot.png"),
+          "handle2-dot": require("../../../assets/map/route/handle2-dot.png"),
+          "pin-preview": require("../../../assets/map/hazards/pin-preview.png"),
         }} />
         <FlagPinImages />
         {props.routes.map((r, i) => i === props.selectedIndex ? null : (
@@ -121,10 +126,22 @@ export default function RouteMapView(props: Props) {
             <StyledLayer type="symbol" id="reshape-handle-icon" style={{iconImage: "handle2-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
+        {props.result && props.selectedMid && !props.dragging && !props.pickingFor ? (
+          <Marker
+            key="route-mid-pill"
+            id="route-mid-pill"
+            lngLat={[props.selectedMid[0], props.selectedMid[1]]}
+            anchor="bottom"
+            offset={[0, -20]}
+          >
+            <RouteMidPill theme={theme} label={`${((props.result.distanceMeters ?? 0) / 1000).toFixed(1)} ${t.route.km} · ${Math.round((props.result.durationSeconds ?? 0) / 60)} ${t.route.min}`} />
+          </Marker>
+        ) : null}
         <RouteFlags camRef={props.flagCamRef} token={props.flagsToken} refreshKey={props.flagsKey} onPick={props.onPickFlag} subscribeRegionDid={props.subscribeRegionDid} />
       </Map>
+        <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
       </View>
-      {props.routes.length > 1 ? (
+      {props.routes.length >= 1 ? (
         <View style={[styles.topBar, {top: insets.top + 12}]}>
           <ScrollView ref={pillScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topBarContent}>
             {props.routes.map((r, i) => {

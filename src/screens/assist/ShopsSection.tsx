@@ -6,6 +6,7 @@ import type {AppTheme} from "../../theme";
 import type {Provider} from "../../api/providers";
 import type {RouteOption} from "../../api/routes";
 import StatusRow from "../../components/ui/StatusRow";
+import ShopClassIcons, {classIconLabel} from "./ShopClassIcons";
 
 type Props = {
   t: Strings;
@@ -32,21 +33,30 @@ export default function ShopsSection(props: Props) {
   const {t, theme} = props;
   return (
     <View style={styles.wrap}>
-      <TextInput
-        style={[styles.input, {borderColor: theme.border, color: theme.text}]}
-        placeholder={t.shop.searchPlaceholder}
-        placeholderTextColor={theme.muted}
-        value={props.query}
-        onChangeText={props.onQuery}
-        accessibilityLabel={t.shop.searchPlaceholder}
-      />
+      <View style={styles.filterRow}>
+        <TextInput
+          style={[styles.input, styles.halfInput, {borderColor: theme.border, color: theme.text}]}
+          placeholder={t.shop.searchPlaceholder}
+          placeholderTextColor={theme.muted}
+          value={props.query}
+          onChangeText={props.onQuery}
+          accessibilityLabel={t.shop.searchPlaceholder}
+        />
+        <Pressable style={[styles.radiusCycle, styles.halfCycle, {borderColor: theme.border}]} onPress={props.onCycleRadius} accessibilityRole="button" accessibilityLabel={props.radiusLabel}>
+          <MaterialIcons name="directions-walk" size={18} color={theme.primary} />
+          <Text style={[styles.radiusCycleText, {color: theme.text}]} numberOfLines={1}>{props.radiusLabel}</Text>
+        </Pressable>
+      </View>
       {props.searching ? (
         props.searchBusy ? (
           <StatusRow theme={theme} text={t.common.loading} />
         ) : (
           props.searchResults.map((shop) => (
             <Pressable key={shop.id} style={[styles.row, {borderColor: theme.border}]} onPress={() => props.onPickSearch(shop.id)} accessibilityRole="button" accessibilityLabel={shop.name}>
-              <Text style={[styles.name, {color: theme.text}]}>{shop.name}</Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, {color: theme.text}]}>{shop.name}</Text>
+                <ShopClassIcons theme={theme} shop={shop} label={classIconLabel(shop, t)} size={14} />
+              </View>
               {typeof shop.distance === "number" ? <Text style={[styles.coords, {color: theme.muted}]}>{(shop.distance / 1000).toFixed(1)} {t.route.km}</Text> : null}
               <Text style={[styles.badge, {color: shop.openNow === false ? theme.danger : shop.openNow === true ? theme.primary : theme.muted}]}>
                 {shop.openNow === false ? t.shop.closed : shop.openNow === true ? t.shop.open : t.shop.unknownHours}
@@ -56,10 +66,6 @@ export default function ShopsSection(props: Props) {
         )
       ) : (
         <>
-          <Pressable style={[styles.radiusCycle, {borderColor: theme.border}]} onPress={props.onCycleRadius} accessibilityRole="button" accessibilityLabel={props.radiusLabel}>
-            <MaterialIcons name="directions-walk" size={18} color={theme.primary} />
-            <Text style={[styles.radiusCycleText, {color: theme.text}]}>{props.radiusLabel}</Text>
-          </Pressable>
           {props.shopSel ? (
             <View style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
               <View style={styles.selectedRow}>
@@ -90,9 +96,13 @@ export default function ShopsSection(props: Props) {
 
 const styles = StyleSheet.create({
   wrap: {gap: 8},
+  filterRow: {flexDirection: "row", gap: 8},
+  halfInput: {flex: 1, minWidth: 0},
+  halfCycle: {flex: 1, justifyContent: "center"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   row: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 4},
-  name: {fontWeight: "700"},
+  name: {fontWeight: "700", flex: 1},
+  nameRow: {flexDirection: "row", alignItems: "center", gap: 8},
   coords: {fontSize: 12},
   badge: {fontSize: 12, fontWeight: "700"},
   radiusCycle: {flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12},

@@ -20,6 +20,17 @@ export function statusTone(status: string): StatusTone {
   return "active";
 }
 
+export function statusPillColor(status: string, theme: {primary: string; success: string; danger: string; muted: string}): string {
+  if (status === DISPATCH_STATUS.RESOLVED) return theme.success;
+  if (status === DISPATCH_STATUS.READY) return "#0d9488";
+  if (status === DISPATCH_STATUS.MATCHED) return theme.primary;
+  if (status === DISPATCH_STATUS.ARRIVED) return "#0284c7";
+  if (status === DISPATCH_STATUS.IN_PROGRESS) return "#d97706";
+  if (status === DISPATCH_STATUS.PENDING) return "#f59e0b";
+  if (status === DISPATCH_STATUS.DECLINED) return theme.danger;
+  return theme.muted;
+}
+
 export function statusStages(ticketType: string): string[] {
   if (ticketType === "WALK_IN") {
     return [

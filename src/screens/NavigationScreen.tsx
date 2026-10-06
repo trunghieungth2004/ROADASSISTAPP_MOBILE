@@ -30,7 +30,7 @@ import FlagDetailSheet from "../components/flags/FlagDetailSheet";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
 import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHazardPush, type HazardPushData} from "../services/push";
-import {playEventSound} from "../services/sound";
+import {playEventSound, warmAudio} from "../services/sound";
 import Snack from "../components/ui/Snack";
 import {pickFeedback} from "../components/ui/feedback";
 import FlagReportDialog from "../components/flags/FlagReportDialog";
@@ -88,6 +88,9 @@ export default function NavigationScreen() {
 
 function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, onExit}: Props) {
   useKeepAwake();
+  useEffect(() => {
+    void warmAudio();
+  }, []);
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();

@@ -16,7 +16,7 @@ import MapPickOverlay from "../components/map/MapPickOverlay";
 import ShopHoursEditor from "../components/providers/ShopHoursEditor";
 import Overlay from "../components/overlay/Overlay";
 
-export type ShopDraft = {name: string; lat: number; lng: number; label?: string; openHours?: string};
+export type ShopDraft = {name: string; lat: number; lng: number; label?: string; openHours?: string; vehicleClasses?: string[]};
 
 export type TowDraft = {name: string; plate: string; vehicleType: string; width: string; lat: number; lng: number};
 
@@ -54,6 +54,16 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [shopMap, setShopMap] = useState(false);
   const [week, setWeek] = useState<WeekHours>(() => emptyWeek());
   const [hoursOpen, setHoursOpen] = useState(false);
+  const [shopClasses, setShopClasses] = useState<string[]>(["SOLO_BIKE", "CAR"]);
+  function toggleShopClass(cls: string): void {
+    setShopClasses((prev) => {
+      if (prev.includes(cls)) {
+        const next = prev.filter((c) => c !== cls);
+        return next.length > 0 ? next : prev;
+      }
+      return [...prev, cls];
+    });
+  }
   function setDay(day: Day, patch: {enabled?: boolean; open?: string; close?: string}): void {
     setWeek((prev) => ({...prev, [day]: {...prev[day], ...patch}}));
   }
@@ -112,7 +122,7 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
         setFieldError(t.provider.invalidHours);
         return;
       }
-      shop = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {}), ...(hours ? {openHours: hours} : {})};
+      shop = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {}), ...(hours ? {openHours: hours} : {}), vehicleClasses: shopClasses};
     }
     let tow: TowDraft | null = null;
     if (towOpen) {
@@ -174,6 +184,16 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
             <Pressable disabled={busy} onPress={() => setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
               <Text style={{color: shopPoint ? theme.text : theme.muted}} numberOfLines={1}>{shopPoint ? (shopPoint.label ?? formatPoint(shopPoint.lat, shopPoint.lng)) : t.provider.addressUnset}</Text>
             </Pressable>
+            <View style={styles.row}>
+              {[{id: "SOLO_BIKE", label: t.shop.vehicleBike}, {id: "CAR", label: t.shop.vehicleCar}].map((c) => {
+                const selected = shopClasses.includes(c.id);
+                return (
+                  <Pressable key={c.id} disabled={busy} onPress={() => toggleShopClass(c.id)} style={[styles.chip, {borderColor: theme.primary}, selected && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: selected}} accessibilityLabel={c.label}>
+                    <Text style={{color: selected ? "#fff" : theme.text}}>{c.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <Pressable disabled={busy} onPress={() => setHoursOpen(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.hours}>
               <Text style={{color: hoursSummary ? theme.text : theme.muted}} numberOfLines={1}>{hoursSummary ? `${t.provider.hours} — ${hoursSummary}` : `${t.provider.hours} — ${t.provider.hoursNotSet}`}</Text>
             </Pressable>

@@ -1,10 +1,12 @@
 import type {RefObject} from "react";
-import {useState} from "react";
-import {StyleSheet} from "react-native";
+import {useMemo} from "react";
+import {StyleSheet, useColorScheme} from "react-native";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/map/StyledLayer";
 import {bundledMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
+import MapStyleVeil from "../../components/map/MapStyleVeil";
+import {useStyleVeil} from "../../components/map/useStyleVeil";
 import type {AppTheme} from "../../theme";
 import type {RouteOption} from "../../api/routes";
 import type {Flag} from "../../api/flags";
@@ -36,11 +38,14 @@ type Props = {
 };
 
 export default function NavMapView(props: Props) {
-  const [mapStyle] = useState(() => bundledMapStyle() ?? "https://demotiles.maplibre.org/style.json");
+  const scheme = useColorScheme();
+  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
   const {theme} = props;
+  const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const coords = props.route.geometry.coordinates;
   const b = coords.length > 0 ? coords[coords.length - 1] : null;
   return (
+    <>
     <Map
       style={StyleSheet.absoluteFill}
       mapStyle={mapStyle}
@@ -48,9 +53,10 @@ export default function NavMapView(props: Props) {
       attribution={false}
       androidView="texture"
       onRegionIsChanging={(e: unknown) => props.onRegionChanging(e)}
+      onDidFinishLoadingStyle={onStyleLoaded}
     >
       <Camera ref={props.cameraRef} initialViewState={{center: props.initialCenter, zoom: 13}} />
-        <Images images={{"nav-arrow": require("../../../assets/map/nav-arrow.png"), "b-dot": require("../../../assets/map/b-dot.png")}} />
+        <Images images={{"nav-arrow": require("../../../assets/map/navigation/nav-arrow.png"), "b-dot": require("../../../assets/map/route/b-dot.png")}} />
         <FlagPinImages />
       {props.pos ? (
         <GeoJSONSource id="nav-puck" data={{type: "Feature", geometry: {type: "Point", coordinates: [props.pos.lng, props.pos.lat]}, properties: {}}}>
@@ -91,5 +97,7 @@ export default function NavMapView(props: Props) {
       ) : null}
         <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} forceKey={props.flagsForceKey} seedFlags={props.flagsSeeds} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />
     </Map>
+    <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
+    </>
   );
 }

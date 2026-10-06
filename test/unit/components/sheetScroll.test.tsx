@@ -217,3 +217,38 @@ test("save route dialog pins its save without a scroller", () => {
   expect(scrollViews(rendered).length).toBe(0);
   rendered.unmount();
 });
+
+test("onboarding shop form toggles vehicle classes keeping one", () => {
+  const rendered = mount(
+    <Overlay visible variant="fullScreen" closeLabel={en.common.cancel} onClose={() => undefined}>
+      <OnboardingScreen
+        t={en}
+        lang="en"
+        token={null}
+        onFinish={() => undefined}
+        onSkip={() => undefined}
+      />
+    </Overlay>,
+  );
+  const {act} = require("react-test-renderer");
+  const subtreeText = (node: {findAll: (p: (n: {props?: {children?: unknown}}) => boolean) => {props?: {children?: unknown}}[]}): string =>
+    node.findAll((n) => typeof n.props?.children === "string" || Array.isArray(n.props?.children)).map((n) => (Array.isArray(n.props?.children) ? (n.props.children as unknown[]).join("") : String(n.props?.children ?? ""))).join(" ");
+  const shopOption = rendered.root.findAll((n) => typeof n.props?.onPress === "function").find((n) => subtreeText(n as never).includes(`${en.roles.shop} — ${en.roles.shopHint}`));
+  expect(shopOption).toBeDefined();
+  act(() => {
+    shopOption?.props.onPress();
+  });
+  const chip = (label: string) => rendered.root.findAll((n) => n.props?.accessibilityLabel === label).find((n) => typeof n.props?.onPress === "function");
+  expect(chip(en.shop.vehicleBike)?.props.accessibilityState?.checked).toBe(true);
+  expect(chip(en.shop.vehicleCar)?.props.accessibilityState?.checked).toBe(true);
+  act(() => {
+    chip(en.shop.vehicleCar)?.props.onPress();
+  });
+  expect(chip(en.shop.vehicleBike)?.props.accessibilityState?.checked).toBe(true);
+  expect(chip(en.shop.vehicleCar)?.props.accessibilityState?.checked).toBe(false);
+  act(() => {
+    chip(en.shop.vehicleBike)?.props.onPress();
+  });
+  expect(chip(en.shop.vehicleBike)?.props.accessibilityState?.checked).toBe(true);
+  rendered.unmount();
+});

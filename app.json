@@ -3,9 +3,6 @@
     "name": "RoadAssist",
     "slug": "roadassistapp-mobile",
     "version": "0.1.0",
-    "extra": {
-      "apiUrl": "https://asia-southeast1-roadassistapp-c2e37.cloudfunctions.net/api"
-    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

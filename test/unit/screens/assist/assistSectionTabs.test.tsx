@@ -15,7 +15,6 @@ async function render(tabs: {id: string; label: string}[], selected: string, onC
 
 const TABS = [
   {id: "request", label: en.assist.sectionRequest},
-  {id: "shops", label: en.assist.sectionShops},
   {id: "records", label: en.assist.sectionRecords},
 ];
 
@@ -23,7 +22,7 @@ test("tabs expose tab roles with selected state", async () => {
   const renderer = await render(TABS, "request", () => undefined);
   try {
     const tabs = renderer.root.findAll((n) => n.props?.accessibilityRole === "tab" && typeof n.props?.onPress === "function");
-    expect(tabs).toHaveLength(3);
+    expect(tabs).toHaveLength(2);
     const selected = tabs.filter((n) => n.props.accessibilityState?.selected === true);
     expect(selected).toHaveLength(1);
     expect(selected[0]?.props.accessibilityLabel).toBe(en.assist.sectionRequest);
@@ -36,13 +35,13 @@ test("tapping a tab reports its id", async () => {
   const onChange = jest.fn();
   const renderer = await render(TABS, "request", onChange);
   try {
-    const shops = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.sectionShops);
-    const pressable = shops.find((n) => typeof n.props?.onPress === "function");
+    const records = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.sectionRecords);
+    const pressable = records.find((n) => typeof n.props?.onPress === "function");
     expect(pressable).toBeDefined();
     await act(async () => {
       await pressable?.props.onPress();
     });
-    expect(onChange).toHaveBeenCalledWith("shops");
+    expect(onChange).toHaveBeenCalledWith("records");
   } finally {
     renderer.unmount();
   }

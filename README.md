@@ -19,10 +19,10 @@ cannot run this app (native modules: MapLibre, notifications, audio, tasks).
 ## Project Map
 
 - `src/screens/RouteScreen.tsx` — planner: search, stops, route options,
-  flags, saved routes; hosts navigation as a modal.
+  flags, saved routes; hands off to navigation via `NavSessionContext`.
 - `src/screens/NavigationScreen.tsx` + `src/screens/navigation/` —
   follow-mode nav: tracking hook, voice, turn list, flags, hazard focus.
-- `src/screens/{Home,Hazards,Assist,Vehicle,More}Screen.tsx` — tabs;
+- `src/screens/{Hazards,Assist,Vehicle,More}Screen.tsx` — tabs;
   More holds permissions, diagnostics, and sign-out.
 - `src/services/` — `push` (FCM), `sound` (earcons + voice ducking),
   `bgNav` (background task), `permissions`, `diagnostics`, `navigation`,
