@@ -11,6 +11,7 @@ export function ticketStatusLabel(status: string, t: Strings): string {
   if (status === DISPATCH_STATUS.IN_PROGRESS) return t.assist.statusInProgress;
   if (status === DISPATCH_STATUS.READY) return t.assist.statusReady;
   if (status === DISPATCH_STATUS.DECLINED) return t.assist.statusDeclined;
+  if (status === DISPATCH_STATUS.QUOTED) return t.assist.statusQuoted;
   return t.assist.statusPending;
 }
 
@@ -28,6 +29,7 @@ export function statusPillColor(status: string, theme: {primary: string; success
   if (status === DISPATCH_STATUS.IN_PROGRESS) return "#d97706";
   if (status === DISPATCH_STATUS.PENDING) return "#f59e0b";
   if (status === DISPATCH_STATUS.DECLINED) return theme.danger;
+  if (status === DISPATCH_STATUS.QUOTED) return "#8b5cf6";
   return theme.muted;
 }
 
@@ -36,6 +38,7 @@ export function statusStages(ticketType: string): string[] {
     return [
       DISPATCH_STATUS.PENDING,
       DISPATCH_STATUS.MATCHED,
+      DISPATCH_STATUS.QUOTED,
       DISPATCH_STATUS.IN_PROGRESS,
       DISPATCH_STATUS.READY,
       DISPATCH_STATUS.RESOLVED,

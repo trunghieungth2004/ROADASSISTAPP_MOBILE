@@ -12,8 +12,6 @@ import {MAX_STOPS, type Point, type SearchField, type Stop} from "./types";
 import {vehicleIcon} from "./routeGeo";
 import {useStopLabels} from "./useStopLabels";
 import {vehicleButtonState} from "../../components/vehicles/vehicleButtonState";
-import {timeAgoLabel} from "../hazards/hazardFilter";
-import {isRouteStale} from "./routeFresh";
 
 type Props = {
   t: Strings;
@@ -31,24 +29,18 @@ type Props = {
   starting: boolean;
   hazardZones: HazardZone[];
   widthBlocks: WidthBlock[];
-  checkedAt: number | null;
-  nowMs: number;
-  checking: boolean;
   onOpenSearch: (field: SearchField) => void;
   onSwap: () => void;
   onDeleteStop: (index: number) => void;
   onOpenVehicle: () => void;
   onStart: () => void;
   onSave: () => void;
-  onRefreshAlerts: () => void;
 };
 
 export default function RouteCard(props: Props) {
   const {t, theme} = props;
   const stopLabels = useStopLabels(props.stops, props.lang);
   const vehicleState = vehicleButtonState(props.hasVehicles, props.activeVehicle !== null);
-  const stale = props.result ? isRouteStale(props.checkedAt, props.nowMs) : false;
-  const ago = props.result && props.checkedAt !== null ? timeAgoLabel(new Date(props.checkedAt).toISOString(), props.nowMs, t.hazards) : null;
   const canAddStop = props.stops.length < MAX_STOPS;
   return (
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
@@ -108,14 +100,6 @@ export default function RouteCard(props: Props) {
         </View>
       ) : null}
       <Text style={[styles.attribution, {color: theme.muted}]}>{t.route.geoAttribution}</Text>
-      {props.result ? (
-        <Pressable style={styles.freshRow} onPress={props.onRefreshAlerts} disabled={props.checking} accessibilityRole="button" accessibilityLabel={stale ? t.route.alertsPaused : t.route.liveAlerts}>
-          {props.checking ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name={stale ? "cloud-off" : "cloud-done"} size={16} color={stale ? theme.danger : theme.primary} />}
-          <Text style={[styles.freshText, {color: stale ? theme.danger : theme.muted}]}>
-            {stale ? t.route.alertsPaused : ago ? `${t.route.liveAlerts} · ${ago}` : t.route.liveAlerts}
-          </Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -147,6 +131,4 @@ const styles = StyleSheet.create({
   warnBox: {gap: 2},
   warnTitle: {fontSize: 13, fontWeight: "700"},
   attribution: {fontSize: 10, textAlign: "right"},
-  freshRow: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 2},
-  freshText: {fontSize: 11, textAlign: "center"},
 });

@@ -9,20 +9,22 @@ test("ticket titles use translated labels", () => {
 });
 
 test("unknown codes fall back without inventing copy", () => {
-  expect(ticketTitle({ticketType: "WARP", status: "9"}, en)).toBe("WARP · Pending");
+  expect(ticketTitle({ticketType: "WARP", status: "0"}, en)).toBe("WARP · Pending");
 });
 
 test("new statuses resolve to translated labels", () => {
   expect(ticketStatusLabel("6", en)).toBe(en.assist.statusInProgress);
   expect(ticketStatusLabel("7", en)).toBe(en.assist.statusReady);
   expect(ticketStatusLabel("8", en)).toBe(en.assist.statusDeclined);
+  expect(ticketStatusLabel("9", en)).toBe(en.assist.statusQuoted);
   expect(statusTone("4")).toBe("done");
   expect(statusTone("7")).toBe("done");
   expect(statusTone("5")).toBe("failed");
   expect(statusTone("8")).toBe("failed");
   expect(statusTone("1")).toBe("active");
   expect(statusTone("6")).toBe("active");
-  expect(statusStages("WALK_IN")).toEqual(["1", "2", "6", "7", "4"]);
+  expect(statusTone("9")).toBe("active");
+  expect(statusStages("WALK_IN")).toEqual(["1", "2", "9", "6", "7", "4"]);
   expect(statusStages("SOS")).toEqual(["1", "2", "3", "4"]);
   expect(stageLabel("WALK_IN", "2", en)).toBe(en.assist.statusAccepted);
   expect(stageLabel("SOS", "2", en)).toBe(en.assist.statusMatched);
@@ -43,4 +45,5 @@ test("status pills carry one color per status", () => {
   expect(statusPillColor("4", theme)).toBe("#s");
   expect(statusPillColor("5", theme)).toBe("#m");
   expect(statusPillColor("8", theme)).toBe("#d");
+  expect(statusPillColor("9", theme)).toBe("#8b5cf6");
 });

@@ -12,6 +12,7 @@ export const DISPATCH_STATUS = {
   IN_PROGRESS: "6",
   READY: "7",
   DECLINED: "8",
+  QUOTED: "9",
 } as const;
 
 export type DispatchStatusCode = (typeof DISPATCH_STATUS)[keyof typeof DISPATCH_STATUS];
@@ -34,6 +35,7 @@ export type FeedTicket = DispatchTicket & {
     openNow?: boolean;
     ratingAvg?: number;
     ratingCount?: number;
+    phone?: string;
   } | null;
   statusHistory?: {status: string; at: string; by: string}[];
 };
@@ -160,6 +162,18 @@ export type WorkOrderPayload = {
 
 export async function updateWorkOrder(payload: WorkOrderPayload, token: string): Promise<{updated: number}> {
   const res = await api.post<{updated: number}>("/dispatch/work", payload, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string): Promise<{quoted: boolean}> {
+  const res = await api.post<{quoted: boolean}>("/dispatch/quote", {ticketId, quotedAmount, ...(workType ? {workType} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function approveQuote(ticketId: string, token: string): Promise<{approved: boolean}> {
+  const res = await api.post<{approved: boolean}>("/dispatch/quote/approve", {ticketId}, token);
   bustTicketCaches(token);
   return res;
 }

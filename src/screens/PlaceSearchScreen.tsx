@@ -4,7 +4,8 @@ import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppTe
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import {usePlaceSearch, type Place} from "../components/place-search";
+import {usePlaceSearch, type Place, type PlaceSearch, type ShopFetcher} from "../components/place-search";
+import type {PlaceSource} from "../components/place-search/PlaceSearch.types";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import {darkTheme, lightTheme} from "../theme";
@@ -27,21 +28,23 @@ const CATEGORY_ICONS: Record<string, ComponentProps<typeof MaterialIcons>["name"
 
 function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
   if (item.source === "saved") return "bookmark";
+  if (item.source === "shop") return "storefront";
   if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
   return "place";
 }
-type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onClose: () => void};
-export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onClose}: Props) {
+type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void};
+export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onClose, search: provided, shops, sources, mapFilter, query, onQuery}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const search = usePlaceSearch({token, lang});
+  const internal = usePlaceSearch({token, lang, shops, sources, mapFilter, query, onQuery});
+  const search = provided ?? internal;
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const grouped: {header: string | null; item: Place}[] = [];
   let last: string | null = null;
   for (const p of search.options) {
-    const header = p.source === "saved" ? t.route.savedPlaces : p.source === "directory" ? t.route.directory : t.route.mapResults;
+    const header = p.source === "saved" ? t.route.savedPlaces : p.source === "directory" ? t.route.directory : p.source === "shop" ? t.shop.sectionRegistered : t.route.mapResults;
     grouped.push({header: header === last ? null : header, item: p});
     last = header;
   }
@@ -67,7 +70,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
         <Pressable style={[styles.closeBtn, {backgroundColor: theme.danger}]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t.common.close}><MaterialIcons name="close" size={20} color="#fff" /></Pressable>
         <View style={styles.searchCol}>
           <Text style={[styles.title, {color: theme.text}]}>{title}</Text>
-          <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={placeholder} placeholderTextColor={theme.muted} value={search.input} onChangeText={search.handleInput} autoFocus />
+          <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={placeholder} placeholderTextColor={theme.muted} value={search.input} onChangeText={search.handleInput} accessibilityLabel={placeholder} autoFocus />
         </View>
       </View>
       {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
@@ -88,7 +91,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
       <FlatList style={styles.results} data={grouped} keyExtractor={(row) => `${row.item.source}:${row.item.label}:${row.item.lat},${row.item.lng}`} keyboardShouldPersistTaps="handled" renderItem={({item: row}) => (
         <View>
           {row.header ? <Text style={[styles.header, {color: theme.muted}]}>{row.header}</Text> : null}
-          <Pressable style={styles.row} onPress={() => { search.select(row.item); onPick(row.item); }}>
+          <Pressable style={styles.row} onPress={() => { search.select(row.item); onPick(row.item); }} accessibilityRole="button" accessibilityLabel={row.item.label}>
             <MaterialIcons name={resultIcon(row.item)} size={20} color={theme.primary} />
             <Text style={[styles.rowText, {color: theme.text}]}>{row.item.label}</Text>
           </Pressable>

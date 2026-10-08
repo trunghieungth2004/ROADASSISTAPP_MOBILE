@@ -63,6 +63,8 @@ export function searchProviders(lat: number, lng: number, query: string, token: 
 export type ProviderRating = {
   id: string;
   score: number;
+  text?: string | null;
+  byUserName?: string | null;
   reply?: string | null;
   repliedAt?: string | null;
   createdAt?: string;
@@ -72,6 +74,7 @@ export type ProviderRatings = {
   ratings: ProviderRating[];
   avg: number;
   count: number;
+  completedJobs: number;
 };
 
 export function providerRatings(providerId: string, token: string): Promise<ProviderRatings> {

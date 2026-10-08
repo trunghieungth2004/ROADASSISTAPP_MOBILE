@@ -7,6 +7,7 @@ export type SubmitRatingPayload = {
   targetKind: RatingTargetKind;
   ticketId: string;
   score: number;
+  text?: string;
 };
 
 export type RatingSummary = {
@@ -27,9 +28,13 @@ export type UserRating = {
   id: string;
   targetId?: string;
   targetKind?: string;
+  byUserId?: string;
+  byUserName?: string | null;
   score: number;
-  ticketId?: string;
+  text?: string | null;
   reply?: string | null;
+  repliedByName?: string | null;
+  ticketId?: string;
   repliedAt?: string | null;
   createdAt?: string;
 };

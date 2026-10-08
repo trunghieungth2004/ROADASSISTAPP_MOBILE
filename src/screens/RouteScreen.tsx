@@ -13,6 +13,7 @@ import {formatPoint, reverseLabel} from "../api/places";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search";
+import {fetchShopPlaces} from "../components/place-search/shopMerge";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
@@ -43,7 +44,7 @@ import VehiclePickerSheet from "../components/vehicles/VehiclePickerSheet";
 import {Fab, FabColumn} from "../components/ui/Fab";
 import {FAB_SIZE, rightColumnBottom} from "./route/fabLayout";
 import {snackBottom} from "../components/ui/snackOffset";
-import {ROUTE_RETOUCH_MS, touchCapReached} from "./route/routeFresh";
+import {ROUTE_RETOUCH_MS, isRouteStale, pausedSnackKey, touchCapReached} from "./route/routeFresh";
 
 export default function RouteScreen() {
   const {t, lang} = useStrings();
@@ -98,6 +99,19 @@ export default function RouteScreen() {
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [checking, setChecking] = useState(false);
+  const [dismissedPausedKey, setDismissedPausedKey] = useState<number | null>(null);
+  const pausedKey = (() => {
+    const key = pausedSnackKey(checkedAt, result !== null);
+    if (key === null) return null;
+    if (!isRouteStale(checkedAt, nowMs)) return null;
+    if (key === dismissedPausedKey) return null;
+    return key;
+  })();
+  function onRefreshAlertsQuiet(): void {
+    if (checking) return;
+    setChecking(true);
+    void quietRef.current().finally(() => setChecking(false));
+  }
   const [appActive, setAppActive] = useState(true);
   const [retouchStart, setRetouchStart] = useState<number | null>(null);
   const HAZARD_HIGHLIGHT_HALF = 80;
@@ -685,14 +699,6 @@ export default function RouteScreen() {
           onOpenVehicle={() => setVehicleOpen(true)}
           onStart={() => void onStart()}
           onSave={() => void onSave()}
-          checkedAt={checkedAt}
-          nowMs={nowMs}
-          checking={checking}
-          onRefreshAlerts={() => {
-            if (checking) return;
-            setChecking(true);
-            void quietRef.current().finally(() => setChecking(false));
-          }}
         />
         </View>
       </View>
@@ -711,6 +717,7 @@ export default function RouteScreen() {
               lang={lang}
               title={searchingFor === "origin" ? t.route.origin : searchingFor === "destination" ? t.route.destination : t.route.stop}
               placeholder={searchingFor === "origin" ? t.route.searchOrigin : searchingFor === "destination" ? t.route.searchDestination : t.route.searchStop}
+              shops={searchingFor === "destination" && token && gpsPos ? async (q) => fetchShopPlaces(q, token, gpsPos) : undefined}
               onPick={onPickPlace}
               onPickOnMap={() => {
                 const f = searchingFor;
@@ -754,11 +761,16 @@ export default function RouteScreen() {
                 ? t.route.pickOnMap
                 : flagMode && !flagPoint
                   ? t.route.flagHint
-                  : null
+                  : pausedKey !== null
+                    ? t.route.alertsPaused
+                    : null
           }
           sticky
           bottom={snackBottom(insets.bottom)}
-          onHide={() => {}}
+          action={pausedKey !== null && !drag.dragging && !pickingFor && !(flagMode && !flagPoint) ? {label: t.assist.refresh, onPress: () => void onRefreshAlertsQuiet()} : undefined}
+          onHide={() => {
+            if (pausedKey !== null) setDismissedPausedKey(pausedKey);
+          }}
         />
       )}
       {flagPoint ? (

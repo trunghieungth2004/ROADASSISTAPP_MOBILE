@@ -51,3 +51,4 @@ test("bundledMapStyle defaults to light and switches on scheme", () => {
   expect(backgroundOf(bundledMapStyle())).toEqual(backgroundOf(buildMapStyle("x", "light")));
   expect(backgroundOf(bundledMapStyle("dark"))).not.toEqual(backgroundOf(bundledMapStyle("light")));
 });
+

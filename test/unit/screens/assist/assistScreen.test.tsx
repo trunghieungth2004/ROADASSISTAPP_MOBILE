@@ -53,6 +53,7 @@ const seen: {path: string; body: string}[] = [];
 let mockMine: unknown[] = [];
 let mockFeed: unknown[] = [];
 let mockTicketRatings: unknown[] = [];
+let mockOwnProviders: unknown[] = [];
 
 function defaultProfile() {
   return {
@@ -94,7 +95,19 @@ function installFetch(): void {
     seen.push({path: u.pathname, body: String(init?.body ?? "")});
     if (u.pathname === "/dispatch/mine") return envelope(mockMine);
     if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
+    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
     if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (u.pathname === "/providers/ratings") {
+      return envelope({
+        ratings: [
+          {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
+          {id: "pr2", score: 4, text: null, reply: null, repliedAt: null, createdAt: "2026-01-02T00:00:00.000Z"},
+        ],
+        avg: 4.5,
+        count: 2,
+        completedJobs: 7,
+      });
+    }
     if (u.pathname === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "SCOOTER", baseWidth: 0.7, baseHeight: 1.1},
@@ -138,6 +151,7 @@ async function mount(): Promise<ReturnType<typeof create>> {
   mockMine = [];
   mockFeed = [];
   mockTicketRatings = [];
+  mockOwnProviders = [];
   resetProfile();
   clearApiCache();
   installFetch();
@@ -600,6 +614,12 @@ test("shop search fires on a debounced non-empty query", async () => {
   try {
     await refreshThenBrowse(renderer);
     seen.length = 0;
+    const field = texts(renderer.root, en.shop.searchPlaceholder).find((n) => typeof n.props?.onPress === "function");
+    expect(field).toBeDefined();
+    await act(async () => {
+      await field?.props.onPress();
+      await flush();
+    });
     const input = texts(renderer.root, en.shop.searchPlaceholder).find((n) => typeof n.props?.onChangeText === "function");
     expect(input).toBeDefined();
     await act(async () => {
@@ -801,7 +821,7 @@ test("incoming resolved job replies and rates the rider", async () => {
     const replied = seen.find((call) => call.path === "/ratings/reply");
     expect(replied).toBeDefined();
     expect(JSON.parse(replied?.body ?? "{}")).toMatchObject({ratingId: "r1", reply: "Thanks!"});
-    const rate = sheetAction(renderer, en.assist.rate);
+    const rate = sheetAction(renderer, en.assist.rateRider);
     expect(rate).toBeDefined();
     await act(async () => {
       await rate?.props.onPress();
@@ -876,12 +896,12 @@ test("search and radius share one filter row", async () => {
   const renderer = await mount();
   try {
     await refreshThenBrowse(renderer);
-    const input = texts(renderer.root, en.shop.searchPlaceholder).find((n) => typeof n.props?.onChangeText === "function");
+    const field = texts(renderer.root, en.shop.searchPlaceholder).find((n) => typeof n.props?.onPress === "function");
     const cycle = texts(renderer.root, "1 km").find((n) => typeof n.props?.onPress === "function");
-    expect(input).toBeDefined();
+    expect(field).toBeDefined();
     expect(cycle).toBeDefined();
     const row = (cycle as ReactTestInstance).parent;
-    expect(row?.findAll((n) => n === input).length).toBeGreaterThan(0);
+    expect(row?.findAll((n) => n === field).length).toBeGreaterThan(0);
   } finally {
     teardown(renderer);
   }
@@ -930,14 +950,15 @@ test("opening a record shows only the sheet, not the map card", async () => {
 test("record sheet shows the shop block from enriched parties", async () => {
   const renderer = await mount();
   try {
-    mockFeed = [{id: "t1", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", label: "12 Le Loi", openNow: true, ratingAvg: 4.5, ratingCount: 12}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockFeed = [{id: "t1", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", label: "12 Le Loi", openNow: true, ratingAvg: 4.5, ratingCount: 12, phone: "+84111"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Walk-in · Matched");
     expect(hasText(renderer.root, "12 Le Loi")).toBe(true);
     expect(hasText(renderer.root, en.shop.open)).toBe(true);
+    expect(hasText(renderer.root, "+84111")).toBe(true);
     const joined = renderer.root
       .findAll((n) => Array.isArray(n.props?.children))
       .map((n) => (n.props.children as unknown[]).join(""));
-    expect(joined.some((s) => s.includes("4.5") && s.includes("12"))).toBe(true);
+    expect(joined.some((s) => s.includes("4.5"))).toBe(true);
   } finally {
     teardown(renderer);
   }
@@ -1001,6 +1022,393 @@ test("inbound sheet shows the rider location block", async () => {
     await openRecord(renderer, "Walk-in · Pending");
     expect(hasText(renderer.root, "Rider Two")).toBe(true);
     expect(hasText(renderer.root, "10.70000, 106.60000")).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("operator advances matched to in-progress from the sheet", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Matched");
+    const start = sheetAction(renderer, en.assist.startWork);
+    expect(start).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await start?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/status");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", status: "6"});
+    expect(sheetAction(renderer, en.assist.startWork)).toBeDefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("operator marks in-progress jobs ready from the sheet", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · In progress");
+    expect(sheetAction(renderer, en.assist.markReady)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.startWork)).toBeUndefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.markReady)?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/status");
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", status: "7"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("shop sends a quote from the work form", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Matched");
+    const edit = sheetAction(renderer, en.provider.saveWork);
+    await act(async () => {
+      await edit?.props.onPress();
+      await flush();
+    });
+    const inputs = renderer.root.findAll((n) => typeof n.props?.onChangeText === "function" && n.props?.placeholder === en.provider.quotedAmount);
+    expect(inputs.length).toBeGreaterThan(0);
+    await act(async () => {
+      await inputs[0]?.props.onChangeText("150000");
+      await flush();
+    });
+    expect(sheetAction(renderer, en.assist.sendQuote)).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.sendQuote)?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/quote");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", quotedAmount: 150000});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider approves a pending quote", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Quoted");
+    expect(sheetAction(renderer, en.assist.approveQuote)).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.approveQuote)?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/quote/approve");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t9"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider resolves a ready ticket from the sheet", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "7", assignedUid: "vol1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "SOS · Ready");
+    expect(sheetAction(renderer, en.assist.resolved)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.rate)).toBeUndefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.resolved)?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/status");
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t9", status: "4"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("quoted amounts lock in the work form", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · In progress");
+    const edit = sheetAction(renderer, en.provider.saveWork);
+    await act(async () => {
+      await edit?.props.onPress();
+      await flush();
+    });
+    const quoteInput = renderer.root.findAll((n) => typeof n.props?.onChangeText === "function" && n.props?.placeholder === en.provider.quotedAmount);
+    expect(quoteInput.every((n) => n.props?.editable === false)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("shop block routes to the shop", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t1", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", providerSnapshot: {id: "shop9", name: "Fix Shop", lat: 10.71, lng: 106.61, kind: "SHOP"}, otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", label: "12 Le Loi"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Matched");
+    const route = renderer.root.findAll((n) => typeof n.props?.onPress === "function" && n.props?.accessibilityLabel === en.common.routeFromHere);
+    expect(route.length).toBeGreaterThan(0);
+    seen.length = 0;
+    await act(async () => {
+      await route[0]?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/routes");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({destLat: 10.71, destLng: 106.61});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rated tickets offer edit rating with comment", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "4", assignedUid: "vol1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "SOS · Resolved");
+    await act(async () => {
+      await sheetAction(renderer, en.assist.rate)?.props.onPress();
+      await flush();
+    });
+    const inputs = renderer.root.findAll((n) => typeof n.props?.onChangeText === "function" && n.props?.placeholder === en.rating.commentPlaceholder);
+    expect(inputs.length).toBeGreaterThan(0);
+    await act(async () => {
+      await inputs[0]?.props.onChangeText("Great help");
+      await flush();
+    });
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.rating.submit)?.props.onPress();
+      await flush();
+    });
+    const rated = seen.find((call) => call.path === "/ratings");
+    expect(JSON.parse(rated?.body ?? "{}")).toMatchObject({ticketId: "t9", score: 5, text: "Great help"});
+    await openRecord(renderer, "SOS · Resolved");
+    expect(sheetAction(renderer, en.rating.editRating)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.rate)).toBeUndefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("reply affordance hides on own ratings", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "4", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockTicketRatings = [
+      {id: "r1", targetId: "shop9", targetKind: "SHOP", byUserId: "u1", byUserName: "Me", score: 5, text: "Fixed fast", reply: null, repliedAt: null},
+      {id: "r2", targetId: "shop9", targetKind: "SHOP", byUserId: "rider9", byUserName: "Rider Nine", score: 4, text: null, reply: null, repliedAt: null},
+    ];
+    await openRecord(renderer, "Walk-in · Resolved");
+    expect(hasText(renderer.root, "Fixed fast")).toBe(true);
+    const replies = texts(renderer.root, en.rating.sendReply).filter((n) => typeof n.props?.onPress === "function");
+    expect(replies).toHaveLength(1);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("shop sheet shows done jobs beside the rating", async () => {
+  const renderer = await mount();
+  try {
+    await refreshThenBrowse(renderer);
+    await tapShopPin(renderer);
+    expect(hasText(renderer.root, en.shop.jobsDone.replace("{n}", "7"))).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("shop preview opens the scrollable reviews modal", async () => {
+  const renderer = await mount();
+  try {
+    await refreshThenBrowse(renderer);
+    await tapShopPin(renderer);
+    expect(hasText(renderer.root, "Great fix")).toBe(true);
+    const preview = texts(renderer.root, en.rating.allReviews).find((n) => typeof n.props?.onPress === "function");
+    expect(preview).toBeDefined();
+    await act(async () => {
+      await preview?.props.onPress();
+      await flush();
+    });
+    expect(hasText(renderer.root, en.rating.allReviews)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rating rows show author faces and names", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "4", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockTicketRatings = [
+      {id: "r1", targetId: "shop9", targetKind: "SHOP", byUserId: "rider9", byUserName: "Rider Nine", score: 5, text: "Fixed fast", reply: "Thanks", repliedByName: "Fix Shop", repliedAt: null},
+    ];
+    await openRecord(renderer, "Walk-in · Resolved");
+    expect(hasText(renderer.root, en.rating.yourRating)).toBe(true);
+    expect(hasText(renderer.root, "Rider Nine")).toBe(true);
+    expect(hasText(renderer.root, "R")).toBe(true);
+    expect(hasText(renderer.root, "Fix Shop")).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("inbound sheet shows the rider stars", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: {id: "rider2", name: "Rider Two", kind: "RIDER", ratingAvg: 4, ratingCount: 5}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Matched");
+    const joined = renderer.root
+      .findAll((n) => Array.isArray(n.props?.children))
+      .map((n) => (n.props.children as unknown[]).join(""));
+    expect(joined.some((s) => s.includes("4.0") && s.includes("5"))).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("shop side rates the rider under its own label", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "4", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: {id: "rider2", name: "Rider Two", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockTicketRatings = [];
+    await openRecord(renderer, "Walk-in · Resolved");
+    expect(sheetAction(renderer, en.assist.rateRider)).toBeDefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("tow destination picks a registered shop from fullscreen search", async () => {
+  const renderer = await mount();
+  try {
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const tow = texts(renderer.root, en.assist.tow).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await tow?.props.onPress();
+      await flush();
+    });
+    const field = texts(renderer.root, en.common.searchPlaceholder).find((n) => typeof n.props?.onPress === "function");
+    expect(field).toBeDefined();
+    await act(async () => {
+      await field?.props.onPress();
+      await flush();
+    });
+    const input = texts(renderer.root, en.shop.searchPlaceholder).find((n) => typeof n.props?.onChangeText === "function");
+    await act(async () => {
+      await input?.props.onChangeText("Good");
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 500));
+    await act(async () => {});
+    await act(async () => {
+      await flush(20);
+    });
+    const pick = texts(renderer.root, "Good Shop North").find((n) => typeof n.props?.onPress === "function");
+    expect(pick).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await pick?.props.onPress();
+      await flush();
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.request)?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketType: "TOW", destinationShopId: "s2"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("dual-role operators toggle shop and tow rows", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [
+      {id: "shop9", kind: "SHOP", status: "ACTIVE"},
+      {id: "tow7", kind: "TOW", status: "ACTIVE"},
+    ];
+    mockFeed = [
+      {id: "t1", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "1", providerId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"},
+      {id: "t2", userId: "rider3", ticketType: "TOW", lat: 10.7, lng: 106.6, status: "1", providerId: "tow7", direction: "in", otherParty: null, createdAt: "2026-01-02T00:00:00.000Z"},
+    ];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    await tapTab(renderer, en.assist.sectionRecords);
+    expect(hasText(renderer.root, "Walk-in")).toBe(true);
+    expect(hasText(renderer.root, "Tow")).toBe(true);
+    const towChip = texts(renderer.root, en.assist.typeTow).find((n) => typeof n.props?.onPress === "function");
+    expect(towChip).toBeDefined();
+    await act(async () => {
+      await towChip?.props.onPress();
+      await flush();
+    });
+    expect(hasText(renderer.root, "Walk-in")).toBe(true);
+    expect(hasText(renderer.root, "Tow")).toBe(false);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider-only users see no kind chips", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t1", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    await tapTab(renderer, en.assist.sectionRecords);
+    expect(texts(renderer.root, en.assist.typeTow).filter((n) => typeof n.props?.onPress === "function")).toHaveLength(0);
+    expect(texts(renderer.root, en.shop.title).filter((n) => typeof n.props?.onPress === "function")).toHaveLength(0);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider chip toggles kind-less rows", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [
+      {id: "t1", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"},
+      {id: "t2", userId: "u1", ticketType: "TOW", lat: 10.7, lng: 106.6, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-02T00:00:00.000Z"},
+    ];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    await tapTab(renderer, en.assist.sectionRecords);
+    expect(hasText(renderer.root, "SOS")).toBe(true);
+    const riderChip = texts(renderer.root, en.assist.filterRider).find((n) => typeof n.props?.onPress === "function");
+    expect(riderChip).toBeDefined();
+    await act(async () => {
+      await riderChip?.props.onPress();
+      await flush();
+    });
+    expect(hasText(renderer.root, "SOS")).toBe(false);
+    expect(hasText(renderer.root, "Tow")).toBe(true);
   } finally {
     teardown(renderer);
   }

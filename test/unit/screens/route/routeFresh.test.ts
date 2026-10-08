@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {isRouteStale, touchCapReached, ROUTE_RETOUCH_MS, ROUTE_STALE_MS, ROUTE_TOUCH_CAP_MS} from "../../../../src/screens/route/routeFresh";
+import {isRouteStale, pausedSnackKey, touchCapReached, ROUTE_RETOUCH_MS, ROUTE_STALE_MS, ROUTE_TOUCH_CAP_MS} from "../../../../src/screens/route/routeFresh";
 
 test("retouch runs before the stale line", () => {
   expect(ROUTE_RETOUCH_MS).toBeLessThan(ROUTE_STALE_MS);
@@ -23,4 +23,10 @@ test("touch window stays open inside the hour", () => {
   expect(touchCapReached(null, 1000)).toBe(false);
   expect(touchCapReached(0, ROUTE_TOUCH_CAP_MS - 1)).toBe(false);
   expect(touchCapReached(0, ROUTE_TOUCH_CAP_MS)).toBe(true);
+});
+
+test("paused key tracks the check stamp only with a result", () => {
+  expect(pausedSnackKey(60000, true)).toBe(60000);
+  expect(pausedSnackKey(null, true)).toBeNull();
+  expect(pausedSnackKey(60000, false)).toBeNull();
 });

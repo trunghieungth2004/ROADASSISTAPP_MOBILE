@@ -13,3 +13,8 @@ export function touchCapReached(windowStartMs: number | null, nowMs: number): bo
   if (windowStartMs === null) return false;
   return nowMs - windowStartMs >= ROUTE_TOUCH_CAP_MS;
 }
+
+export function pausedSnackKey(checkedAt: number | null, hasResult: boolean): number | null {
+  if (!hasResult || checkedAt === null) return null;
+  return checkedAt;
+}

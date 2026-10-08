@@ -19,14 +19,12 @@ type Props = {
   cameraRef: RefObject<CameraRef | null>;
   gps: Point | null;
   dest: Point | null;
-  mine: DispatchTicket[];
   nearby: DispatchTicket[];
   shops: Provider[];
   selectedShop: Provider | null;
   pillTextForShop: (shop: Provider) => string | null;
   walkRoute: RouteOption | null;
   onMapReady: () => void;
-  onPickTicket: (id: string) => void;
   onPickShop: (id: string) => void;
 };
 
@@ -67,22 +65,11 @@ export default function AssistMapView(props: Props) {
             <StyledLayer type="symbol" id="assist-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.mine.map((ticket) => (
-          <GeoJSONSource
-            key={`assist-mine-${ticket.id}`}
-            id={`assist-mine-${ticket.id}`}
-            data={pointFeature(ticket.lng, ticket.lat)}
-            onPress={() => props.onPickTicket(ticket.id)}
-          >
-            <StyledLayer type="symbol" id={`assist-mine-icon-${ticket.id}`} style={{iconImage: "ticket-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
-          </GeoJSONSource>
-        ))}
         {props.nearby.map((ticket) => (
           <GeoJSONSource
             key={`assist-near-${ticket.id}`}
             id={`assist-near-${ticket.id}`}
             data={pointFeature(ticket.lng, ticket.lat)}
-            onPress={() => props.onPickTicket(ticket.id)}
           >
             <StyledLayer
               type="circle"

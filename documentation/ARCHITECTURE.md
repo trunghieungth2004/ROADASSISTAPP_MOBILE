@@ -152,15 +152,27 @@ capsule language as the route pills, primary variant when selected, tap
 opens the sheet). Native-anchored views: no sprite registration, no fit
 math, no per-value assets. The selected pin uses the same pill. The sheet
 shows a class pill beside the title (icons, defaults to both when
-undeclared) plus an open/closed status pill in the header, rating
-line (hollow stars under 3 ratings, count always shown), an icon row (walk /
+undeclared) plus an open/closed status pill in the header, a stats row
+(jobs done left, stars always filled by average right), a tappable latest-two
+reviews preview opening a scrollable all-reviews dialog (quarter-screen
+minimum height, same `RatingRow` rows), rating
+line (count always shown), an icon row (walk /
 navigate / report, words kept as accessibility labels), and **I'm here** as
 the primary action — visible only within 200 m GPS (`IM_HERE_RADIUS_M`,
 `null` otherwise). Distance, minutes, and the closed warning live on the map
 pill, never repeated in the sheet.
-`I'm here` posts a `WALK_IN` ticket and jumps to Records. Name search
-debounces 250 ms, fires only on non-empty queries, and uses a 10 km ceiling
-against the 2 km browse cycler. Search and radius share one 50:50 filter row.
+`I'm here` posts a `WALK_IN` ticket and jumps to Records. Shop search runs
+through the shared place-search infra (`usePlaceSearch` + `PlaceSearchScreen`,
+fullscreen): the inline field is a button opening the overlay in browse or
+tow-destination mode, with registered shops merged as the first group
+(unbounded server range; the 10 km ceiling applies only to the old inline
+caller, now retired) and repair-gated MapTiler results after. Either source
+failing never blanks the other; name-folded + 150 m dedupe, cap 5, distance
+sort. Browse shop picks open the sheet and map picks raise a selected card
+(navigate/register); tow picks set the destination (`destinationShopId` for
+registered shops, free-form point otherwise, saved places preserved). The
+radius cycler governs registered browse only, never search results. Search
+and radius share one 50:50 filter row.
 The onboarding shop form carries the same
 vehicle-class chips, so fresh shops declare at signup.
 
@@ -174,20 +186,48 @@ or rider display name; shop parties additionally carry `label`, `openNow`,
 through `assignedShopId`, then the addressed `providerId`, then
 `destinationShopId`, so pending and declined tickets already name their shop).
 Rows are two lines: type + status pill (per-status
-color via `statusPillColor`), counterparty + relative date. No inline
+color via `statusPillColor`), counterparty + relative date. The filter row
+carries All/In/Out plus role-aware kind toggles (shop/tow icons, always-on
+rider icon) pinned right: rows resolve to a business kind through assignment,
+then ticket type, with kind-less rows on the rider toggle; each row leads
+with its role glyph (storefront, tow-truck, person) ahead of the direction
+arrow, drawn from the same mapping as the filters. Chips render
+only for businesses the user actually operates (rider chip always). No inline
 actions, and opening a row no longer touches map selection — the sheet is
 the only detail UI. Tapping a row opens `RecordDetailSheet` (bottom sheet,
 same language as shop details): type-only title with the status as a header
 pill, counterparty hero (direction chip, name,
-relative age), an enriched shop block (address label, open badge, stars)
-when the party carries it, a rider-location block (coords plus distance when
-GPS is available) on inbound rows, icon fact rows (coords, note, decline, VND
+relative age), an enriched shop block (address label, open-status pill,
+stars, phone row, square route button docked right)
+when the party carries it, a rider-location block (name, coords plus distance,
+stars, tappable phone) on inbound rows, icon fact rows (coords, note, decline, VND
 amounts with separators), a vertical dot-and-connector timeline built from
 `statusHistory` (`StatusStepper` only for legacy rows without history), and
-the rating thread with reply. Committing actions (Rate, Accept, Cancel,
-Decline-send, work-save) live in `Overlay`'s pinned footer; forms (cancel
+the rating thread with reply (ratee-only: the reply affordance hides on your
+own ratings; every row is a shared `RatingRow` — initial avatar, author
+name, stars, comment, indented reply with replier name — under a Your rating
+title). Committing actions (Rate/Edit rating, Resolve at ready, Accept, Cancel,
+Decline-send, work-save, Send-quote, Approve) live in `Overlay`'s pinned footer; forms (cancel
 confirm, decline reasons, work editor, reply) stay in the body on demand.
 Declining closes the sheet on success (errors keep it open for retry).
+Quotes are one-shot: sent amounts render locked in the work form (the server
+`400`s re-quotes and re-finals), and the shop block carries a route button
+(resolves snapshot → known-shop coords into navigation) beside a shared row
+with the phone on the left and the open status on the right.
+The sheet stays open and live across accept, work-save, and status moves:
+every reload re-syncs the open ticket from the feed. Map dots are display
+only — tapping them never opens anything; the sheet is the sole ticket UI.
+Operator lifecycle runs inside the sheet: Accept (pending) → Start work
+(`6`, from arrived or matched walk-ins without a sent quote) → work editor
+→ Mark ready (`7`), with Decline + reason as the pending off-ramp. Work
+states, the work editor, and quotes are shop-ticket only — volunteer-held
+tickets never see those controls (the server 403s them regardless).
+Sending a quote (amount required) flips the ticket to `9` (Quoted, violet)
+for rider approval — Approve moves `9→6`, Decline reuses the cancel pair,
+and starting work is blocked while a quote pends, so no job starts
+unapproved. Either side's phone number rides the feed on live tickets
+(`2`/`3`/`4`/`6`/`7`/`9`, never pending or dead) and renders as a tappable
+`tel:` row in the matching block; absent when unregistered.
 
 ## Hazard report form (`FlagSheet`)
 

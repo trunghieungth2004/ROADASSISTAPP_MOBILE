@@ -7,13 +7,12 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, cancelTicket, createTicket, declineTicket, feedTickets, getTicket, myTickets, nearTickets, riderActionsFor, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketType} from "../api/dispatch";
-import {myProviders, nearProviders, pingProviderLocation, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ReportReason} from "../api/providers";
+import {acceptTicket, approveQuote, cancelTicket, createTicket, declineTicket, feedTickets, getTicket, myTickets, nearTickets, riderActionsFor, sendQuote, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketType} from "../api/dispatch";
+import {myProviders, nearProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
 import {toMessage, ApiError} from "../api/client";
-import type {Place} from "../components/place-search/PlaceSearch.types";
-import {PlaceSearchField, usePlaceSearch} from "../components/place-search";
+import type {Place} from "../components/place-search";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useNavSession} from "../context/NavSessionContext";
@@ -34,6 +33,8 @@ import {vehicleClassOf} from "./assist/vehicleClass";
 import AssistSectionTabs, {type AssistSection} from "./assist/AssistSectionTabs";
 import StatusStepper from "./assist/StatusStepper";
 import RequestSection from "./assist/RequestSection";
+import {fetchShopPlaces, isRepairPlace} from "../components/place-search/shopMerge";
+import PlaceSearchScreen from "./PlaceSearchScreen";
 import ShopsSection from "./assist/ShopsSection";
 import RecordsSection from "./assist/RecordsSection";
 import RecordDetailSheet, {type WorkPatch} from "./assist/RecordDetailSheet";
@@ -50,7 +51,7 @@ const ACTIVE_KEY = "roadassist.activeTicket";
 
 export default function AssistScreen() {
   const {t, lang} = useStrings();
-  const {token} = useAuth();
+  const {token, uid} = useAuth();
   const {activeVehicle, activateVehicle, bundle, hasVehicle} = useProfile();
   const [ownProviders, setOwnProviders] = useState<Provider[]>([]);
   const provider = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
@@ -62,15 +63,23 @@ export default function AssistScreen() {
   const cameraRef = useRef<CameraRef | null>(null);
   const centeredRef = useRef(false);
   const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
-  const destSearch = usePlaceSearch({token: token ?? undefined, lang});
   const [ticketType, setTicketType] = useState<TicketType | null>(null);
   const [note, setNote] = useState("");
   const [dest, setDest] = useState<Place | null>(null);
+  const [destShopId, setDestShopId] = useState<string | null>(null);
+  const [mapSel, setMapSel] = useState<{label: string; lat: number; lng: number} | null>(null);
+  const [shopSearchMode, setShopSearchMode] = useState<"browse" | "tow" | null>(null);
   const [mine, setMine] = useState<DispatchTicket[]>([]);
   const [feed, setFeed] = useState<FeedTicket[]>([]);
   const [ticketRatings, setTicketRatings] = useState<Record<string, UserRating[]>>({});
   const [recBusy, setRecBusy] = useState(false);
   const [detailFor, setDetailFor] = useState<FeedTicket | null>(null);
+  useEffect(() => {
+    setDetailFor((prev) => {
+      if (!prev) return prev;
+      return feed.find((t) => t.id === prev.id) ?? prev;
+    });
+  }, [feed]);
   const [vehicleOpen, setVehicleOpen] = useState(false);
   const [nearby, setNearby] = useState<DispatchTicket[]>([]);
   const [gps, setGps] = useState<{lat: number; lng: number} | null>(null);
@@ -109,6 +118,8 @@ export default function AssistScreen() {
   const [shopLoading, setShopLoading] = useState(false);
   const [shopSel, setShopSel] = useState<Provider | null>(null);
   const [shopSheet, setShopSheet] = useState<Provider | null>(null);
+  const [shopJobs, setShopJobs] = useState<Record<string, number>>({});
+  const [shopReviews, setShopReviews] = useState<Record<string, ProviderRating[]>>({});
   const [walkRoute, setWalkRoute] = useState<RouteOption | null>(null);
   const [walkBusy, setWalkBusy] = useState(false);
   const [navBusy, setNavBusy] = useState(false);
@@ -121,8 +132,6 @@ export default function AssistScreen() {
   const [locateBusy, setLocateBusy] = useState(false);
   const [section, setSection] = useState<AssistSection>("request");
   const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Provider[]>([]);
-  const [searchBusy, setSearchBusy] = useState(false);
   const [imHereBusy, setImHereBusy] = useState(false);
   const [ratingFor, setRatingFor] = useState<DispatchTicket | null>(null);
   const [ratingBusy, setRatingBusy] = useState(false);
@@ -131,8 +140,6 @@ export default function AssistScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cardH, setCardH] = useState(0);
-  const selectedTicket = selectedId ? ticketById([...mine, ...nearby, ...feed], selectedId) : null;
-  const selectedIsMine = selectedTicket ? mine.some((item) => item.id === selectedTicket.id) : false;
   const vehicleClass = vehicleClassOf(activeVehicle?.type);
   const showShops = vehicleClass !== "CAR";
   const browsing = section === "request" && ticketType === "MECHANIC" && showShops;
@@ -267,6 +274,10 @@ export default function AssistScreen() {
         setWalkRoute(null);
         return true;
       }
+      if (mapSel) {
+        setMapSel(null);
+        return true;
+      }
       if (section !== "request") {
         setSection("request");
         return true;
@@ -274,7 +285,7 @@ export default function AssistScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [selectedId, shopSheet, shopSel, section]);
+  }, [selectedId, shopSheet, shopSel, mapSel, section]);
   const loadShops = useCallback(async (): Promise<void> => {
     if (!token || !gps) {
       setShops([]);
@@ -294,26 +305,10 @@ export default function AssistScreen() {
     if (!browsing) return;
     void loadShops();
   }, [browsing, loadShops]);
-  useEffect(() => {
-    const q = query.trim();
-    if (q === "" || !token || !gps) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchBusy(true);
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          setSearchResults(await searchProviders(gps.lat, gps.lng, q, token, {radiusMeters: 10000, ...(vehicleClass ? {vehicleClass} : {})}));
-        } catch (err) {
-          setError(toMessage(err));
-        } finally {
-          setSearchBusy(false);
-        }
-      })();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query, token, gps, vehicleClass]);
+  const fetchAssistShops = useCallback(async (q: string) => {
+    if (!token || !gps) return [];
+    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined);
+  }, [token, gps, vehicleClass]);
   async function currentPoint(): Promise<{lat: number; lng: number}> {
     const {status} = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") throw new Error(t.nav.locationDenied);
@@ -330,6 +325,15 @@ export default function AssistScreen() {
     const shop = shops.find((s) => s.id === id) ?? null;
     if (!shop) return;
     setShopSheet(shop);
+    if (token && shopJobs[shop.id] === undefined) {
+      void providerRatings(shop.id, token).then(
+        (res) => {
+          setShopJobs((prev) => ({...prev, [shop.id]: res.completedJobs}));
+          setShopReviews((prev) => ({...prev, [shop.id]: res.ratings}));
+        },
+        () => undefined,
+      );
+    }
     void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
   }
   function pillForShop(shop: Provider): string | null {
@@ -366,6 +370,9 @@ export default function AssistScreen() {
     }
   }
   async function onNavigateToShop(shop: Provider): Promise<void> {
+    await navigateToPoint({lat: shop.lat, lng: shop.lng});
+  }
+  async function navigateToPoint(dest: {lat: number; lng: number}): Promise<void> {
     if (!token || navBusy) return;
     setNavBusy(true);
     setError(null);
@@ -373,12 +380,12 @@ export default function AssistScreen() {
       const live = await currentPoint();
       setShopSheet(null);
       const res = await findRoute(
-        {originLat: live.lat, originLng: live.lng, destLat: shop.lat, destLng: shop.lng, width: activeVehicle?.baseWidth, vehicleType: activeVehicle?.type},
+        {originLat: live.lat, originLng: live.lng, destLat: dest.lat, destLng: dest.lng, width: activeVehicle?.baseWidth, vehicleType: activeVehicle?.type},
         token,
       );
       const first = res.routes?.[0];
       if (!first) throw new Error(t.route.noResults);
-      startNavSession({route: first, dest: {lat: shop.lat, lng: shop.lng}, stops: [], seed: live, ...(activeVehicle?.baseWidth !== undefined ? {width: activeVehicle.baseWidth} : {}), ...(activeVehicle?.type ? {vehicleType: activeVehicle.type} : {})});
+      startNavSession({route: first, dest, stops: [], seed: live, ...(activeVehicle?.baseWidth !== undefined ? {width: activeVehicle.baseWidth} : {}), ...(activeVehicle?.type ? {vehicleType: activeVehicle.type} : {})});
       navigation.navigate("Navigation" as never);
     } catch (err) {
       setError(toMessage(err));
@@ -386,11 +393,62 @@ export default function AssistScreen() {
       setNavBusy(false);
     }
   }
+  async function onRouteTicketShop(ticket: FeedTicket): Promise<void> {
+    const party = ticket.otherParty;
+    const shopId = typeof party === "object" && party !== null && party.kind === "SHOP" && typeof party.id === "string" ? party.id : null;
+    const snap = ticket.providerSnapshot;
+    const fromSnap = snap && snap.id === shopId ? {lat: snap.lat, lng: snap.lng} : null;
+    const known = shopId ? shops.find((s) => s.id === shopId) ?? null : null;
+    const dest = fromSnap ?? (known ? {lat: known.lat, lng: known.lng} : null);
+    if (!dest) {
+      setError(t.assist.alreadyGone);
+      return;
+    }
+    await navigateToPoint(dest);
+  }
   function onPickSearch(id: string): void {
-    const shop = searchResults.find((s) => s.id === id) ?? null;
-    if (!shop) return;
-    setShopSheet(shop);
-    void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+    if (!token || !gps) {
+      setError(t.assist.alreadyGone);
+      return;
+    }
+    void (async () => {
+      try {
+        const shops = await searchProviders(
+          gps.lat,
+          gps.lng,
+          query.trim(),
+          token,
+          {radiusMeters: 10000, ...(vehicleClass ? {vehicleClass} : {})},
+        );
+        const shop = shops.find((s) => s.id === id) ?? null;
+        if (!shop) {
+          setError(t.assist.alreadyGone);
+          return;
+        }
+        setShopSearchMode(null);
+        setShopSheet(shop);
+        void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+      } catch (err) {
+        setError(toMessage(err));
+      }
+    })();
+  }
+  function onPickTowShop(place: Place): void {
+    if (typeof place.id !== "string") return;
+    setDestShopId(place.id);
+    setDest({label: place.label, lat: place.lat, lng: place.lng, source: "map"});
+    setShopSearchMode(null);
+  }
+  function onPickTowPlace(place: Place): void {
+    setDestShopId(null);
+    setDest({label: place.label, lat: place.lat, lng: place.lng, source: "map"});
+    setShopSearchMode(null);
+  }
+  function onNavigateMap(place: {lat: number; lng: number}): void {
+    void navigateToPoint({lat: place.lat, lng: place.lng});
+  }
+  function onRegisterShop(): void {
+    navigation.navigate("More" as never);
   }
   async function onImHere(shop: Provider): Promise<void> {
     if (!token || imHereBusy) return;
@@ -423,7 +481,7 @@ export default function AssistScreen() {
     setRatingRider(false);
     setRatingFor(ticket);
   }
-  async function onSubmitRating(score: number): Promise<void> {
+  async function onSubmitRating(score: number, comment: string): Promise<void> {
     if (!token || !ratingFor || ratingBusy) return;
     const target = ratingRider ? {targetId: ratingFor.userId, targetKind: "RIDER" as const} : rateTarget(ratingFor);
     if (!target) {
@@ -433,7 +491,7 @@ export default function AssistScreen() {
     setRatingBusy(true);
     setError(null);
     try {
-      await submitRating({targetId: target.targetId, targetKind: target.targetKind, ticketId: ratingFor.id, score}, token);
+      await submitRating({targetId: target.targetId, targetKind: target.targetKind, ticketId: ratingFor.id, score, ...(comment ? {text: comment} : {})}, token);
       setRatedScores((prev) => ({...prev, [ratingFor.id]: score}));
       setRatingFor(null);
       setRatingRider(false);
@@ -465,12 +523,12 @@ export default function AssistScreen() {
     try {
       Keyboard.dismiss();
       const point = await currentPoint();
-      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth}, token);
+      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, destinationShopId: kind === "TOW" ? destShopId ?? undefined : undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth}, token);
       setPendingTicket(null);
       setNotice(t.assist.requested);
       setNote("");
       setDest(null);
-      destSearch.clear();
+      setDestShopId(null);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
@@ -530,6 +588,51 @@ export default function AssistScreen() {
       await declineTicket(ticket.id, ticket.providerId, reason, note, token);
       setNotice(t.provider.declineSent);
       setDetailFor(null);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onSendQuote(ticket: FeedTicket, patch: WorkPatch): Promise<void> {
+    if (!token || recBusy) return;
+    const q = Number(patch.quoted.trim());
+    if (patch.quoted.trim() === "" || !Number.isInteger(q) || q < 0) {
+      setError(t.provider.invalidAmount);
+      return;
+    }
+    setRecBusy(true);
+    setError(null);
+    try {
+      await sendQuote(ticket.id, q, patch.workType.trim() || undefined, token);
+      setNotice(t.provider.workSaved);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onApproveQuote(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await approveQuote(ticket.id, token);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onAdvanceStatus(ticket: FeedTicket, status: string): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await updateTicketStatus(ticket.id, status, token);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
@@ -640,14 +743,12 @@ export default function AssistScreen() {
         cameraRef={cameraRef}
         gps={gps}
         dest={ticketType === "TOW" && dest ? {lat: dest.lat, lng: dest.lng} : null}
-        mine={mine}
         nearby={provider ? nearby : []}
         shops={browsing ? shops : []}
         selectedShop={browsing ? (shopSheet ?? shopSel) : null}
         pillTextForShop={pillForShop}
         walkRoute={browsing ? walkRoute : null}
         onMapReady={() => applyCenter()}
-        onPickTicket={onPickTicket}
         onPickShop={(id) => void onPickShop(id)}
       />
       <FabColumn top={insets.top + 24 + cardH}>
@@ -658,39 +759,6 @@ export default function AssistScreen() {
           {loading ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="refresh" size={22} color={theme.primary} />}
         </Fab>
       </FabColumn>
-      {selectedTicket ? (
-        <View style={[styles.selectedWrap, {top: insets.top + 24 + cardH}]} pointerEvents="box-none">
-          <View style={[styles.selectedCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-            <View style={styles.selectedRow}>
-              <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTitle(selectedTicket, t)}</Text>
-              <Pressable onPress={() => setSelectedId(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.common.close}>
-                <MaterialIcons name="close" size={18} color={theme.muted} />
-              </Pressable>
-            </View>
-            {typeof selectedTicket.note === "string" && selectedTicket.note ? <Text style={{color: theme.text}}>{selectedTicket.note}</Text> : null}
-            <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(selectedTicket.lat, selectedTicket.lng)}</Text>
-            {typeof selectedTicket.towPlate === "string" && selectedTicket.towPlate ? (
-              <Text style={[styles.coords, {color: theme.text}]}>{t.tow.plate}: {selectedTicket.towPlate}</Text>
-            ) : null}
-            {typeof selectedTicket.assignedShopId === "string" && selectedTicket.assignedShopId ? (
-              <Pressable style={[styles.chip, {borderColor: theme.border}]} onPress={() => { setReportReason("FAKE_BUSINESS"); setReportNote(""); setReportError(null); setReportFor({id: selectedTicket.assignedShopId as string, name: selectedTicket.towPlate ?? t.report.unknownProvider}); }} accessibilityRole="button" accessibilityLabel={t.report.title}>
-                <Text style={{color: theme.primary}}>{t.report.title}</Text>
-              </Pressable>
-            ) : null}
-            {selectedIsMine ? (
-              selectedTicket.status === "1" || selectedTicket.status === "2" ? (
-                <Pressable style={[styles.chip, {borderColor: theme.primary}]} onPress={() => void onCancel(selectedTicket.id)} accessibilityRole="button" accessibilityLabel={t.assist.cancel}>
-                  <Text style={{color: theme.primary}}>{t.assist.cancel}</Text>
-                </Pressable>
-              ) : null
-            ) : (selectedTicket as FeedTicket).direction === "in" ? null : (
-              <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, (respBusy || !!active) && styles.disabled]} disabled={respBusy || !!active} onPress={() => void onAccept(selectedTicket.id)} accessibilityRole="button" accessibilityLabel={t.assist.accept}>
-                <Text style={styles.actionText}>{t.assist.accept}</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      ) : null}
       <View style={[styles.topContainer, {top: insets.top + 12}]}>
         <View onLayout={(e) => setCardH(e.nativeEvent.layout.height)} style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -741,7 +809,7 @@ export default function AssistScreen() {
                 ticketType={ticketType}
                 onTicketType={setTicketType}
                 showMechanic={showShops}
-                onOpenTicket={(kind) => { prevTicketType.current = ticketType; setDest(null); destSearch.clear(); setPendingTicket(kind); }}
+                onOpenTicket={(kind) => { prevTicketType.current = ticketType; setDest(null); setDestShopId(null); setPendingTicket(kind); }}
                 vehicleType={activeVehicle?.type ?? null}
                 hasVehicles={hasVehicle}
                 onOpenVehicle={() => setVehicleOpen(true)}
@@ -754,11 +822,13 @@ export default function AssistScreen() {
                   t={t}
                   theme={theme}
                   query={query}
-                  onQuery={setQuery}
-                  searchResults={searchResults}
-                  searchBusy={searchBusy}
-                  searching={query.trim() !== ""}
-                  onPickSearch={(id) => onPickSearch(id)}
+                  onOpenSearch={() => setShopSearchMode("browse")}
+                  mapSel={mapSel}
+                  onClearMapSel={() => setMapSel(null)}
+                  onNavigateMapSel={() => {
+                    if (mapSel) void navigateToPoint(mapSel);
+                  }}
+                  onRegisterShop={() => onRegisterShop()}
                   radiusLabel={radiusLabel(radius)}
                   onCycleRadius={cycleRadius}
                   shopLoading={shopLoading}
@@ -781,6 +851,11 @@ export default function AssistScreen() {
                 tickets={feed}
                 loading={loading}
                 selectedId={selectedId}
+                shopKinds={new Map(
+                  ownProviders
+                    .filter((p) => p.status !== "DENIED" && (p.kind === "SHOP" || p.kind === "TOW"))
+                    .map((p) => [p.id, p.kind]),
+                )}
                 onOpen={(ticket) => {
                   setDetailFor(ticket);
                   if (ticket.status === "4") void onLoadRatings(ticket);
@@ -794,12 +869,18 @@ export default function AssistScreen() {
                 ratings={ticketRatings[detailFor.id] ?? []}
                 busy={recBusy}
                 gps={gps}
+                uid={uid}
+                hasRated={ratedScores[detailFor.id] !== undefined}
                 onClose={() => setDetailFor(null)}
                 onConfirmCancel={(id) => void onCancel(id)}
                 onRate={(ticket) => onRate(ticket)}
                 onAccept={(ticket) => void onAcceptTicket(ticket)}
                 onDecline={(ticket, reason, note) => void onDeclineTicket(ticket, reason, note)}
                 onSaveWork={(ticket, patch) => void onSaveWork(ticket, patch)}
+                onSendQuote={(ticket, patch) => void onSendQuote(ticket, patch)}
+                onApproveQuote={(ticket) => void onApproveQuote(ticket)}
+                onRouteShop={(ticket) => void onRouteTicketShop(ticket)}
+                onAdvance={(ticket, status) => void onAdvanceStatus(ticket, status)}
                 onReply={(ratingId, text) => void onReplyRating(ratingId, text)}
                 onRateRider={(ticket) => onRateRider(ticket)}
               />
@@ -839,6 +920,8 @@ export default function AssistScreen() {
           walkBusy={walkBusy}
           navBusy={navBusy}
           imHereBusy={imHereBusy}
+          jobs={shopJobs[shopSheet.id] ?? null}
+          reviews={shopReviews[shopSheet.id] ?? null}
           onReport={() => {
             setReportReason("FAKE_BUSINESS");
             setReportNote("");
@@ -862,8 +945,9 @@ export default function AssistScreen() {
           t={t}
           ticket={ratingFor}
           initialScore={ratedScores[ratingFor.id] ?? null}
+          initialComment={(ticketRatings[ratingFor.id] ?? []).find((r) => r.byUserId === uid)?.text ?? null}
           busy={ratingBusy}
-          onSubmit={(score) => void onSubmitRating(score)}
+          onSubmit={(score, comment) => void onSubmitRating(score, comment)}
           onClose={() => { setRatingFor(null); setRatingRider(false); }}
         />
       ) : null}
@@ -874,11 +958,71 @@ export default function AssistScreen() {
           ticketType={pendingTicket}
           note={note}
           onNote={setNote}
-          towDest={<PlaceSearchField search={destSearch} placeholder={t.common.searchPlaceholder} noResultsText={t.common.noResults} groupLabels={{saved: t.route.savedPlaces, directory: t.route.directory, map: t.route.mapResults}} onSelect={setDest} />}
+          towDest={
+            <View style={{gap: 8}}>
+              <Pressable
+                style={[styles.destField, {borderColor: theme.border}]}
+                onPress={() => setShopSearchMode("tow")}
+                accessibilityRole="button"
+                accessibilityLabel={t.common.searchPlaceholder}
+              >
+                <Text style={{color: dest ? theme.text : theme.muted}} numberOfLines={1}>
+                  {dest ? dest.label : t.common.searchPlaceholder}
+                </Text>
+              </Pressable>
+              {dest ? (
+                <Pressable
+                  style={[styles.destClear, {borderColor: theme.border}]}
+                  onPress={() => {
+                    setDest(null);
+                    setDestShopId(null);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.route.clear}
+                >
+                  <Text style={{color: theme.muted}}>{t.route.clear}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          }
           busy={reqBusy}
           onSubmit={() => void onRequest()}
           onClose={() => { setPendingTicket(null); setTicketType(prevTicketType.current); }}
         />
+      ) : null}
+      {shopSearchMode ? (
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); }}>
+          <PlaceSearchScreen
+            t={t}
+            token={token ?? undefined}
+            lang={lang}
+            title={t.shop.searchPlaceholder}
+            placeholder={t.shop.searchPlaceholder}
+            shops={fetchAssistShops}
+            sources={shopSearchMode === "tow" ? ["saved", "shop", "directory", "map"] : ["shop", "map"]}
+            mapFilter={isRepairPlace}
+            query={query}
+            onQuery={setQuery}
+            onPick={(place) => {
+              if (shopSearchMode === "tow") {
+                if (place.source === "shop" && typeof place.id === "string") {
+                  onPickTowShop(place);
+                } else {
+                  onPickTowPlace(place);
+                }
+                return;
+              }
+              if (place.source === "shop" && typeof place.id === "string") {
+                setShopSearchMode(null);
+                onPickSearch(place.id);
+                return;
+              }
+              setShopSearchMode(null);
+              setMapSel({label: place.label, lat: place.lat, lng: place.lng});
+            }}
+            onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); }}
+          />
+        </Overlay>
       ) : null}
       <Overlay
         visible={reportFor !== null}
@@ -922,10 +1066,9 @@ const styles = StyleSheet.create({
   activeCard: {borderWidth: 2},
   cardTitle: {fontWeight: "700"},
   coords: {fontSize: 12},
+  destField: {borderWidth: 1, borderRadius: 8, padding: 10},
+  destClear: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, alignSelf: "flex-start"},
   hint: {fontSize: 12},
   actionBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
   actionText: {color: "#fff", fontWeight: "700"},
-  selectedWrap: {position: "absolute", left: 12, right: 12, zIndex: 10, elevation: 5},
-  selectedCard: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 6},
-  selectedRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between"},
 });
