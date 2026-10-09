@@ -1,5 +1,7 @@
 export const WALK_RADII = [500, 1000, 2000];
 
+export const TOW_RADII = [2000, 5000, 10000, 20000];
+
 export const IM_HERE_RADIUS_M = 200;
 
 export const WALK_METERS_PER_MINUTE = 83;

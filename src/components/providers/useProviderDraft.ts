@@ -1,7 +1,7 @@
 import {useState} from "react";
 import {Keyboard} from "react-native";
 import * as Location from "expo-location";
-import {createProvider, updateProvider, type Provider} from "../../api/providers";
+import {createProvider, nearProviders, updateProvider, type Provider} from "../../api/providers";
 import {toMessage} from "../../api/client";
 import {getFix} from "../../services/geo";
 import type {Place} from "../place-search/PlaceSearch.types";
@@ -36,6 +36,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
   const [locBusy, setLocBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nearbyExisting, setNearbyExisting] = useState<Provider[]>([]);
   const hoursOk = validateWeek(week);
   const plateOk = plate.trim() === "" || isValidTowPlate(plate);
   const editable = !provider || provider.status === "ACTIVE";
@@ -77,6 +78,16 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     setLocTouched(true);
     setMapPick(false);
     setMapTarget(null);
+  }
+  async function refreshNearbyExisting(authToken: string | null): Promise<void> {
+    setNearbyExisting([]);
+    if (!authToken || !point) return;
+    try {
+      const found = await nearProviders(point.lat, point.lng, authToken, {radiusMeters: 300});
+      setNearbyExisting(found.filter((s) => s.id !== provider?.id));
+    } catch {
+      return;
+    }
   }
   async function stampTowPoint(): Promise<void> {
     if (locBusy) return;
@@ -219,6 +230,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     onPickPlace,
     onPickTowPlace,
     stampTowPoint,
+    nearbyExisting,
+    refreshNearbyExisting,
     submit,
   };
 }

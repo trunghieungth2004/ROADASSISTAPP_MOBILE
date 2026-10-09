@@ -19,13 +19,11 @@ type Props = {
   cameraRef: RefObject<CameraRef | null>;
   gps: Point | null;
   dest: Point | null;
-  nearby: DispatchTicket[];
-  shops: Provider[];
   selectedShop: Provider | null;
   pillTextForShop: (shop: Provider) => string | null;
   walkRoute: RouteOption | null;
+  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null} | null;
   onMapReady: () => void;
-  onPickShop: (id: string) => void;
 };
 
 export default function AssistMapView(props: Props) {
@@ -65,46 +63,29 @@ export default function AssistMapView(props: Props) {
             <StyledLayer type="symbol" id="assist-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.nearby.map((ticket) => (
-          <GeoJSONSource
-            key={`assist-near-${ticket.id}`}
-            id={`assist-near-${ticket.id}`}
-            data={pointFeature(ticket.lng, ticket.lat)}
-          >
-            <StyledLayer
-              type="circle"
-              id={`assist-near-dot-${ticket.id}`}
-              style={{circleRadius: 10, circleColor: "#f59e0b", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}}
-            />
+        {props.jobLayers && props.jobLayers.tower ? (
+          <GeoJSONSource id="tow-job-tower" data={pointFeature(props.jobLayers.tower.lng, props.jobLayers.tower.lat)}>
+            <StyledLayer type="symbol" id="tow-job-tower-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
-        ))}
-        {props.shops.filter((shop) => shop.id !== props.selectedShop?.id).map((shop) => (
-          <>
-          <GeoJSONSource
-            key={`assist-shop-${shop.id}`}
-            id={`assist-shop-${shop.id}`}
-            data={pointFeature(shop.lng, shop.lat)}
-            onPress={() => props.onPickShop(shop.id)}
-          >
-            <StyledLayer
-              type="symbol"
-              id={`assist-shop-icon-${shop.id}`}
-              style={{iconImage: shop.openNow === false ? "shop-pin-closed" : shop.openNow === true ? "shop-pin" : "shop-pin-unknown", iconSize: 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
-            />
+        ) : null}
+        {props.jobLayers ? (
+          <GeoJSONSource id="tow-job-pickup" data={pointFeature(props.jobLayers.pickup.lng, props.jobLayers.pickup.lat)}>
+            <StyledLayer type="symbol" id="tow-job-pickup-icon" style={{iconImage: "ticket-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
-          {props.pillTextForShop(shop) ? (
-            <Marker
-              key={`assist-shop-pill-${shop.id}`}
-              id={`assist-shop-pill-${shop.id}`}
-              lngLat={[shop.lng, shop.lat]}
-              anchor="bottom"
-              offset={[0, -20]}
-            >
-              <ShopPill theme={props.theme} label={props.pillTextForShop(shop) as string} selected={false} onPress={() => props.onPickShop(shop.id)} />
-            </Marker>
-          ) : null}
-          </>
-        ))}
+        ) : null}
+        {props.jobLayers && props.jobLayers.dest ? (
+          <GeoJSONSource id="tow-job-dest" data={pointFeature(props.jobLayers.dest.lng, props.jobLayers.dest.lat)}>
+            <StyledLayer type="symbol" id="tow-job-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+          </GeoJSONSource>
+        ) : null}
+        {props.jobLayers && props.jobLayers.tower ? (
+          <GeoJSONSource
+            id="tow-job-line"
+            data={{type: "Feature", geometry: {type: "LineString", coordinates: [[props.jobLayers.tower.lng, props.jobLayers.tower.lat], [props.jobLayers.pickup.lng, props.jobLayers.pickup.lat]]}, properties: {}}}
+          >
+            <StyledLayer type="line" id="tow-job-line-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
         {props.selectedShop ? (
           <>
           <GeoJSONSource id="assist-shop-sel" data={pointFeature(props.selectedShop.lng, props.selectedShop.lat)}>
@@ -124,9 +105,9 @@ export default function AssistMapView(props: Props) {
                 id="assist-shop-sel-label"
                 lngLat={[sel.lng, sel.lat]}
                 anchor="bottom"
-                offset={[0, -24]}
+                offset={[0, -32]}
               >
-                <ShopPill theme={props.theme} label={label} selected onPress={() => props.onPickShop(sel.id)} />
+                <ShopPill theme={props.theme} label={label} selected onPress={() => undefined} />
               </Marker>
             );
           })()}

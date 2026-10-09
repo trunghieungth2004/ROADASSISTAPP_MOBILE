@@ -15,6 +15,7 @@ async function render(tabs: {id: string; label: string}[], selected: string, onC
 
 const TABS = [
   {id: "request", label: en.assist.sectionRequest},
+  {id: "tow", label: en.assist.sectionTow},
   {id: "records", label: en.assist.sectionRecords},
 ];
 
@@ -22,7 +23,7 @@ test("tabs expose tab roles with selected state", async () => {
   const renderer = await render(TABS, "request", () => undefined);
   try {
     const tabs = renderer.root.findAll((n) => n.props?.accessibilityRole === "tab" && typeof n.props?.onPress === "function");
-    expect(tabs).toHaveLength(2);
+    expect(tabs).toHaveLength(3);
     const selected = tabs.filter((n) => n.props.accessibilityState?.selected === true);
     expect(selected).toHaveLength(1);
     expect(selected[0]?.props.accessibilityLabel).toBe(en.assist.sectionRequest);

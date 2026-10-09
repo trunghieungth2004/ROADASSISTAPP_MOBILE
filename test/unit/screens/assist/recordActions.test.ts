@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canDecline, canEditWork, canMarkReady, canRate, canRateRider, canSendQuote, canStartWork, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canEditWork, canMarkReady, canRate, canRateRider, canSendQuote, canStartWork, visibleActions} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -60,6 +60,17 @@ test("operator starts arrived jobs and walk-ins from matched", () => {
   expect(canMarkReady("in", "2", true)).toBe(false);
   expect(canMarkReady("in", "6", false)).toBe(false);
   expect(canMarkReady("out", "6", true)).toBe(false);
+});
+
+test("destination decline belongs to the destination shop once matched", () => {
+  const mine = new Set(["shop-1"]);
+  expect(canDeclineDestination("2", "shop-1", mine)).toBe(true);
+  for (const s of ["3", "6", "7"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(true);
+  expect(canDeclineDestination("1", "shop-1", mine)).toBe(false);
+  for (const s of ["4", "5", "8"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(false);
+  expect(canDeclineDestination("2", "shop-2", mine)).toBe(false);
+  expect(canDeclineDestination("2", null, mine)).toBe(false);
+  expect(canDeclineDestination("2", "", mine)).toBe(false);
 });
 
 test("quote handshake gates both sides", () => {

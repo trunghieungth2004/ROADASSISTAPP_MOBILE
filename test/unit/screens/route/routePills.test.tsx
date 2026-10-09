@@ -45,13 +45,10 @@ function baseProps(routes: RouteOption[], onSelectIndex: (i: number) => void, ov
     hazardHighlight: null,
     dragging: null,
     dragPan: {panHandlers: {}} as Props["dragPan"],
-    pickingFor: null,
-    pickBusy: false,
     onMapPress: () => undefined,
     onRegionChange: () => undefined,
     onRegionDid: () => undefined,
     onSelectIndex,
-    onCancelPick: () => undefined,
     onMapReady: () => undefined,
     flagCamRef: {current: null},
     flagsToken: null,
@@ -152,16 +149,6 @@ test("mid-route pill hides without a result", async () => {
 
 test("mid-route pill hides while dragging", async () => {
   const renderer = await render([option(2400, 2280)], () => undefined, {dragging: "origin"});
-  try {
-    const expected = `${(2400 / 1000).toFixed(1)} ${en.route.km} · ${Math.round(2280 / 60)} ${en.route.min}`;
-    expect(labels(renderer)).not.toContain(expected);
-  } finally {
-    renderer.unmount();
-  }
-});
-
-test("mid-route pill hides while picking a point", async () => {
-  const renderer = await render([option(2400, 2280)], () => undefined, {pickingFor: "origin"});
   try {
     const expected = `${(2400 / 1000).toFixed(1)} ${en.route.km} · ${Math.round(2280 / 60)} ${en.route.min}`;
     expect(labels(renderer)).not.toContain(expected);

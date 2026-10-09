@@ -2,7 +2,7 @@ import {useCallback, useRef, useState, type MutableRefObject} from "react";
 import {PanResponder, type PanResponderInstance} from "react-native";
 import {formatPoint} from "../../api/places";
 import type {RouteOption} from "../../api/routes";
-import {ARM_RADIUS, MAX_STOPS, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
+import {ARM_RADIUS, MAX_STOPS, type CamState, type DragTarget, type Point, type Stop} from "./types";
 import {midOf} from "./routeGeo";
 
 export type DragContext = {
@@ -12,7 +12,6 @@ export type DragContext = {
   routes: RouteOption[];
   selectedIndex: number;
   busy: boolean;
-  pickingFor: SearchField | null;
   flagMode: boolean;
   requestRoute: (o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean) => void;
   setOrigin: (p: Point) => void;
@@ -20,7 +19,6 @@ export type DragContext = {
   setDest: (p: Point) => void;
   setDestText: (s: string) => void;
   setStops: (s: Stop[]) => void;
-  onPickMapPoint: (lat: number, lng: number) => void;
   onFlagMapPoint: (lat: number, lng: number) => void;
 };
 
@@ -105,10 +103,6 @@ export function useRouteDrag(ctx: DragContext): {
     if (live.busy || dragging) return;
     const coords = (e as {nativeEvent?: {lngLat?: [number, number]}}).nativeEvent?.lngLat;
     if (!coords) return;
-    if (live.pickingFor) {
-      live.onPickMapPoint(coords[1], coords[0]);
-      return;
-    }
     if (live.flagMode) {
       live.onFlagMapPoint(coords[1], coords[0]);
       return;

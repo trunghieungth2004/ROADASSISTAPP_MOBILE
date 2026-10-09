@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, AppState, BackHandler, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, AppState, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation, useIsFocused} from "@react-navigation/native";
 import {AppText as Text} from "../components/ui/AppText";
@@ -9,7 +9,7 @@ import {type CameraRef} from "@maplibre/maplibre-react-native";
 import {findRoute, getSavedRoute, saveRoute, isFlagWarning, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
 import {windowAround} from "../services/navigation";
 import {drainHazardLaunch, ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
-import {formatPoint, reverseLabel} from "../api/places";
+import {formatPoint} from "../api/places";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search";
@@ -36,7 +36,7 @@ import {markDenied, markVoted} from "../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./route/types";
 import {boundsOf, midOf} from "./route/routeGeo";
 import {useRouteDrag} from "./route/useRouteDrag";
-import {createTaskEpoch, type TaskEpoch} from "./route/taskEpoch";
+import MapPickOverlay from "../components/map/MapPickOverlay";
 import {shouldRetryCenter} from "./route/cameraIntent";
 import RouteMapView from "./route/RouteMapView";
 import RouteCard from "./route/RouteCard";
@@ -74,10 +74,7 @@ export default function RouteScreen() {
   const [searchingFor, setSearchingFor] = useState<SearchField | null>(null);
   const [starting, setStarting] = useState(false);
   const {start: startNavSession} = useNavSession();
-  const [pickingFor, setPickingFor] = useState<SearchField | null>(null);
-  const [pickBusy, setPickBusy] = useState(false);
-  const [pickEpoch] = useState<TaskEpoch>(createTaskEpoch);
-  const pickAbortRef = useRef<AbortController | null>(null);
+  const [mapPickFor, setMapPickFor] = useState<SearchField | null>(null);
   const [flagMode, setFlagMode] = useState(false);
   const [flagPoint, setFlagPoint] = useState<Point | null>(null);
   const [selectedFlag, setSelectedFlag] = useState<Flag | null>(null);
@@ -151,7 +148,7 @@ export default function RouteScreen() {
   requestRef.current = requestRoute;
   useEffect(() => {
     const key = origin && dest ? `${origin.lat},${origin.lng}|${dest.lat},${dest.lng}|${stops.length}` : "";
-    if (!routeTabFocused || !origin || !dest || routes.length > 0 || busy || starting || searchingFor || pickingFor || !token) return;
+    if (!routeTabFocused || !origin || !dest || routes.length > 0 || busy || starting || searchingFor || mapPickFor || !token) return;
     if (autoFindRef.current === key && (autoFailAtRef.current === 0 || Date.now() - autoFailAtRef.current < 30000)) return;
     const o = origin;
     const d = dest;
@@ -164,7 +161,7 @@ export default function RouteScreen() {
       });
     }, 600);
     return () => clearTimeout(timer);
-  }, [origin, dest, stops, routes.length, busy, starting, searchingFor, pickingFor, token, routeTabFocused]);
+  }, [origin, dest, stops, routes.length, busy, starting, searchingFor, mapPickFor, token, routeTabFocused]);
   async function refreshRoutesQuiet(): Promise<void> {
     if (!token || !origin || !dest || routes.length === 0) return;
     const id = (seqRef.current += 1);
@@ -250,39 +247,11 @@ export default function RouteScreen() {
     }
     setSearchingFor(null);
   }
-  function cancelPick(): void {
-    pickEpoch.invalidate();
-    pickAbortRef.current?.abort();
-    pickAbortRef.current = null;
-    setPickBusy(false);
-    setPickingFor(null);
-  }
-  async function onPickMapPoint(lat: number, lng: number) {
-    const field = pickingFor;
-    if (!field || busy || pickAbortRef.current) return;
-    Keyboard.dismiss();
-    if (field === "stop" && stops.length >= MAX_STOPS) {
-      setPickingFor(null);
-      return;
-    }
-    const ctrl = new AbortController();
-    pickAbortRef.current = ctrl;
-    const id = pickEpoch.claim();
-    setPickBusy(true);
-    try {
-      const label = await reverseLabel(lat, lng, lang, ctrl.signal);
-      if (!pickEpoch.current(id)) return;
-      onPickPlace({label, lat, lng, source: "map"}, field);
-    } catch (err) {
-      if (!pickEpoch.current(id)) return;
-      setError(toMessage(err));
-    } finally {
-      if (pickAbortRef.current === ctrl) pickAbortRef.current = null;
-      if (pickEpoch.current(id)) {
-        setPickBusy(false);
-        setPickingFor(null);
-      }
-    }
+  function onConfirmMapPick(lat: number, lng: number, label: string): void {
+    const field = mapPickFor;
+    setMapPickFor(null);
+    if (!field) return;
+    onPickPlace({label, lat, lng, source: "map"}, field);
   }
   async function onFlagMapPoint(lat: number, lng: number) {
     setFlagPoint({lat, lng});
@@ -294,7 +263,6 @@ export default function RouteScreen() {
     routes,
     selectedIndex,
     busy,
-    pickingFor,
     flagMode,
     requestRoute,
     setOrigin,
@@ -302,7 +270,6 @@ export default function RouteScreen() {
     setDest,
     setDestText,
     setStops,
-    onPickMapPoint,
     onFlagMapPoint,
   });
   const CENTER_RETRIES = 3;
@@ -350,14 +317,14 @@ export default function RouteScreen() {
     return () => clearInterval(clock);
   }, [routeTabFocused, result !== null]);
   useEffect(() => {
-    if (!routeTabFocused || !appActive || !result || busy || starting || searchingFor || pickingFor || !token) return;
+    if (!routeTabFocused || !appActive || !result || busy || starting || searchingFor || mapPickFor || !token) return;
     const timer = setInterval(() => {
       if (checking || touchCapReached(retouchStart, Date.now())) return;
       setChecking(true);
       void quietRef.current().finally(() => setChecking(false));
     }, ROUTE_RETOUCH_MS);
     return () => clearInterval(timer);
-  }, [routeTabFocused, appActive, result !== null, busy, starting, searchingFor, pickingFor, token, checking, retouchStart]);
+  }, [routeTabFocused, appActive, result !== null, busy, starting, searchingFor, mapPickFor, token, checking, retouchStart]);
   useEffect(() => {
     ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
@@ -381,24 +348,12 @@ export default function RouteScreen() {
       navigation.setOptions({headerShown: true});
     };
   }, [navigation]);
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (pickingFor) {
-        cancelPick();
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [pickingFor]);
   function toggleFlagMode() {
     setFlagMode((v) => !v);
-    cancelPick();
   }
   function cancelFlagReport() {
     setFlagPoint(null);
     setFlagMode(false);
-    cancelPick();
   }
   async function onSubmitFlag(report: FlagReport) {
     if (!token || !flagPoint) return;
@@ -627,13 +582,10 @@ export default function RouteScreen() {
         hazardHighlight={hazardHighlight}
         dragging={drag.dragging}
         dragPan={drag.dragPan}
-        pickingFor={pickingFor}
-        pickBusy={pickBusy}
         onMapPress={drag.onMapPress}
         onRegionChange={drag.onRegionChange}
         onRegionDid={drag.onRegionDid}
         onSelectIndex={onSelectRoute}
-        onCancelPick={cancelPick}
         onMapReady={() => applyCenter()}
         flagCamRef={drag.camRef}
         flagsToken={token}
@@ -641,7 +593,7 @@ export default function RouteScreen() {
         onPickFlag={setSelectedFlag}
         subscribeRegionDid={drag.subscribeRegionDid}
       />
-      {!pickingFor && !flagPoint && !selectedFlag ? (
+      {!flagPoint && !selectedFlag ? (
         flagMode ? (
           <Fab theme={theme} variant="danger" size={FAB_SIZE} label={t.common.close} onPress={toggleFlagMode} style={{position: "absolute", top: insets.top + 12, left: 12, zIndex: 10, elevation: 4}}>
             <MaterialIcons name="close" size={22} color="#fff" />
@@ -652,7 +604,7 @@ export default function RouteScreen() {
           </Fab>
         )
       ) : null}
-      {!pickingFor && !flagMode && !selectedFlag ? (
+      {!flagMode && !selectedFlag ? (
       <>
       <FabColumn bottom={rightColumnBottom(cardH)}>
         {canClear ? (
@@ -693,7 +645,7 @@ export default function RouteScreen() {
           starting={starting}
           hazardZones={hazardZones}
           widthBlocks={widthBlocks}
-          onOpenSearch={(f) => { setPickingFor(null); setFlagMode(false); setSearchingFor(f); }}
+          onOpenSearch={(f) => { setMapPickFor(null); setFlagMode(false); setSearchingFor(f); }}
           onSwap={onSwap}
           onDeleteStop={onDeleteStop}
           onOpenVehicle={() => setVehicleOpen(true)}
@@ -724,10 +676,22 @@ export default function RouteScreen() {
                 Keyboard.dismiss();
                 setSearchingFor(null);
                 setFlagMode(false);
-                setPickingFor(f);
+                setMapPickFor(f);
               }}
               onClose={() => { Keyboard.dismiss(); setSearchingFor(null); }}
             />
+        </Overlay>
+      ) : null}
+      {mapPickFor ? (
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setMapPickFor(null)}>
+          <MapPickOverlay
+            t={t}
+            lang={lang}
+            title={mapPickFor === "origin" ? t.route.origin : mapPickFor === "destination" ? t.route.destination : t.route.stop}
+            initial={mapPickFor === "origin" ? origin : mapPickFor === "destination" ? dest : stops.length > 0 ? stops[stops.length - 1] : null}
+            onPick={onConfirmMapPick}
+            onClose={() => setMapPickFor(null)}
+          />
         </Overlay>
       ) : null}
       {savedOpen ? (
@@ -757,17 +721,15 @@ export default function RouteScreen() {
           message={
             drag.dragging
               ? t.route.dragHint
-              : pickingFor
-                ? t.route.pickOnMap
-                : flagMode && !flagPoint
-                  ? t.route.flagHint
-                  : pausedKey !== null
-                    ? t.route.alertsPaused
-                    : null
+              : flagMode && !flagPoint
+                ? t.route.flagHint
+                : pausedKey !== null
+                  ? t.route.alertsPaused
+                  : null
           }
           sticky
           bottom={snackBottom(insets.bottom)}
-          action={pausedKey !== null && !drag.dragging && !pickingFor && !(flagMode && !flagPoint) ? {label: t.assist.refresh, onPress: () => void onRefreshAlertsQuiet()} : undefined}
+          action={pausedKey !== null && !drag.dragging && !(flagMode && !flagPoint) ? {label: t.assist.refresh, onPress: () => void onRefreshAlertsQuiet()} : undefined}
           onHide={() => {
             if (pausedKey !== null) setDismissedPausedKey(pausedKey);
           }}

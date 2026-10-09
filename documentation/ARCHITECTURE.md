@@ -53,8 +53,8 @@ background, white bold label, no hardcoded colors so both schemes follow the
 app main color) showing `2.4 km · 38 min` for the selected result only. It
 anchors at `selectedMid` (index midpoint from `midOf`, already computed for
 the reshape handle) with a bottom anchor and upward offset so it floats above
-the line, eats no taps (`pointerEvents="none"`), and hides while dragging or
-pick-on-map is armed. The top pill bar keeps numbers for switching
+the line, eats no taps (`pointerEvents="none"`), and hides while dragging.
+The top pill bar keeps numbers for switching
 alternatives, and renders a single informational pill when only one option
 exists.
 
@@ -66,9 +66,11 @@ capped at `MAX_STOPS`). Sub-8px releases disarm without committing.
 `requestRoute` is sequence-guarded; camera `fitBounds` runs only on explicit
 search actions (Find/pick/swap), never on drag reroutes.
 
-Pick-on-map arms `pickingFor` on the main map (FE parity): the bottom card
-hides, a cancel chip sits top-left under the pill bar, taps
-reverse-geocode into the origin/dest/stop setters.
+Pick-on-map uses the same fullscreen `MapPickOverlay` as every other search
+surface: the search closes, the overlay opens with the field's current point
+(or GPS when unset), and confirm feeds `{label, lat, lng, source: "map"}`
+through the identical `onPickPlace` handler as a list result, so origin, dest,
+and stops all resolve the same way.
 
 ## Place search (`src/screens/PlaceSearchScreen.tsx`)
 
@@ -100,6 +102,16 @@ follow (`isUserInteraction` guarded by `animatingRef`); recenter resumes it.
 
 `src/services/navigation.ts` (pure): segment projection → remaining/ETA,
 arrival < 30 m, off-route > 50 m × 3 fixes → auto-reroute (seq-guarded).
+
+Tow jobs navigate with the ticket attached (`NavSession.ticketId`): the
+navigator subscribes to dispatch pushes for that ticket and refetches it —
+destination change patches the session and quietly re-routes (`retargetTo`,
+same guards as refreshes), a cleared destination holds guidance with a
+banner, and a cancel auto-exits to Assist Records with a notice. Non-ticket
+navigations skip all of it. The navigator also shares the tower's live
+position every 60 s while a tow job is attached (foreground only), so
+tracking survives the Assist tab losing focus for the whole drive; shop and
+route navigations stay silent.
 `src/services/maneuvers.ts` (pure): prefers backend `steps` when present,
 else synthesizes turn/slight/sharp/U-turn maneuvers from geometry with
 wiggle suppression. Banner + `expo-speech` prompts at ~200 m / ~50 m;
@@ -142,7 +154,29 @@ confirmation (terminal server-side); rating submits straight through (the
 server upserts). A 404 on rate means the row vanished under the BE expiry
 sweep, so the sheet closes with a notice instead of an error.
 
-Tapping a shop pin opens `ShopDetailSheet`. All map art lives in
+Sections are Request, Tow, and Records in one segmented control: Request files
+SOS/repair jobs and browses shops, Tow files tow tickets (destination via the
+shared place search, shop or free point) and boards nearby tow jobs for
+active towers and car-capable volunteers on duty (both may legally accept a
+TOW — the board matches the BE accept rules; board accepts resolve the
+caller's own ACTIVE tower as `shopId`, volunteers send none and take the
+volunteer path; record accepts follow the same resolution, and shop-only
+viewers get a plain "tow operators only" message instead of an accept),
+Records merges everything. An accepted tow pins a live job view: map layers
+(tower pin, pickup pin, drop-off pin, connecting line, camera fit on open)
+plus a buttonless mini card (title, counterparty, live ETA) that opens the
+record modal, where every action lives — riders mark arrival/resolution
+there, towers resume navigation there. A quiet 15 s feed poll keeps the
+tracking fresh while the job is live and focused. The tow board reuses the pending
+radar filtered to `TOW` (the BE already gates it to active tow providers).
+Tapping a board row opens the same record sheet as a ticket (rider name,
+pickup and destination blocks, timeline, Accept in the footer — Decline is
+record-only since the server honors it solely on addressed walk-ins).
+Pending TOW modals carry a whole-way route preview (tower → pickup → shop in
+one `findRoute` call with the pickup as a stop, summary plus a fullscreen map
+with an Accept pinned in its footer); accepting from either place files the
+job and starts a navigation session through the pickup stop, so the tower
+lands in the navigator on the job.
 `assets/map/` sorted by feature (`hazards/`, `navigation/`, `shops/`,
 `route/`) and generates from `tools/genIcons.py` at full 1x/2x/3x —
 regenerate rather than hand-editing; re-runs are no-op diffs. Every listed
@@ -161,20 +195,51 @@ navigate / report, words kept as accessibility labels), and **I'm here** as
 the primary action — visible only within 200 m GPS (`IM_HERE_RADIUS_M`,
 `null` otherwise). Distance, minutes, and the closed warning live on the map
 pill, never repeated in the sheet.
-`I'm here` posts a `WALK_IN` ticket and jumps to Records. Shop search runs
+`I'm here` posts a `WALK_IN` ticket and jumps to Records. Navigating to a shop
+stamps the nav session with that shop (`checkIn`), so the navigator shows its
+own arrival **I'm here** card (200 m-gated on live position) that files the
+same ticket through the shared `checkInAtShop` helper and lands back on
+Records — no re-picking after the ride. Walk-preview and shop navigation both
+pass through a closing-soon gate first: when the fresh route's ETA outruns
+the shop's `closesInMinutes`, a dialog names both numbers and only proceeds
+on **Go anyway**. Saved places live
+under More (list/add/delete): adding picks a point on a fullscreen map, labels
+it, and stores it server-side, so tow-to-home and route destinations resolve
+in two taps through the saved-first merge. Shop search runs
 through the shared place-search infra (`usePlaceSearch` + `PlaceSearchScreen`,
 fullscreen): the inline field is a button opening the overlay in browse or
-tow-destination mode, with registered shops merged as the first group
+tow-destination mode (titled "Drop-off point", never shop copy), with registered shops merged as the first group
 (unbounded server range; the 10 km ceiling applies only to the old inline
 caller, now retired) and repair-gated MapTiler results after. Either source
 failing never blanks the other; name-folded + 150 m dedupe, cap 5, distance
-sort. Browse shop picks open the sheet and map picks raise a selected card
+sort. Every search surface carries the same pick-on-map escape hatch: the
+action row's map button closes the search and opens a fullscreen
+`MapPickOverlay` (centre pin, GPS jump, confirm reverse-geocodes), and the
+result is fed back through the identical pick handler as a list result —
+Assist browse/tow, Onboarding shop/tow, the provider form (shop and tow), and
+Route origin/dest/stop. Browse shop picks open the sheet and map picks raise a selected card
 (navigate/register); tow picks set the destination (`destinationShopId` for
 registered shops, free-form point otherwise, saved places preserved). The
-radius cycler governs registered browse only, never search results. Search
-and radius share one 50:50 filter row.
+the radius cycler lives inside the nearby overlay, never on the tab: the search
+action row's third button ("Nearby shops") opens a fullscreen
+`ShopRadiusOverlay` (registered shops around GPS, same pins and `~N min`
+pills as the old tab map, the retired walk-icon pill cycling the mode's radii
+(walk 500 m / 1 km / 2 km, tow 2 / 5 / 10 / 20 km up to the roof), and tapping
+a pin or pill docks a detail card in the overlay — name, open pill, class,
+stars, jobs (loading row while ratings fetch), the full walk/route/report
+icon row, reviews preview with its modal, and in tow mode a **Use this shop**
+button that sets the destination. Switching pins swaps the card in place, so
+comparing shops never leaves the map. The old tab-level cycler and background shop pins
+are gone; the background map is display-only again (GPS dot, tow destination,
+selected-shop context). Tow name-search runs at a 20 km radius (the BE
+defaults provider search to 2 km, which is why tow drop-offs felt locked);
+the overlay passes its own radius explicitly.
 The onboarding shop form carries the same
 vehicle-class chips, so fresh shops declare at signup.
+Adding a shop address (place pick or map pick) also runs a one-shot
+`POST /providers/near` at 300 m and, when registered shops come back (this
+record excluded), prints their names under the field — a duplicate warning
+only; the server `409` stays the real guard.
 
 ## Records: compact rows, detail sheet, ticket history
 
@@ -196,20 +261,41 @@ only for businesses the user actually operates (rider chip always). No inline
 actions, and opening a row no longer touches map selection — the sheet is
 the only detail UI. Tapping a row opens `RecordDetailSheet` (bottom sheet,
 same language as shop details): type-only title with the status as a header
-pill, counterparty hero (direction chip, name,
-relative age), an enriched shop block (address label, open-status pill,
-stars, phone row, square route button docked right)
-when the party carries it, a rider-location block (name, coords plus distance,
-stars, tappable phone) on inbound rows, icon fact rows (coords, note, decline, VND
+pill, then the counterparty hero (direction chip, name, role caption —
+repair shop / tow operator / volunteer / rider — relative age), a bordered
+place container (labeled Pickup on TOW, Start point on walk-in, with a
+reverse-geocoded label over the coordinates), the shop card when the party is
+a shop (name title, address, stars, phone with the open-status pill —
+tapping it opens the full shop modal, which owns the route action), a
+drop-off section whenever a destination exists (full shop card from
+`destinationParty` for registered shops, compact labeled point otherwise),
+a rider-location block (name, coords plus distance,
+stars, tappable phone) on inbound rows, icon fact rows (note, decline, VND
 amounts with separators), a vertical dot-and-connector timeline built from
-`statusHistory` (`StatusStepper` only for legacy rows without history), and
+`statusHistory` (`StatusStepper` only for legacy rows without history), tow ETA
+rows ("driver arrives in ~N min", only while future), a linked-ticket row
+jumping to the auto-spawned shop ticket on resolved tows, and
 the rating thread with reply (ratee-only: the reply affordance hides on your
 own ratings; every row is a shared `RatingRow` — initial avatar, author
 name, stars, comment, indented reply with replier name — under a Your rating
 title). Committing actions (Rate/Edit rating, Resolve at ready, Accept, Cancel,
-Decline-send, work-save, Send-quote, Approve) live in `Overlay`'s pinned footer; forms (cancel
+Decline-send, work-save, Send-quote, Approve, Decline drop-off) live in
+`Overlay`'s pinned footer; forms (cancel
 confirm, decline reasons, work editor, reply) stay in the body on demand.
+On pending unclaimed TOWs the Accept action renders faded for viewers who
+can neither attach a tower nor take the volunteer path (shop-only viewers),
+with a hint line in the body explaining the flow (tower claims first — shops
+can't accept tow jobs); attempting it anyway errors plainly instead of
+claiming the record vanished.
 Declining closes the sheet on success (errors keep it open for retry).
+A drop-off block sits under the ticket coords whenever a destination exists:
+registered shops show their name (storefront glyph), free points their label or
+`Drop-off point` (flag glyph), both with coords. **Decline drop-off** appears in
+the footer only for the destination shop's own operator on a non-pending,
+non-terminal ticket — same gate as the server (`canDeclineDestination`), so a
+foreign destination is read-only. It posts
+`POST /dispatch/destination/decline`, which clears the destination and freezes
+the traveled leg server-side; the reload drops the block on success.
 Quotes are one-shot: sent amounts render locked in the work form (the server
 `400`s re-quotes and re-finals), and the shop block carries a route button
 (resolves snapshot → known-shop coords into navigation) beside a shared row
@@ -221,7 +307,9 @@ Operator lifecycle runs inside the sheet: Accept (pending) → Start work
 (`6`, from arrived or matched walk-ins without a sent quote) → work editor
 → Mark ready (`7`), with Decline + reason as the pending off-ramp. Work
 states, the work editor, and quotes are shop-ticket only — volunteer-held
-tickets never see those controls (the server 403s them regardless).
+and tower-held tickets never see those controls (the server 403s them
+regardless; the client gates on the ticket touching one of your own SHOPs,
+so dual-role accounts see the workbench only on their shop jobs).
 Sending a quote (amount required) flips the ticket to `9` (Quoted, violet)
 for rider approval — Approve moves `9→6`, Decline reuses the cancel pair,
 and starting work is blocked while a quote pends, so no job starts

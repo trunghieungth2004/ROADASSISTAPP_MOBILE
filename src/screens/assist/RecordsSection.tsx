@@ -15,7 +15,6 @@ type Props = {
   theme: AppTheme;
   tickets: FeedTicket[];
   loading: boolean;
-  selectedId: string | null;
   shopKinds: Map<string, BusinessKind>;
   onOpen: (ticket: FeedTicket) => void;
 };
@@ -33,7 +32,7 @@ function partyName(ticket: FeedTicket, t: Strings): string {
   return t.assist.unassigned;
 }
 
-export default function RecordsSection({t, theme, tickets, loading, selectedId, shopKinds, onOpen}: Props) {
+export default function RecordsSection({t, theme, tickets, loading, shopKinds, onOpen}: Props) {
   const [filter, setFilter] = useState<RecordFilter>("ALL");
   const [showShop, setShowShop] = useState(true);
   const [showTow, setShowTow] = useState(true);
@@ -79,7 +78,7 @@ export default function RecordsSection({t, theme, tickets, loading, selectedId, 
           const ago = typeof item.createdAt === "string" ? timeAgoLabel(item.createdAt, Date.now(), t.hazards) : null;
           return (
             <Pressable key={item.id} onPress={() => onOpen(item)} accessibilityRole="button" accessibilityLabel={ticketTitle(item, t)}>
-              <View style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: selectedId === item.id ? theme.primary : theme.border}]}>
+              <View style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
                 <View style={styles.titleRow}>
                   {(() => {
                     const icon = roleIconName(businessKindOf(item, shopKinds));

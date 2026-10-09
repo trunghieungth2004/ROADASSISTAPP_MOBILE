@@ -7,6 +7,9 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {setVolunteerAvailability, updateProfile, updateUserServices, volunteerHeartbeat} from "../api/users";
 import {capturePosition, useLocationBeat} from "../services/locationBeats";
 import {missingKinds, operatedKinds, providerPill, providerRowSubtitle, serviceLabel, switchEnabled} from "./more/providerUi";
+import {listSavedPlaces, removeSavedPlace, savePlace, type SavedPlace} from "../api/places";
+import SavedPlacesSheet from "../components/place-search/SavedPlacesSheet";
+import MapPickOverlay from "../components/map/MapPickOverlay";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -56,6 +59,14 @@ export default function MoreScreen() {
   const [confirmedCount, setConfirmedCount] = useState(0);
   const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [pickingPlace, setPickingPlace] = useState(false);
+  const [draftPoint, setDraftPoint] = useState<{lat: number; lng: number} | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [savedBusy, setSavedBusy] = useState(false);
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [providerBusy, setProviderBusy] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | null>(null);
@@ -71,6 +82,50 @@ export default function MoreScreen() {
       setProviderError(toMessage(err));
     }
   }, [token]);
+  const loadSavedPlaces = useCallback(async (): Promise<void> => {
+    if (!token) {
+      setSavedPlaces([]);
+      return;
+    }
+    setSavedLoading(true);
+    try {
+      setSavedPlaces(await listSavedPlaces(token));
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedLoading(false);
+    }
+  }, [token]);
+  async function onSaveDraftPlace(): Promise<void> {
+    if (!token || !draftPoint || savedBusy) return;
+    const label = draftLabel.trim();
+    if (!label) return;
+    setSavedBusy(true);
+    try {
+      await savePlace({label, lat: draftPoint.lat, lng: draftPoint.lng}, token);
+      setDraftPoint(null);
+      setDraftLabel("");
+      setNotice(t.route.placeSaved);
+      await loadSavedPlaces();
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedBusy(false);
+    }
+  }
+  async function onDeleteSavedPlace(id: string): Promise<void> {
+    if (!token || savedBusy) return;
+    setSavedBusy(true);
+    try {
+      await removeSavedPlace(id, token);
+      setNotice(t.route.placeUnsaved);
+      await loadSavedPlaces();
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedBusy(false);
+    }
+  }
   useFocusEffect(useCallback(() => {
     void getPermissionStates().then(setPerms).catch(() => undefined);
     if (!token) return;
@@ -422,6 +477,22 @@ export default function MoreScreen() {
           <ProviderFormDialog t={t} token={token} kind={providerEdit.kind === "TOW" ? "TOW" : "SHOP"} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />
         ) : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable
+            style={styles.listRow}
+            onPress={() => {
+              setSavedError(null);
+              setSavedOpen(true);
+              void loadSavedPlaces();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t.route.savedPlaces}
+          >
+            <MaterialIcons name="bookmark" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.route.savedPlaces}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+        </View>
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Diagnostics" as never)}>
             <MaterialIcons name="bug-report" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.diagnostics}</Text>
@@ -432,6 +503,53 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={() => void signOut()}><MaterialIcons name="logout" size={20} color={theme.danger} /><Text style={[styles.listText, {color: theme.danger}]}>{t.more.signOut}</Text></Pressable>
         </View>
       </ScrollView>
+      {savedOpen ? (
+        <SavedPlacesSheet
+          t={t}
+          places={savedPlaces}
+          loading={savedLoading}
+          busy={savedBusy}
+          error={savedError}
+          onAdd={() => setPickingPlace(true)}
+          onDelete={(id) => void onDeleteSavedPlace(id)}
+          onClose={() => setSavedOpen(false)}
+        />
+      ) : null}
+      {pickingPlace ? (
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setPickingPlace(false)}>
+          <MapPickOverlay
+            t={t}
+            lang={lang}
+            title={t.route.savePlace}
+            initial={null}
+            onPick={(lat, lng, label) => {
+              setDraftPoint({lat, lng});
+              setDraftLabel(label);
+              setPickingPlace(false);
+            }}
+            onClose={() => setPickingPlace(false)}
+          />
+        </Overlay>
+      ) : null}
+      {draftPoint ? (
+        <Overlay
+          visible
+          variant="dialog"
+          title={t.route.savePlace}
+          closeLabel={t.common.cancel}
+          onClose={() => setDraftPoint(null)}
+          actions={[{label: t.common.save, tone: "primary", busy: savedBusy, onPress: () => void onSaveDraftPlace()}]}
+        >
+          <TextInput
+            style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+            value={draftLabel}
+            onChangeText={setDraftLabel}
+            placeholder={t.route.savePlace}
+            placeholderTextColor={theme.muted}
+            maxLength={120}
+          />
+        </Overlay>
+      ) : null}
       {volError ? (
         <Snack message={volError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
       ) : providerError ? (

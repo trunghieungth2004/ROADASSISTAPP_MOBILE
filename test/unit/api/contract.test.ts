@@ -4,12 +4,14 @@ import {
   acceptTicket,
   cancelTicket,
   createTicket,
+  declineDestination,
   feedTickets,
   getTicket,
   myTickets,
   nearTickets,
   updateTicketStatus,
 } from "../../../src/api/dispatch";
+import {checkInAtShop} from "../../../src/screens/assist/checkIn";
 import {ratingsByTicket, submitRating} from "../../../src/api/ratings";
 import {
   confirmFlag,
@@ -75,6 +77,8 @@ const calls: Call[] = [
   {fn: () => nearTickets(1, 2, T), method: "POST", path: "/dispatch/near"},
   {fn: () => acceptTicket("t1", T), method: "POST", path: "/dispatch/accept"},
   {fn: () => updateTicketStatus("t1", "4", T), method: "PUT", path: "/dispatch/status"},
+  {fn: () => declineDestination("t1", T), method: "POST", path: "/dispatch/destination/decline"},
+  {fn: () => checkInAtShop({providerId: "p1", token: T, deniedMessage: "denied"}), method: "POST", path: "/dispatch"},
   {fn: () => submitFlag({type: "FLOOD", lat: 1, lng: 2}, T), method: "POST", path: "/flags"},
   {fn: () => confirmFlag("f1", T), method: "POST", path: "/flags/confirm"},
   {fn: () => denyFlag("f1", T), method: "POST", path: "/flags/deny"},

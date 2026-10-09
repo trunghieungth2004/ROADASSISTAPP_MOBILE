@@ -23,6 +23,6 @@ export default function ShopPill({theme, label, selected, onPress}: Props) {
 }
 
 const styles = StyleSheet.create({
-  pill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
-  text: {color: "#fff", fontSize: 11, fontWeight: "700"},
+  pill: {borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14},
+  text: {color: "#fff", fontSize: 13, fontWeight: "700"},
 });

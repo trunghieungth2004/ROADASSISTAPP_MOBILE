@@ -48,7 +48,10 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
           lang={lang}
           title={t.provider.shopAddress}
           placeholder={t.provider.shopAddress}
-          onPick={draft.onPickPlace}
+          onPick={(place) => {
+            draft.onPickPlace(place);
+            void draft.refreshNearbyExisting(token);
+          }}
           onPickOnMap={() => {
             draft.setShopSearch(false);
             draft.openMapPick("shop");
@@ -64,6 +67,10 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
           title={t.provider.towAddress}
           placeholder={t.provider.towAddress}
           onPick={draft.onPickTowPlace}
+          onPickOnMap={() => {
+            draft.setTowSearch(false);
+            draft.openMapPick("tow");
+          }}
           onClose={() => draft.setTowSearch(false)}
         />
       </Overlay>
@@ -71,9 +78,12 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
         <MapPickOverlay
           t={t}
           lang={lang}
-          title={t.provider.shopAddress}
-          initial={draft.point}
-          onPick={(lat, lng, label) => draft.onConfirmMapPoint(lat, lng, label)}
+          title={kind === "TOW" ? t.provider.towAddress : t.provider.shopAddress}
+          initial={kind === "TOW" ? draft.towPoint : draft.point}
+          onPick={(lat, lng, label) => {
+            draft.onConfirmMapPoint(lat, lng, label);
+            void draft.refreshNearbyExisting(token);
+          }}
           onClose={() => draft.setMapPick(false)}
         />
       </Overlay>

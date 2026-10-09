@@ -65,9 +65,11 @@ export async function fetchShopPlaces(
   token: string,
   gps: {lat: number; lng: number},
   vehicleClass?: string,
+  radiusMeters?: number,
 ): Promise<ShopEntry[]> {
   const shops = await searchProviders(gps.lat, gps.lng, query, token, {
     ...(vehicleClass ? {vehicleClass} : {}),
+    ...(radiusMeters ? {radiusMeters} : {}),
   });
   return shops.map((s) => ({id: s.id, name: s.name, lat: s.lat, lng: s.lng}));
 }

@@ -77,3 +77,43 @@ test("place search shows the map button only when onPickOnMap is passed", () => 
   expect(pickOnMapLabels(withoutMap)).toBe(0);
   withoutMap.unmount();
 });
+
+function nearbyLabels(rendered: ReactTestRenderer): number {
+  return rendered.root.findAll((n) => n.props?.children === en.shop.nearbyShops).length;
+}
+
+test("place search shows the nearby button only when onBrowseNearby is passed", () => {
+  const onBrowseNearby = jest.fn();
+  const withNearby = mount(
+    <PlaceSearchScreen t={en} lang="en" title="Pick" placeholder="Search" onPick={() => undefined} onBrowseNearby={onBrowseNearby} onClose={() => undefined} />,
+  );
+  try {
+    expect(nearbyLabels(withNearby)).toBeGreaterThan(0);
+    const btn = withNearby.root
+      .findAll((n) => typeof n.props?.onPress === "function" && flatText(n.props?.children).includes(en.shop.nearbyShops))
+      .pop();
+    expect(btn).toBeDefined();
+    act(() => {
+      btn?.props.onPress();
+    });
+    expect(onBrowseNearby).toHaveBeenCalledTimes(1);
+  } finally {
+    withNearby.unmount();
+  }
+  const withoutNearby = mount(
+    <PlaceSearchScreen t={en} lang="en" title="Pick" placeholder="Search" onPick={() => undefined} onClose={() => undefined} />,
+  );
+  try {
+    expect(nearbyLabels(withoutNearby)).toBe(0);
+  } finally {
+    withoutNearby.unmount();
+  }
+});
+
+function flatText(node: unknown): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(flatText).join(" ");
+  if (node && typeof node === "object") return flatText((node as {props?: {children?: unknown}}).props?.children);
+  return "";
+}

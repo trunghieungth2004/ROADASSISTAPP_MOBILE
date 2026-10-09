@@ -27,8 +27,8 @@ const KINDS: {id: TicketType; icon: "sos" | "tow" | "mechanic"}[] = [
 
 function KindIcon({kind, selected, theme}: {kind: "sos" | "tow" | "mechanic"; selected: boolean; theme: AppTheme}): ReactNode {
   const color = selected ? "#fff" : theme.primary;
-  if (kind === "tow") return <MaterialCommunityIcons name="tow-truck" size={22} color={color} />;
   if (kind === "mechanic") return <MaterialIcons name="car-repair" size={22} color={color} />;
+  if (kind === "tow") return <MaterialCommunityIcons name="tow-truck" size={22} color={color} />;
   return <MaterialIcons name="sos" size={22} color={color} />;
 }
 

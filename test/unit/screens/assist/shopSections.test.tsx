@@ -42,10 +42,6 @@ async function render(overrides?: Partial<Props>) {
           onClearMapSel={() => undefined}
           onNavigateMapSel={() => undefined}
           onRegisterShop={() => undefined}
-          radiusLabel="500 m"
-          onCycleRadius={() => undefined}
-          shopLoading={false}
-          emptyShops={false}
           shopSel={null}
           walkRoute={null}
           walkBusy={false}

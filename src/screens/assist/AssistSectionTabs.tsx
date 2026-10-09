@@ -2,7 +2,7 @@ import {Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {AppTheme} from "../../theme";
 
-export type AssistSection = "request" | "records";
+export type AssistSection = "request" | "tow" | "records";
 
 export type SectionTab = {id: string; label: string};
 

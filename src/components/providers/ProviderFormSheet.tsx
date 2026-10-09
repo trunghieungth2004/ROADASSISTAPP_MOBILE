@@ -36,6 +36,11 @@ export default function ProviderFormSheet({t, draft}: Props) {
           <Pressable onPress={() => draft.setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
             <Text style={{color: draft.point ? theme.text : theme.muted}} numberOfLines={1}>{draft.point ? (draft.point.label ?? formatPoint(draft.point.lat, draft.point.lng)) : t.provider.addressUnset}</Text>
           </Pressable>
+          {draft.nearbyExisting.length > 0 ? (
+            <Text style={[styles.coords, {color: theme.muted}]}>
+              {t.provider.nearbyListed.replace("{n}", String(draft.nearbyExisting.length))}: {draft.nearbyExisting.slice(0, 3).map((s) => s.name).join(", ")}
+            </Text>
+          ) : null}
           <Text style={[styles.label, {color: theme.text}]}>{t.provider.serves}</Text>
           <View style={styles.row}>
             {[{id: "SOLO_BIKE", label: t.shop.vehicleBike}, {id: "CAR", label: t.shop.vehicleCar}].map((c) => {

@@ -32,8 +32,8 @@ function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
   if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
   return "place";
 }
-type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void};
-export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onClose, search: provided, shops, sources, mapFilter, query, onQuery}: Props) {
+type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void};
+export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -83,6 +83,12 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
         <Pressable style={[styles.actionBtn, {borderColor: theme.border}]} onPress={onPickOnMap}>
           <MaterialIcons name="pin-drop" size={20} color={theme.primary} />
           <Text style={[styles.actionBtnText, {color: theme.text}]} numberOfLines={1}>{t.route.pickOnMap}</Text>
+        </Pressable>
+        ) : null}
+        {onBrowseNearby ? (
+        <Pressable style={[styles.actionBtn, {borderColor: theme.border}]} onPress={onBrowseNearby}>
+          <MaterialIcons name="directions-walk" size={20} color={theme.primary} />
+          <Text style={[styles.actionBtnText, {color: theme.text}]} numberOfLines={1}>{t.shop.nearbyShops}</Text>
         </Pressable>
         ) : null}
       </View>

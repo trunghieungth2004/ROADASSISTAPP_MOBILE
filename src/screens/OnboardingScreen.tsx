@@ -75,6 +75,7 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [width, setWidth] = useState("");
   const [towPoint, setTowPoint] = useState<{lat: number; lng: number} | null>(null);
   const [towSearch, setTowSearch] = useState(false);
+  const [towMap, setTowMap] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [locBusy, setLocBusy] = useState(false);
   async function stampTowPosition(): Promise<void> {
@@ -103,6 +104,10 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   function onPickTowPlace(place: Place): void {
     setTowPoint({lat: place.lat, lng: place.lng});
     setTowSearch(false);
+  }
+  function onConfirmTowMap(lat: number, lng: number): void {
+    setTowPoint({lat, lng});
+    setTowMap(false);
   }
   function onContinue(): void {
     if (busy) return;
@@ -275,7 +280,21 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
           title={t.provider.towAddress}
           placeholder={t.provider.towAddress}
           onPick={onPickTowPlace}
+          onPickOnMap={() => {
+            setTowSearch(false);
+            setTowMap(true);
+          }}
           onClose={() => setTowSearch(false)}
+        />
+      </Overlay>
+      <Overlay visible={towMap} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setTowMap(false)}>
+        <MapPickOverlay
+          t={t}
+          lang={lang}
+          title={t.provider.towAddress}
+          initial={towPoint}
+          onPick={onConfirmTowMap}
+          onClose={() => setTowMap(false)}
         />
       </Overlay>
       <Overlay visible={hoursOpen} variant="sheet" title={t.provider.hours} closeLabel={t.common.cancel} onClose={() => setHoursOpen(false)}>

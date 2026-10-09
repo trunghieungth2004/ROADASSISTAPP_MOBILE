@@ -70,3 +70,27 @@ test("role picker stays unmounted until services opens", async () => {
   expect(pickers[0].props.selectedServices).toEqual(["RIDER", "VOLUNTEER"]);
   renderer.unmount();
 });
+
+test("saved places row opens the manager sheet", async () => {
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <MoreScreen />
+      </SafeAreaProvider>,
+    );
+  });
+  if (!renderer) throw new Error("mount failed");
+  try {
+    const pressables = renderer.root.findAll((n) => typeof n.props?.onPress === "function");
+    const row = pressables.find((r) => textsUnder(r).some((text) => text === en.route.savedPlaces));
+    expect(row).toBeDefined();
+    await act(async () => {
+      row?.props.onPress();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+    expect(textsUnder(renderer.root).some((text) => text === en.common.add)).toBe(true);
+  } finally {
+    renderer.unmount();
+  }
+});

@@ -1,6 +1,6 @@
 import type {RefObject} from "react";
 import {useEffect, useMemo, useRef, useState, type MutableRefObject} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme, type PanResponderInstance} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View, useColorScheme, type PanResponderInstance} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/ui/AppText";
@@ -10,12 +10,10 @@ import {bundledMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
-import {Fab} from "../../components/ui/Fab";
-import {FAB_SIZE} from "./fabLayout";
 import type {AppTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import type {RouteOption} from "../../api/routes";
-import {HCMC_CENTER, type CamState, type DragTarget, type Point, type SearchField, type Stop} from "./types";
+import {HCMC_CENTER, type CamState, type DragTarget, type Point, type Stop} from "./types";
 import {pointFeature} from "./routeGeo";
 import {pillMeta} from "./routeSummary";
 import RouteMidPill from "./RouteMidPill";
@@ -39,13 +37,10 @@ type Props = {
   hazardHighlight: [number, number][] | null;
   dragging: DragTarget | null;
   dragPan: PanResponderInstance;
-  pickingFor: SearchField | null;
-  pickBusy: boolean;
   onMapPress: (e: unknown) => void;
   onRegionChange: (e: unknown) => void;
   onRegionDid: (e: unknown) => void;
   onSelectIndex: (i: number) => void;
-  onCancelPick: () => void;
   onMapReady: () => void;
   flagCamRef: MutableRefObject<CamState>;
   flagsToken: string | null;
@@ -126,13 +121,13 @@ export default function RouteMapView(props: Props) {
             <StyledLayer type="symbol" id="reshape-handle-icon" style={{iconImage: "handle2-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.result && props.selectedMid && !props.dragging && !props.pickingFor ? (
+        {props.result && props.selectedMid && !props.dragging ? (
           <Marker
             key="route-mid-pill"
             id="route-mid-pill"
             lngLat={[props.selectedMid[0], props.selectedMid[1]]}
             anchor="bottom"
-            offset={[0, -20]}
+            offset={[0, -28]}
           >
             <RouteMidPill theme={theme} label={`${((props.result.distanceMeters ?? 0) / 1000).toFixed(1)} ${t.route.km} · ${Math.round((props.result.durationSeconds ?? 0) / 60)} ${t.route.min}`} />
           </Marker>
@@ -171,16 +166,6 @@ export default function RouteMapView(props: Props) {
         </View>
       ) : null}
       {props.dragging ? <View style={StyleSheet.absoluteFill} {...props.dragPan.panHandlers} /> : null}
-      {props.pickingFor ? (
-        <Fab theme={theme} variant="danger" size={FAB_SIZE} label={t.common.close} onPress={props.onCancelPick} style={{position: "absolute", left: 12, top: insets.top + 12, zIndex: 10, elevation: 4}}>
-          <MaterialIcons name="close" size={22} color="#fff" />
-        </Fab>
-      ) : null}
-      {props.pickingFor && props.pickBusy ? (
-        <View style={[styles.pickResolving, {top: insets.top + 56}]} pointerEvents="none">
-          <ActivityIndicator size="small" color="#fff" />
-        </View>
-      ) : null}
     </>
   );
 }
@@ -190,5 +175,4 @@ const styles = StyleSheet.create({
   topBarContent: {paddingHorizontal: 12, gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
   pillInner: {flexDirection: "row", alignItems: "center", gap: 4},
-  pickResolving: {position: "absolute", left: 12, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", zIndex: 10, elevation: 4},
 });

@@ -1,4 +1,4 @@
-import {DISPATCH_STATUS, riderActionsFor, type FeedDirection, type RiderAction} from "../../api/dispatch";
+import {DISPATCH_STATUS, isTerminal, riderActionsFor, type FeedDirection, type RiderAction} from "../../api/dispatch";
 
 export function canRate(status: string): boolean {
   return status === DISPATCH_STATUS.RESOLVED;
@@ -50,4 +50,11 @@ export function canApproveQuote(direction: FeedDirection, status: string): boole
 
 export function canResolve(direction: FeedDirection, status: string): boolean {
   return direction === "out" && status === DISPATCH_STATUS.READY;
+}
+
+export function canDeclineDestination(status: string, destinationShopId: string | null | undefined, ownShopIds: Set<string>): boolean {
+  if (typeof destinationShopId !== "string" || destinationShopId === "") return false;
+  if (!ownShopIds.has(destinationShopId)) return false;
+  if (status === DISPATCH_STATUS.PENDING || isTerminal(status)) return false;
+  return true;
 }

@@ -59,6 +59,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   onRecenter: () => void;
   rerouteForConfirm: () => Promise<boolean>;
   refreshRouteQuiet: () => Promise<{changed: boolean; warnings: FlagWarning[]} | null>;
+  retargetTo: (next: {lat: number; lng: number}, nextStops: {lat: number; lng: number}[]) => Promise<{changed: boolean; warnings: FlagWarning[]} | null>;
   previewStep: (idx: number) => void;
   preview: {at: [number, number]; highlight: [number, number][]; bearing: number} | null;
   hazardFocus: {at: [number, number]; highlight: [number, number][]; idx: number} | null;
@@ -211,10 +212,19 @@ export function useNavTracking(opts: NavTrackingOpts): {
   const refreshRouteQuiet = async (): Promise<{changed: boolean; warnings: FlagWarning[]} | null> => {
     const p = lastFixRef.current;
     if (!p || reroutingRef.current || arrivedRef.current) return null;
+    return retargetTo(dest, stops);
+  };
+
+  const retargetTo = async (
+    next: {lat: number; lng: number},
+    nextStops: {lat: number; lng: number}[],
+  ): Promise<{changed: boolean; warnings: FlagWarning[]} | null> => {
+    const p = lastFixRef.current;
+    if (!p || reroutingRef.current || arrivedRef.current) return null;
     const id = (seqRef.current += 1);
     try {
       const res = await findRoute(
-        {originLat: p.lat, originLng: p.lng, destLat: dest.lat, destLng: dest.lng, stops, width, vehicleType},
+        {originLat: p.lat, originLng: p.lng, destLat: next.lat, destLng: next.lng, stops: nextStops, width, vehicleType},
         token,
       );
       if (seqRef.current !== id) return null;
@@ -656,6 +666,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   onRecenter,
   rerouteForConfirm,
   refreshRouteQuiet,
+  retargetTo,
   previewStep,
   preview,
   hazardFocus,

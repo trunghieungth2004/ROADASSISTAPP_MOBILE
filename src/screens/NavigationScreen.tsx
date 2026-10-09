@@ -1,13 +1,15 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useKeepAwake} from "expo-keep-awake";
-import {useNavigation} from "@react-navigation/native";
+import {useIsFocused, useNavigation} from "@react-navigation/native";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useNavSession} from "../context/NavSessionContext";
+import {pingProviderLocation} from "../api/providers";
+import {capturePosition, useLocationBeat} from "../services/locationBeats";
 import Overlay from "../components/overlay/Overlay";
 import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
 import type {RouteOption} from "../api/routes";
@@ -29,12 +31,16 @@ import {SNACK_GAP} from "../components/ui/snackOffset";
 import FlagDetailSheet from "../components/flags/FlagDetailSheet";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
-import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeHazardPush, type HazardPushData} from "../services/push";
+import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeDispatchPush, subscribeHazardPush, type DispatchPushData, type HazardPushData} from "../services/push";
+import {DISPATCH_STATUS, getTicket} from "../api/dispatch";
+import {towDestOf} from "./assist/towDest";
 import {playEventSound, warmAudio} from "../services/sound";
 import Snack from "../components/ui/Snack";
 import {pickFeedback} from "../components/ui/feedback";
 import FlagReportDialog from "../components/flags/FlagReportDialog";
 import type {FlagReport} from "../components/flags/FlagSheet";
+import {checkInAtShop} from "./assist/checkIn";
+import {IM_HERE_RADIUS_M} from "./assist/walkShop";
 import {flagOverlayActions} from "./hazards/flagActions";
 
 type Props = {
@@ -47,19 +53,41 @@ type Props = {
   stops: {lat: number; lng: number}[];
   width?: number;
   vehicleType?: string;
+  checkIn: {providerId: string; name: string} | null;
+  ticketId: string | null;
   onExit: () => void;
+  onCheckedIn: () => void;
+  onTicketCancelled: () => void;
 };
 
 export default function NavigationScreen() {
   const {t, lang} = useStrings();
   const {token} = useAuth();
-  const {session, clear} = useNavSession();
+  const {session, clear, setCheckedIn, setNavEnded} = useNavSession();
   const navigation = useNavigation();
+  const focused = useIsFocused();
+  useLocationBeat(!!token && (session?.ticketId ?? null) !== null && focused, 60 * 1000, async () => {
+    if (!token) return;
+    const pos = await capturePosition();
+    if (!pos) return;
+    await pingProviderLocation(pos.lat, pos.lng, token);
+  });
   const onExit = useCallback(() => {
     clear();
     navigation.goBack();
   }, [clear, navigation]);
+  const onCheckedIn = useCallback(() => {
+    setCheckedIn(true);
+    clear();
+    navigation.goBack();
+  }, [setCheckedIn, clear, navigation]);
+  const onTicketCancelled = useCallback(() => {
+    setNavEnded(true);
+    clear();
+    navigation.goBack();
+  }, [setNavEnded, clear, navigation]);
   useEffect(() => {
+    if (!focused) return undefined;
     if (!session || !token) {
       const timer = setTimeout(() => {
         clear();
@@ -68,7 +96,7 @@ export default function NavigationScreen() {
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [session, token, clear, navigation]);
+  }, [focused, session, token, clear, navigation]);
   if (!session || !token) return null;
   return (
     <NavigationContent
@@ -81,12 +109,16 @@ export default function NavigationScreen() {
       stops={session.stops}
       width={session.width}
       vehicleType={session.vehicleType}
+      checkIn={session.checkIn ?? null}
+      ticketId={session.ticketId ?? null}
       onExit={onExit}
+      onCheckedIn={onCheckedIn}
+      onTicketCancelled={onTicketCancelled}
     />
   );
 }
 
-function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, onExit}: Props) {
+function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, checkIn, ticketId, onExit, onCheckedIn, onTicketCancelled}: Props) {
   useKeepAwake();
   useEffect(() => {
     void warmAudio();
@@ -140,6 +172,51 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   deniedRef.current = deniedIds;
   const posRef = useRef(nav.pos);
   posRef.current = nav.pos;
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const ticketIdRef = useRef(ticketId);
+  ticketIdRef.current = ticketId;
+  const destRef = useRef(dest);
+  destRef.current = dest;
+  const {patch} = useNavSession();
+  function noteTicket(text: string): void {
+    setConfirmSnack(text);
+    if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
+    confirmSnackTimer.current = setTimeout(() => setConfirmSnack(null), 6000);
+  }
+  useEffect(() => {
+    return subscribeDispatchPush((data: DispatchPushData) => {
+      void (async () => {
+        const tid = ticketIdRef.current;
+        if (!tid || data.ticketId !== tid || !tokenRef.current) return;
+        let fresh;
+        try {
+          fresh = await getTicket(tid, tokenRef.current);
+        } catch {
+          return;
+        }
+        if (!aliveRef.current) return;
+        if (fresh.status === DISPATCH_STATUS.CANCELLED) {
+          onTicketCancelled();
+          return;
+        }
+        const next = towDestOf(fresh);
+        const prev = destRef.current;
+        if (!next) {
+          if (prev.lat !== fresh.lat || prev.lng !== fresh.lng) {
+            noteTicket(t.nav.dropOffRemoved);
+          }
+          return;
+        }
+        if (next.lat === prev.lat && next.lng === prev.lng) return;
+        const nextStops = fresh.status === DISPATCH_STATUS.MATCHED ? [{lat: fresh.lat, lng: fresh.lng}] : [];
+        patch({dest: next, stops: nextStops});
+        destRef.current = next;
+        await navRef.current.retargetTo(next, nextStops);
+        noteTicket(t.nav.dropOffUpdated);
+      })();
+    }, "navigation");
+  }, []);
   const openManualFlag = useCallback((flag: Flag): void => {
     autoIdRef.current = null;
     setAutoOpened(false);
@@ -341,6 +418,28 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   }, [showVotes]);
   const etaMin = Math.max(1, Math.round((remaining * pace) / 60));
   const frac = routeMeters > 0 ? Math.min(1, (nav.progress?.progressMeters ?? 0) / routeMeters) : 0;
+  const [checkBusy, setCheckBusy] = useState(false);
+  const nearShop = checkIn !== null && nav.pos !== null && distBetween(nav.pos, dest) <= IM_HERE_RADIUS_M;
+  async function onCheckIn(): Promise<void> {
+    if (!checkIn || !nearShop || checkBusy) return;
+    setCheckBusy(true);
+    try {
+      await checkInAtShop({
+        providerId: checkIn.providerId,
+        token,
+        vehicleType,
+        vehicleWidth: width,
+        deniedMessage: t.nav.locationDenied,
+      });
+      onCheckedIn();
+    } catch (err) {
+      setFetchError(toMessage(err));
+      if (fetchErrorTimer.current) clearTimeout(fetchErrorTimer.current);
+      fetchErrorTimer.current = setTimeout(() => setFetchError(null), 6000);
+    } finally {
+      setCheckBusy(false);
+    }
+  }
   const shadeRef = useRef({at: 0, frac: -1, turn: ""});
   useEffect(() => {
     const turnKey = nav.next ? `${nav.next.kind}|${nav.next.street ?? ""}` : nav.arrived ? "arrived" : "";
@@ -466,6 +565,20 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
         </View>
       </View>
       <View style={[styles.bottomStack, {bottom: insets.bottom + 12}]} onLayout={(e) => setBottomH(e.nativeEvent.layout.height)}>
+        {nav.arrived && nearShop && checkIn ? (
+          <View style={[styles.checkinCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
+            <Text style={[styles.checkinName, {color: theme.text}]} numberOfLines={1}>{checkIn.name}</Text>
+            <Pressable
+              style={[styles.checkinBtn, {backgroundColor: theme.primary}, checkBusy && styles.disabled]}
+              disabled={checkBusy}
+              onPress={() => void onCheckIn()}
+              accessibilityRole="button"
+              accessibilityLabel={t.assist.imHere}
+            >
+              {checkBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkinText}>{t.assist.imHere}</Text>}
+            </Pressable>
+          </View>
+        ) : null}
         {nearestWarning ? (
           <View style={[styles.hazardCard, {backgroundColor: theme.paper, borderColor: cardKind.color}]}>
             <View style={[styles.voteSide, {opacity: showVotes ? 1 : 0}]}>
@@ -583,6 +696,11 @@ const styles = StyleSheet.create({
   statusText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   bottomStack: {position: "absolute", left: 88, right: 76, gap: 8},
   bottomBar: {borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 4, alignItems: "center"},
+  checkinCard: {borderWidth: 2, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, gap: 8, alignItems: "center"},
+  checkinName: {fontSize: 15, fontWeight: "700", textAlign: "center"},
+  checkinBtn: {borderRadius: 8, paddingVertical: 10, paddingHorizontal: 24, alignItems: "center", alignSelf: "stretch"},
+  checkinText: {color: "#fff", fontWeight: "700"},
+  disabled: {opacity: 0.6},
   hazardCard: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12},
   hazardCenter: {flex: 1, alignItems: "center", gap: 2, minWidth: 0},
   hazardTypeRow: {flexDirection: "row", alignItems: "center", gap: 6},

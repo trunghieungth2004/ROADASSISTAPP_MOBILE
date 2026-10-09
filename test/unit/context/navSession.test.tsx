@@ -28,6 +28,7 @@ const mockSetOptions = jest.fn();
 
 jest.mock("@react-navigation/native", () => ({
   useNavigation: () => ({goBack: mockGoBack, setOptions: mockSetOptions}),
+  useIsFocused: () => true,
 }));
 
 test("navigation route renders nothing without a session", async () => {

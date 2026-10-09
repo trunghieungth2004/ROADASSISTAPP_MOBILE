@@ -16,10 +16,6 @@ type Props = {
   onClearMapSel: () => void;
   onNavigateMapSel: () => void;
   onRegisterShop: () => void;
-  radiusLabel: string;
-  onCycleRadius: () => void;
-  shopLoading: boolean;
-  emptyShops: boolean;
   shopSel: Provider | null;
   walkRoute: RouteOption | null;
   walkBusy: boolean;
@@ -32,22 +28,16 @@ export default function ShopsSection(props: Props) {
   const {t, theme} = props;
   return (
     <View style={styles.wrap}>
-      <View style={styles.filterRow}>
-        <Pressable
-          style={[styles.input, styles.halfInput, {borderColor: theme.border}]}
-          onPress={props.onOpenSearch}
-          accessibilityRole="button"
-          accessibilityLabel={t.shop.searchPlaceholder}
-        >
-          <Text style={{color: props.query ? theme.text : theme.muted}} numberOfLines={1}>
-            {props.query ? props.query : t.shop.searchPlaceholder}
-          </Text>
-        </Pressable>
-        <Pressable style={[styles.radiusCycle, styles.halfCycle, {borderColor: theme.border}]} onPress={props.onCycleRadius} accessibilityRole="button" accessibilityLabel={props.radiusLabel}>
-          <MaterialIcons name="directions-walk" size={18} color={theme.primary} />
-          <Text style={[styles.radiusCycleText, {color: theme.text}]} numberOfLines={1}>{props.radiusLabel}</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        style={[styles.input, {borderColor: theme.border}]}
+        onPress={props.onOpenSearch}
+        accessibilityRole="button"
+        accessibilityLabel={t.shop.searchPlaceholder}
+      >
+        <Text style={{color: props.query ? theme.text : theme.muted}} numberOfLines={1}>
+          {props.query ? props.query : t.shop.searchPlaceholder}
+        </Text>
+      </Pressable>
       {props.mapSel ? (
             <View style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
               <View style={styles.selectedRow}>
@@ -86,25 +76,18 @@ export default function ShopsSection(props: Props) {
               </Pressable>
             </View>
           ) : null}
-          {props.shopLoading && !props.shopSel ? <StatusRow theme={theme} text={t.shop.loading} /> : null}
-          {props.emptyShops ? <Text style={[styles.hint, {color: theme.muted}]}>{t.shop.empty}</Text> : null}
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {gap: 8},
-  filterRow: {flexDirection: "row", gap: 8},
-  halfInput: {flex: 1, minWidth: 0},
-  halfCycle: {flex: 1, justifyContent: "center"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   coords: {fontSize: 12},
-  radiusCycle: {flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12},
-  radiusCycleText: {fontSize: 13, fontWeight: "600"},
   innerCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 6},
   activeCard: {borderWidth: 2},
   cardTitle: {fontWeight: "700"},
-  hint: {fontSize: 12},
   actionBtn: {borderRadius: 8, padding: 10, alignItems: "center"},
   actionText: {color: "#fff", fontWeight: "700"},
   chipBtn: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, alignItems: "center", justifyContent: "center"},

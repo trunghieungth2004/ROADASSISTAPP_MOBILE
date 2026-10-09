@@ -31,6 +31,8 @@ export type FeedTicket = DispatchTicket & {
     id: string;
     name: string;
     kind: string;
+    lat?: number;
+    lng?: number;
     label?: string;
     openNow?: boolean;
     ratingAvg?: number;
@@ -38,6 +40,22 @@ export type FeedTicket = DispatchTicket & {
     phone?: string;
   } | null;
   statusHistory?: {status: string; at: string; by: string}[];
+  destinationParty?: {
+    id: string;
+    name: string;
+    kind: string;
+    lat?: number;
+    lng?: number;
+    label?: string;
+    openNow?: boolean;
+    ratingAvg?: number;
+    ratingCount?: number;
+    phone?: string;
+  } | null;
+  etaPickupAt?: string | null;
+  etaDropoffAt?: string | null;
+  towerFix?: {lat: number; lng: number; at: string} | null;
+  linkedTicketIds?: string[];
 };
 
 export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as const;
@@ -54,6 +72,8 @@ export function riderActionsFor(status: string): RiderAction[] {
 export type DispatchTicket = {
   id: string;
   userId: string;
+  riderName?: string | null;
+  distance?: number;
   ticketType: string;
   lat: number;
   lng: number;
@@ -68,6 +88,7 @@ export type DispatchTicket = {
   expiresAt?: string | null;
   destinationShopId?: string | null;
   destinationPoint?: {lat: number; lng: number; label?: string} | null;
+  destinationSnapshot?: {id?: string; name?: string; lat: number; lng: number; kind?: string; label?: string | null; source?: string} | null;
   assignedUid?: string | null;
   assignedShopId?: string | null;
   assignedKind?: string | null;
@@ -123,9 +144,9 @@ export async function cancelTicket(ticketId: string, token: string): Promise<{up
   return res;
 }
 
-export function nearTickets(lat: number, lng: number, token: string, radiusMeters?: number): Promise<DispatchTicket[]> {
-  const key = `ticketsNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters ?? "-"}`;
-  return withCache(key, CACHE_TTL_MS.ticketsNear, () => api.post<DispatchTicket[]>("/dispatch/near", {lat, lng, radiusMeters}, token));
+export function nearTickets(lat: number, lng: number, token: string, radiusMeters?: number, ticketType?: string): Promise<DispatchTicket[]> {
+  const key = `ticketsNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters ?? "-"},${ticketType ?? "-"}`;
+  return withCache(key, CACHE_TTL_MS.ticketsNear, () => api.post<DispatchTicket[]>("/dispatch/near", {lat, lng, radiusMeters, ticketType}, token));
 }
 
 export async function acceptTicket(ticketId: string, token: string, shopId?: string): Promise<{matched: boolean; kind: string}> {
@@ -174,6 +195,12 @@ export async function sendQuote(ticketId: string, quotedAmount: number, workType
 
 export async function approveQuote(ticketId: string, token: string): Promise<{approved: boolean}> {
   const res = await api.post<{approved: boolean}>("/dispatch/quote/approve", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function declineDestination(ticketId: string, token: string): Promise<{declined: boolean; legKm: number}> {
+  const res = await api.post<{declined: boolean; legKm: number}>("/dispatch/destination/decline", {ticketId}, token);
   bustTicketCaches(token);
   return res;
 }

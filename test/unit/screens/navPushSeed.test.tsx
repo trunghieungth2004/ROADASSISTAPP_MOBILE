@@ -38,6 +38,7 @@ jest.mock("../../../src/context/NavSessionContext", () => {
 
 jest.mock("@react-navigation/native", () => ({
   useNavigation: () => ({goBack: jest.fn(), setOptions: jest.fn()}),
+  useIsFocused: () => true,
 }));
 
 jest.mock("expo-speech", () => ({
