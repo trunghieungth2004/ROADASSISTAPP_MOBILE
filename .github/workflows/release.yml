@@ -48,7 +48,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
       - run: npx expo prebuild --platform android --non-interactive
       - name: Restore upload keystore
         env:
