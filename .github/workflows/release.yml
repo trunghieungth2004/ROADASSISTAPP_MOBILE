@@ -100,6 +100,8 @@ jobs:
           EOF
       - run: ./gradlew assembleRelease --no-daemon
         working-directory: android
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       - run: |
           TAG="${GITHUB_REF_NAME:-manual}"
           cp android/app/build/outputs/apk/release/app-release.apk "roadassist-${TAG}.apk"
