@@ -131,7 +131,11 @@ One map, one top-anchored card, three mutually exclusive sections switched by a
 segmented control (`AssistSectionTabs`, tab semantics): `Request` (icon-only
 type buttons — the `MECHANIC` button expands shop browse inline: map-icon
 pins + name search; `SOS`/`TOW` open a ticket dialog with note field,
-drop-off picker for tow, and Send; nothing preselected) and `Records`
+drop-off picker for tow, and Send; nothing preselected). Filing while holding
+a live ticket of the same type answers `409` with the live ticket's id — the
+dialog names it once and offers Change drop-off (when the live ticket is a
+destination-less tow, opening the retarget picker on it) or File anyway
+(resubmits forced); cross-type filings skip the dialog entirely) and `Records`
 (unified in/out list, see below). The type row ends in a compact vehicle
 button (glyph only) opening the shared picker: neutral border when set,
 danger dot when the fleet exists but nothing is active, dashed border + plus
@@ -161,12 +165,25 @@ active towers and car-capable volunteers on duty (both may legally accept a
 TOW — the board matches the BE accept rules; board accepts resolve the
 caller's own ACTIVE tower as `shopId`, volunteers send none and take the
 volunteer path; record accepts follow the same resolution, and shop-only
-viewers get a plain "tow operators only" message instead of an accept),
+viewers see no Accept at all — just the flow hint (tower claims first) —
+since they can never take a tow),
 Records merges everything. An accepted tow pins a live job view: map layers
-(tower pin, pickup pin, drop-off pin, connecting line, camera fit on open)
+(green tower-dot pin, pickup pin, drop-off pin, leg-aware straight connector —
+tower→pickup while matched, tower→shop once arrived — camera fit on open)
 plus a buttonless mini card (title, counterparty, live ETA) that opens the
 record modal, where every action lives — riders mark arrival/resolution
-there, towers resume navigation there. A quiet 15 s feed poll keeps the
+there, towers resume navigation there. Countdowns show live distance first
+(tower→pickup) and refresh from the tower's fix every few minutes while
+matched, via `POST /dispatch/eta/refresh`. While any job card shows, the top
+panel collapses to an expand bar (auto-collapsed on pin, manually
+re-expandable, reset on unpin) so the map breathes; the mini card stays as
+the job handle. The pin has two sources: an explicit
+working pin (set when you accept a job, always wins) and a rider fallback —
+the newest own out-direction tow at matched/arrived pins itself, so riders
+get the live view without ever accepting. A pending tow pins from the
+get-go: with a destination it shows an info card (drop-off name, default
+border, no tracking), without one it pins alert-only (amber border, no
+layers, no poll) as the visible "pick a drop-off" nudge. A quiet 15 s feed poll keeps the
 tracking fresh while the job is live and focused. The tow board reuses the pending
 radar filtered to `TOW` (the BE already gates it to active tow providers).
 Tapping a board row opens the same record sheet as a ticket (rider name,
@@ -245,11 +262,13 @@ only; the server `409` stays the real guard.
 
 Records merges both sides of every ticket into a single newest-first list fed
 by `POST /dispatch/feed`, which stamps each row server-side
-(`direction: "in" | "out"` plus `otherParty` names — shop, volunteer handle,
+(`direction: "in" | "out"` plus `otherParty` names — shop, tower, volunteer handle,
 or rider display name; shop parties additionally carry `label`, `openNow`,
 `ratingAvg`, and `ratingCount` when the provider record holds them, resolved
-through `assignedShopId`, then the addressed `providerId`, then
-`destinationShopId`, so pending and declined tickets already name their shop).
+through `assignedShopId`, then the addressed `providerId` — the tow drop-off
+shop is never the counterparty, so a pending tow reads Unassigned with its
+drop-off arriving only via `destinationParty`, and pending and declined
+walk-ins already name their shop).
 Rows are two lines: type + status pill (per-status
 color via `statusPillColor`), counterparty + relative date. The filter row
 carries All/In/Out plus role-aware kind toggles (shop/tow icons, always-on
@@ -272,8 +291,7 @@ drop-off section whenever a destination exists (full shop card from
 a rider-location block (name, coords plus distance,
 stars, tappable phone) on inbound rows, icon fact rows (note, decline, VND
 amounts with separators), a vertical dot-and-connector timeline built from
-`statusHistory` (`StatusStepper` only for legacy rows without history), tow ETA
-rows ("driver arrives in ~N min", only while future), a linked-ticket row
+`statusHistory` (`StatusStepper` only for legacy rows without history), tow ETArows ("driver arrives in ~N min", only while future), a linked-ticket row
 jumping to the auto-spawned shop ticket on resolved tows, and
 the rating thread with reply (ratee-only: the reply affordance hides on your
 own ratings; every row is a shared `RatingRow` — initial avatar, author
@@ -282,20 +300,43 @@ title). Committing actions (Rate/Edit rating, Resolve at ready, Accept, Cancel,
 Decline-send, work-save, Send-quote, Approve, Decline drop-off) live in
 `Overlay`'s pinned footer; forms (cancel
 confirm, decline reasons, work editor, reply) stay in the body on demand.
-On pending unclaimed TOWs the Accept action renders faded for viewers who
+The walk-in Decline renders only on walk-in tickets — tow rows never offer
+it, so a destination shop sees exactly one decline affordance (Decline
+drop-off).
+On pending unclaimed TOWs the Accept action is hidden from viewers who
 can neither attach a tower nor take the volunteer path (shop-only viewers),
 with a hint line in the body explaining the flow (tower claims first — shops
-can't accept tow jobs); attempting it anyway errors plainly instead of
-claiming the record vanished.
-Declining closes the sheet on success (errors keep it open for retry).
+can't accept tow jobs) standing in for the missing button. Towers whose own
+vehicle isn't accepting (off duty or mid-job) get the same hidden treatment
+with an off-duty hint instead — the server would refuse the accept anyway.
+Declining closes the sheet on success (errors keep it open for retry) —
+walk-in declines and destination declines alike.
 A drop-off block sits under the ticket coords whenever a destination exists:
 registered shops show their name (storefront glyph), free points their label or
-`Drop-off point` (flag glyph), both with coords. **Decline drop-off** appears in
-the footer only for the destination shop's own operator on a non-pending,
-non-terminal ticket — same gate as the server (`canDeclineDestination`), so a
-foreign destination is read-only. It posts
-`POST /dispatch/destination/decline`, which clears the destination and freezes
-the traveled leg server-side; the reload drops the block on success.
+`Drop-off point` (flag glyph), both with coords. One drop-off rendering:
+the counterparty card never doubles as the drop-off — the server no longer
+resolves the drop-off shop into `otherParty`, so a pending tow reads
+Unassigned in the hero with a single bordered drop-off block at every stage.
+**Decline drop-off** appears in
+the footer only for the destination shop's own operator on a non-terminal
+ticket — pending included, so the shop can bow out as soon as it is told —
+same gate as the server (`canDeclineDestination`), so a
+foreign destination is read-only. A tow with no destination (after a decline
+or a retarget to a cleared point) shows an explicit empty drop-off block, and
+the rider gets a **Change drop-off** action (`canEditDestination`: own tow,
+pending/matched/arrived) that reuses the creation picker and posts
+`POST /dispatch/destination` — the open sheet refreshes from the reloaded
+feed, so the new block appears in place. Shops recorded in the ticket's
+`towLegs` render disabled with a "declined" note in the tow picker (the
+server refuses them anyway); map-point picks and full refiles stay
+unblocked by design. Rider cancel is guarded against
+double-submit and closes the sheet on success, so a dead ticket can never be
+cancelled twice into an "already closed" error. It posts
+`POST /dispatch/destination/decline`, which clears the destination without
+touching the ticket status (the tower keeps the job and waits for the rider's
+new drop-off; no travel leg is written when no tower is engaged) and the
+reload drops the block on success; the rider is told to pick another
+drop-off, and retargeting restamps the tower's ETAs from the live fix.
 Quotes are one-shot: sent amounts render locked in the work form (the server
 `400`s re-quotes and re-finals), and the shop block carries a route button
 (resolves snapshot → known-shop coords into navigation) beside a shared row
@@ -319,9 +360,9 @@ unapproved. Either side's phone number rides the feed on live tickets
 
 ## Hazard report form (`FlagSheet`)
 
-Compact type selector beside a multiline note field (50:50 row), radius
-chips below at 48 px minimum targets in a wrapping row — glove/rain usable.
-No new dependencies, no new copy.
+Type label plus all three types in one row, radius label plus five chips in
+a second row — no dropdown, no note field, 48 px minimum targets,
+glove/rain usable. No new dependencies, no new copy.
 
 ## Services & roles
 

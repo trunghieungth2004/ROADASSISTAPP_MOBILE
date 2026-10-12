@@ -228,6 +228,7 @@ async function openRecord(renderer: ReturnType<typeof create>, title: string): P
     await refresh?.props.onPress();
     await flush();
   });
+  await expandIfCollapsed(renderer);
   await tapTab(renderer, en.assist.sectionRecords);
   const row = texts(renderer.root, title).find((n) => typeof n.props?.onPress === "function");
   expect(row).toBeDefined();
@@ -256,6 +257,15 @@ function teardown(renderer: ReturnType<typeof create>): void {
   renderer.unmount();
   globalThis.fetch = realFetch;
   clearApiCache();
+}
+
+async function expandIfCollapsed(renderer: ReturnType<typeof create>): Promise<void> {
+  const expand = texts(renderer.root, en.assist.expandPanel).find((n) => typeof n.props?.onPress === "function");
+  if (!expand) return;
+  await act(async () => {
+    await expand?.props.onPress();
+    await flush();
+  });
 }
 
 async function openRadiusOverlay(renderer: ReturnType<typeof create>): Promise<void> {
@@ -1775,6 +1785,7 @@ test("rider chip toggles kind-less rows", async () => {
       await refresh?.props.onPress();
       await flush();
     });
+    await expandIfCollapsed(renderer);
     await tapTab(renderer, en.assist.sectionRecords);
     expect(hasText(renderer.root, "SOS")).toBe(true);
     const riderChip = texts(renderer.root, en.assist.filterRider).find(
@@ -1894,23 +1905,67 @@ test("record accept falls back to the own tower on provider-less tows", async ()
   }
 });
 
-test("shop-only viewer gets a truthful message on provider-less tows", async () => {
+test("shop-only viewer sees no accept action on provider-less tows", async () => {
   const renderer = await mount();
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t6", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Tow · Pending");
     seen.length = 0;
-    const accept = sheetAction(renderer, en.assist.accept);
-    expect(accept).toBeDefined();
-    expect(accept?.props.disabled).toBe(true);
+    expect(sheetAction(renderer, en.assist.accept)).toBeUndefined();
     expect(hasText(renderer.root, en.assist.towAcceptHint)).toBe(true);
+    expect(seen.find((call) => call.path === "/dispatch/accept")).toBeUndefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("destination decline closes the sheet on success", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "shop-1", kind: "SHOP", status: "ACTIVE"}];
+    mockFeed = [{id: "t6", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "in", otherParty: null, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Pending");
+    seen.length = 0;
+    const decline = sheetAction(renderer, en.assist.declineDestination);
+    expect(decline).toBeDefined();
     await act(async () => {
-      await accept?.props.onPress();
+      await decline?.props.onPress();
       await flush(12);
     });
-    expect(seen.find((call) => call.path === "/dispatch/accept")).toBeUndefined();
-    expect(hasText(renderer.root, en.assist.towOperatorsOnly)).toBe(true);
+    expect(seen.find((call) => call.path === "/dispatch/destination/decline")).toBeDefined();
+    expect(sheetAction(renderer, en.assist.declineDestination)).toBeUndefined();
+    expect(hasText(renderer.root, en.provider.declineSent)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("destination decline keeps the sheet open on failure", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "shop-1", kind: "SHOP", status: "ACTIVE"}];
+    mockFeed = [{id: "t6", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "in", otherParty: null, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Pending");
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
+      const u = new URL(String(url));
+      seen.push({path: u.pathname, body: String(init?.body ?? "")});
+      if (u.pathname === "/dispatch/destination/decline") {
+        return {ok: false, status: 400, text: async () => JSON.stringify({statusCode: 400, status: "ERROR", message: "Nope"})} as Response;
+      }
+      return (prevFetch as typeof fetch)(url, init);
+    }) as unknown) as typeof fetch;
+    seen.length = 0;
+    const decline = sheetAction(renderer, en.assist.declineDestination);
+    expect(decline).toBeDefined();
+    await act(async () => {
+      await decline?.props.onPress();
+      await flush(12);
+    });
+    expect(seen.find((call) => call.path === "/dispatch/destination/decline")).toBeDefined();
+    expect(sheetAction(renderer, en.assist.declineDestination)).toBeDefined();
+    expect(hasText(renderer.root, en.provider.declineSent)).toBe(false);
   } finally {
     teardown(renderer);
   }
@@ -2073,9 +2128,18 @@ test("tower active job shows a buttonless mini card into the modal", async () =>
     expect(mockNavStart).toHaveBeenCalledTimes(1);
     expect(texts(renderer.root, en.assist.arrived).filter((n) => typeof n.props?.onPress === "function").length).toBe(0);
     expect(texts(renderer.root, en.assist.resolved).filter((n) => typeof n.props?.onPress === "function").length).toBe(0);
+    expect(renderer.root.findAll((n) => n.props?.name === "tow-truck").length).toBeGreaterThan(0);
     expect(hasText(renderer.root, "Rider Nine")).toBe(true);
     const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
+    const miniTitles = (mini?.findAll((n) => Array.isArray(n.props?.children) &&
+      (n.props.children as unknown[]).includes(en.assist.activeJob)) ?? []);
+    expect(miniTitles.length).toBeGreaterThan(0);
+    for (const node of miniTitles.slice(0, 1)) {
+      const parts = node.props.children as unknown[];
+      expect(parts).toContain(en.assist.typeTow);
+      expect(parts.some((c) => typeof c === "string" && c.includes("Matched"))).toBe(false);
+    }
     await act(async () => {
       await mini?.props.onPress();
       await flush(12);
@@ -2177,6 +2241,239 @@ test("tow board modal shows the whole-way preview and its map", async () => {
     const session = mockNavStart.mock.calls[0]?.[0] as {dest?: {lat: number; lng: number}; stops?: unknown[]} | undefined;
     expect(session?.dest).toEqual({lat: 10.75, lng: 106.65});
     expect(session?.stops).toEqual([{lat: 10.71, lng: 106.61}]);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider cancel posts once and closes the sheet", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Pending");
+    const cancel = sheetAction(renderer, en.assist.cancel);
+    expect(cancel).toBeDefined();
+    await act(async () => {
+      await cancel?.props.onPress();
+      await flush(12);
+    });
+    const yes = sheetAction(renderer, en.assist.confirmCancel);
+    expect(yes).toBeDefined();
+    await act(async () => {
+      await Promise.all([yes?.props.onPress(), yes?.props.onPress()]);
+      await flush(12);
+    });
+    expect(seen.filter((call) => call.path === "/dispatch/status")).toHaveLength(1);
+    expect(sheetAction(renderer, en.assist.confirmCancel)).toBeUndefined();
+    expect(hasText(renderer.root, en.assist.cancelled)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("change drop-off opens the tow picker", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Pending");
+    const change = sheetAction(renderer, en.assist.changeDropOff);
+    expect(change).toBeDefined();
+    await act(async () => {
+      await change?.props.onPress();
+      await flush(12);
+    });
+    const input = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.route.searchDestination);
+    expect(input.length).toBeGreaterThan(0);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider's own matched tow pins a live mini card", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    expect(mini?.findAll((n) => n.props?.children === "Tow Seven").length).toBeGreaterThan(0);
+    await act(async () => {
+      await mini?.props.onPress();
+      await flush(12);
+    });
+    expect(hasText(renderer.root, "Fix Shop")).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("pending tow with a destination pins an info card", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const cands = texts(renderer.root, "Tow · Pending").filter((n) => typeof n.props?.onPress === "function");
+    const mini = cands.find((n) => n.findAll((m) => Array.isArray(m.props?.children) && (m.props.children as unknown[]).includes(en.assist.activeJob)).length > 0);
+    expect(mini).toBeDefined();
+    const shopLine = (mini?.findAll((n) => Array.isArray(n.props?.children) &&
+      (n.props.children as unknown[]).includes("Fix Shop")) ?? []);
+    expect(shopLine.length).toBeGreaterThan(0);
+    expect(JSON.stringify(mini?.props.style)).not.toContain("f59e0b");
+    await act(async () => {
+      await mini?.props.onPress();
+      await flush(12);
+    });
+    expect(hasText(renderer.root, "Fix Shop")).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("destination-less pending tow pins an amber alert card into the sheet", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, destinationShopId: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const mini = texts(renderer.root, "Tow · Pending").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBeGreaterThan(0);
+    expect(JSON.stringify(mini?.props.style)).toContain("f59e0b");
+    await act(async () => {
+      await mini?.props.onPress();
+      await flush(12);
+    });
+    expect(actionLabels(renderer)).toContain(en.assist.changeDropOff);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("stored working pin beats the rider fallback", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE"}];
+    mockNear = [{id: "t5", userId: "rider9", riderName: "Rider Nine", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", note: "Stuck"}];
+    mockFeed = [
+      {id: "t5", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"},
+      {id: "t6", userId: "u1", ticketType: "TOW", lat: 10.72, lng: 106.62, status: "2", direction: "out", otherParty: {id: "tow8", name: "Tow Six", kind: "TOW"}, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-02T00:00:00.000Z"},
+    ];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    await expandIfCollapsed(renderer);
+    await tapTab(renderer, en.assist.sectionTow);
+    const row = texts(renderer.root, "Tow · Pending").find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await row?.props.onPress();
+      await flush(12);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.accept)?.props.onPress();
+      await flush(12);
+    });
+    const minis = texts(renderer.root, "Tow · Matched").filter((n) => typeof n.props?.onPress === "function");
+    expect(minis.length).toBeGreaterThan(0);
+    const card = minis.find((n) => n.findAll((m) => m.props?.children === "Rider Nine").length > 0);
+    expect(card).toBeDefined();
+    for (const m of minis) {
+      expect(m.findAll((x) => x.props?.children === "Tow Six").length).toBe(0);
+    }
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("duplicate filing asks once then files with force", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t7", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const sos = texts(renderer.root, en.assist.sos).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await sos?.props.onPress();
+      await flush();
+    });
+    const prevFetch = globalThis.fetch;
+    let dispatchPosts = 0;
+    globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
+      const u = new URL(String(url));
+      if (u.pathname === "/dispatch" && (init?.method ?? "GET") === "POST") {
+        dispatchPosts += 1;
+        if (dispatchPosts <= 1) {
+          seen.push({path: u.pathname, body: String(init?.body ?? "")});
+          return {ok: false, status: 409, text: async () => JSON.stringify({statusCode: 409, status: "ERROR", message: "Rider already holds a live ticket of this type", errors: {ticketId: "t7", status: "1", createdAt: "2026-01-01T00:00:00.000Z"}})} as Response;
+        }
+      }
+      return (prevFetch as typeof fetch)(url, init);
+    }) as unknown) as typeof fetch;
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.request)?.props.onPress();
+      await flush(12);
+    });
+    expect(hasText(renderer.root, en.assist.duplicateTitle)).toBe(true);
+    expect(hasText(renderer.root, en.assist.fileAnyway)).toBe(true);
+    expect(seen.filter((call) => call.path === "/dispatch")).toHaveLength(1);
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.fileAnyway)?.props.onPress();
+      await flush(12);
+    });
+    const posts = seen.filter((call) => call.path === "/dispatch");
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0]?.body ?? "{}")).toMatchObject({force: true});
+    expect(hasText(renderer.root, en.assist.requested)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("off-duty tower sees no accept action with the off-duty hint", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE", accepting: false}];
+    mockFeed = [{id: "t6", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "1", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Pending");
+    seen.length = 0;
+    expect(sheetAction(renderer, en.assist.accept)).toBeUndefined();
+    expect(hasText(renderer.root, en.assist.towNotAccepting)).toBe(true);
+    expect(seen.find((call) => call.path === "/dispatch/accept")).toBeUndefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("live job collapses the top card with an expand affordance", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t6", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, destinationShopId: "shop-1", destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    expect(texts(renderer.root, en.assist.sectionRecords).length).toBe(0);
+    const expand = texts(renderer.root, en.assist.expandPanel).find((n) => typeof n.props?.onPress === "function");
+    expect(expand).toBeDefined();
+    await act(async () => {
+      await expand?.props.onPress();
+      await flush();
+    });
+    expect(texts(renderer.root, en.assist.sectionRecords).length).toBeGreaterThan(0);
+    expect(texts(renderer.root, en.assist.collapsePanel).find((n) => typeof n.props?.onPress === "function")).toBeDefined();
   } finally {
     teardown(renderer);
   }

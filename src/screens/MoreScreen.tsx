@@ -285,7 +285,7 @@ export default function MoreScreen() {
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
               <View style={styles.badgeRow}>
                 <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.more.roleUser}</Text></View>
-                {services.map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
+                {[...new Set(services)].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
                 {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
                 {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
               </View>

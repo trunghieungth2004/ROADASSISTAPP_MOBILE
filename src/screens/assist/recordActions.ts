@@ -1,4 +1,5 @@
-import {DISPATCH_STATUS, isTerminal, riderActionsFor, type FeedDirection, type RiderAction} from "../../api/dispatch";
+import {DISPATCH_STATUS, isTerminal, riderActionsFor, type FeedDirection, type FeedTicket, type RiderAction} from "../../api/dispatch";
+import {towDestOf} from "./towDest";
 
 export function canRate(status: string): boolean {
   return status === DISPATCH_STATUS.RESOLVED;
@@ -55,6 +56,27 @@ export function canResolve(direction: FeedDirection, status: string): boolean {
 export function canDeclineDestination(status: string, destinationShopId: string | null | undefined, ownShopIds: Set<string>): boolean {
   if (typeof destinationShopId !== "string" || destinationShopId === "") return false;
   if (!ownShopIds.has(destinationShopId)) return false;
-  if (status === DISPATCH_STATUS.PENDING || isTerminal(status)) return false;
+  if (isTerminal(status)) return false;
   return true;
+}
+
+export function canEditDestination(direction: FeedDirection, status: string, ticketType: string): boolean {
+  if (direction !== "out") return false;
+  if (ticketType !== "TOW") return false;
+  return status === DISPATCH_STATUS.PENDING || status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED;
+}
+
+export function retargetableLiveTicket(feed: FeedTicket[], ticketId: string): FeedTicket | null {
+  const row = feed.find((t) => t.id === ticketId) ?? null;
+  if (!row) return null;
+  if (!canEditDestination(row.direction, row.status, row.ticketType)) return null;
+  if (towDestOf(row) !== null) return null;
+  return row;
+}
+
+export function announcesShopPush(feed: FeedTicket[], ownShopIds: Set<string>, ticketId: string): boolean {
+  const row = feed.find((t) => t.id === ticketId) ?? null;
+  if (!row || row.direction !== "in" || row.status !== DISPATCH_STATUS.PENDING) return false;
+  return (typeof row.destinationShopId === "string" && ownShopIds.has(row.destinationShopId)) ||
+    (typeof row.providerId === "string" && ownShopIds.has(row.providerId));
 }

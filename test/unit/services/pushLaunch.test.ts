@@ -46,6 +46,14 @@ test("token registers without notification permission", async () => {
   expect(mockRegister).toHaveBeenCalledWith("tok", "dev1");
 });
 
+test("login reconciles the token on every sync", async () => {
+  mockStore.clear();
+  mockRegister.mockClear();
+  await expect(syncPushToken("tok", "u1")).resolves.toBe(true);
+  await expect(syncPushToken("tok", "u1")).resolves.toBe(true);
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+});
+
 test("dispatch launch drains once per tap", async () => {
   mockLastResponse = responseFor({ticketId: "t1", ticketType: "WALK_IN", status: "1"}, 111);
   await expect(drainDispatchLaunch()).resolves.toMatchObject({ticketId: "t1", ticketType: "WALK_IN"});

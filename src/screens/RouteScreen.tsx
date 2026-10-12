@@ -28,7 +28,7 @@ import Snack from "../components/ui/Snack";
 import {flagOverlayActions} from "./hazards/flagActions";
 import type {FlagReport} from "../components/flags/FlagSheet";
 import FlagDetailSheet from "../components/flags/FlagDetailSheet";
-import {confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
+import {bustFlagCaches, confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {flagTypeLabel} from "../i18n/labels";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
@@ -328,6 +328,7 @@ export default function RouteScreen() {
   useEffect(() => {
     ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
+      if (token) bustFlagCaches(token);
       setFlagsKey((k) => k + 1);
       if (data.removed) {
         setSelectedFlag((cur) => (cur?.id === data.flagId ? null : cur));

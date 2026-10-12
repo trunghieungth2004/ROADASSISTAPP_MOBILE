@@ -7,3 +7,7 @@ export function registerPush(token: string, deviceToken: string): Promise<{userI
 export function unregisterPush(token: string, deviceToken: string): Promise<{removed: boolean}> {
   return api.post<{removed: boolean}>("/push/unregister", {token: deviceToken}, token);
 }
+
+export function pingPush(token: string): Promise<{tokens: number; sent: number; failed: number; firstError: string | null}> {
+  return api.post<{tokens: number; sent: number; failed: number; firstError: string | null}>("/push/ping", {}, token);
+}

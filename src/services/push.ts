@@ -9,6 +9,7 @@ export type {DispatchPushData, HazardPushData};
 const DEVICE_KEY = "roadassist.push.device";
 const OWNER_KEY = "roadassist.push.owner";
 const LAST_PUSH_KEY = "roadassist.push.last";
+const LAST_DISPATCH_PUSH_KEY = "roadassist.push.lastDispatch";
 const CLAIM_TTL_MS = 120000;
 
 let configured = false;
@@ -64,8 +65,6 @@ export async function syncPushToken(authToken: string | null, uid: string | null
   try {
     const device = (await Notifications.getDevicePushTokenAsync()).data ?? "";
     if (device === "") return false;
-    const prev = await AsyncStorage.multiGet([DEVICE_KEY, OWNER_KEY]);
-    if (prev[0][1] === device && prev[1][1] === uid) return true;
     await registerPush(authToken, device);
     await AsyncStorage.multiSet([
       [DEVICE_KEY, device],
@@ -89,7 +88,7 @@ export function subscribeHazardPush(onPush: (data: HazardPushData) => void, owne
   const fromNotification = (n: Notifications.Notification | null | undefined): void => {
     if (!n) return;
     const parsed = parseHazardPush(n.request.content.data);
-    if (parsed && claimPush(`${owner}:${parsed.flagId}`)) {
+    if (parsed && claimPush(`${owner}:${parsed.flagId}:${parsed.status ?? "-"}`)) {
       void AsyncStorage.setItem(LAST_PUSH_KEY, JSON.stringify({flagId: parsed.flagId, at: Date.now()})).catch(() => undefined);
       onPush(parsed);
     }
@@ -106,7 +105,9 @@ export function subscribeDispatchPush(onPush: (data: DispatchPushData) => void, 
   const fromNotification = (n: Notifications.Notification | null | undefined): void => {
     if (!n) return;
     const parsed = parseDispatchPush(n.request.content.data);
-    if (parsed && claimPush(`${owner}:${parsed.ticketId}`)) {
+    if (!parsed) return;
+    void AsyncStorage.setItem(LAST_DISPATCH_PUSH_KEY, JSON.stringify({ticketId: parsed.ticketId, status: parsed.status ?? "", at: Date.now()})).catch(() => undefined);
+    if (claimPush(`${owner}:${parsed.ticketId}:${parsed.status ?? "-"}`)) {
       onPush(parsed);
     }
   };
@@ -124,6 +125,18 @@ export async function getLastPush(): Promise<{flagId: string; at: number} | null
     const parsed = JSON.parse(raw) as {flagId: string; at: number};
     if (typeof parsed.flagId !== "string" || typeof parsed.at !== "number") return null;
     return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function getLastDispatchPush(): Promise<{ticketId: string; status: string; at: number} | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_DISPATCH_PUSH_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {ticketId: string; status: string; at: number};
+    if (typeof parsed.ticketId !== "string" || typeof parsed.at !== "number") return null;
+    return {ticketId: parsed.ticketId, status: typeof parsed.status === "string" ? parsed.status : "", at: parsed.at};
   } catch {
     return null;
   }

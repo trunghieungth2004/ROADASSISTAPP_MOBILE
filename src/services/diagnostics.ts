@@ -1,7 +1,7 @@
 import {API_URL} from "../api/client";
-import {registerPush} from "../api/push";
+import {pingPush, registerPush} from "../api/push";
 import {flagsNear} from "../api/flags";
-import {getLastPush, probeDeviceToken} from "./push";
+import {getLastDispatchPush, getLastPush, notifyHazardHeadsUp, probeDeviceToken} from "./push";
 import {getDuckHolds, getLastSound} from "./sound";
 import {getPermissionStates} from "./permissions";
 import {hasStartedLocationUpdatesAsync, getLastKnownPositionAsync, getForegroundPermissionsAsync} from "expo-location";
@@ -63,6 +63,17 @@ export const CHECK_DEFS: CheckDef[] = [
     },
   },
   {
+    id: "tokenKind",
+    tab: "push",
+    labelKey: "diagTokenKind",
+    run: async () => {
+      const probe = await probeDeviceToken();
+      if (!probe.token) return {ok: false, detail: probe.error ?? "NONE"};
+      if (probe.token.startsWith("ExponentPushToken")) return {ok: false, detail: "EXPO"};
+      return {ok: true, detail: "FCM"};
+    },
+  },
+  {
     id: "registered",
     tab: "push",
     labelKey: "diagRegistered",
@@ -70,8 +81,57 @@ export const CHECK_DEFS: CheckDef[] = [
       const probe = await probeDeviceToken();
       if (!probe.token || !authToken) return {ok: false, detail: "NO_TOKEN"};
       try {
-        await registerPush(authToken, probe.token);
-        return {ok: true, detail: "ON"};
+        const record = await registerPush(authToken, probe.token);
+        const tokens = Array.isArray(record.tokens) ? record.tokens : [];
+        const present = tokens.includes(probe.token);
+        return {ok: present, detail: `${tokens.length} tokens · ${record.updatedAt}`};
+      } catch (err) {
+        return {ok: false, detail: err instanceof Error ? err.message : String(err)};
+      }
+    },
+  },
+  {
+    id: "serverToken",
+    tab: "push",
+    labelKey: "diagServerToken",
+    run: async (authToken) => {
+      const probe = await probeDeviceToken();
+      if (!probe.token || !authToken) return {ok: false, detail: "NO_TOKEN"};
+      try {
+        const record = await registerPush(authToken, probe.token);
+        const tokens = Array.isArray(record.tokens) ? record.tokens : [];
+        const present = tokens.includes(probe.token);
+        return {ok: present, detail: present ? `${tokens.length} tokens` : "MISSING"};
+      } catch (err) {
+        return {ok: false, detail: err instanceof Error ? err.message : String(err)};
+      }
+    },
+  },
+  {
+    id: "localTest",
+    tab: "push",
+    labelKey: "diagLocalTest",
+    run: async () => {
+      const states = await getPermissionStates();
+      if (!states.notifications.granted) return {ok: false, detail: "OFF"};
+      try {
+        await notifyHazardHeadsUp("RoadAssist test", "Local notification path");
+        return {ok: true, detail: "SENT"};
+      } catch (err) {
+        return {ok: false, detail: err instanceof Error ? err.message : String(err)};
+      }
+    },
+  },
+  {
+    id: "fcmRoundTrip",
+    tab: "push",
+    labelKey: "diagFcmRoundTrip",
+    run: async (authToken) => {
+      if (!authToken) return {ok: false, detail: "NO_AUTH"};
+      try {
+        const result = await pingPush(authToken);
+        const detail = `${result.sent}/${result.tokens} sent${result.firstError ? ` · ${result.firstError}` : ""}`;
+        return {ok: result.sent > 0, detail};
       } catch (err) {
         return {ok: false, detail: err instanceof Error ? err.message : String(err)};
       }
@@ -85,6 +145,18 @@ export const CHECK_DEFS: CheckDef[] = [
       const last = await getLastPush();
       if (!last) return {ok: false, detail: "NEVER"};
       return {ok: true, detail: `${last.flagId.slice(0, 8)}… · ${fmtTime(last.at)}`};
+    },
+  },
+  {
+    id: "lastDispatchPush",
+    tab: "push",
+    labelKey: "diagLastDispatchPush",
+    run: async () => {
+      const last = await getLastDispatchPush();
+      if (!last) return {ok: false, detail: "NEVER"};
+      const ticket = last.ticketId.slice(0, 8);
+      const status = last.status !== "" ? ` · ${last.status}` : "";
+      return {ok: true, detail: `${ticket}…${status} · ${fmtTime(last.at)}`};
     },
   },
   {

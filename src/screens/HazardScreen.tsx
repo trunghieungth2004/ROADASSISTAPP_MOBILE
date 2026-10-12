@@ -21,6 +21,7 @@ import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import type {Flag} from "../api/flags";
+import {bustFlagCaches} from "../api/flags";
 import {flagTypeLabel} from "../i18n/labels";
 import {distBetween} from "./navigation/navUtils";
 import HazardMapView from "./hazards/HazardMapView";
@@ -57,6 +58,7 @@ export default function HazardScreen() {
   useEffect(() => {
     ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
+      if (token) bustFlagCaches(token);
       if (data.removed) {
         removeMineLocal(data.flagId);
         setSelected((cur) => (cur?.id === data.flagId ? null : cur));

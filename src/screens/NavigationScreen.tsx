@@ -13,7 +13,7 @@ import {capturePosition, useLocationBeat} from "../services/locationBeats";
 import Overlay from "../components/overlay/Overlay";
 import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
 import type {RouteOption} from "../api/routes";
-import {confirmFlag, denyFlag, flagsNear, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
+import {bustFlagCaches, confirmFlag, denyFlag, flagsNear, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {toMessage} from "../api/client";
 import {markDenied, markVoted} from "../storage/votedFlags";
 import {darkTheme, lightTheme} from "../theme";
@@ -472,6 +472,8 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     setNavForeground(true);
     void flagsNear(seed.lat, seed.lng, NAV_NEAR_RADIUS_M, token).catch(() => undefined);
     const onHazard = (data: HazardPushData): void => {
+      const key = tokenRef.current;
+      if (key) bustFlagCaches(key);
       if (data.removed) {
         onRemovedPush(data.flagId);
         return;

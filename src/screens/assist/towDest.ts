@@ -7,8 +7,7 @@ export type TowRouteTicket = Pick<
   destinationParty?: FeedTicket["destinationParty"];
 };
 
-export function towDestOf(
-  ticket: Pick<TowRouteTicket, "destinationParty" | "destinationSnapshot" | "destinationPoint">,
+export function towDestOf(  ticket: Pick<TowRouteTicket, "destinationParty" | "destinationSnapshot" | "destinationPoint">,
 ): {lat: number; lng: number} | null {
   const party = ticket.destinationParty;
   if (party !== null && typeof party === "object" && typeof party.lat === "number" && typeof party.lng === "number") {
@@ -23,4 +22,17 @@ export function towDestOf(
     return {lat: point.lat, lng: point.lng};
   }
   return null;
+}
+
+export function declinedShopIds(
+  ticket: Pick<DispatchTicket, "towLegs">,
+): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(ticket.towLegs)) return out;
+  for (const leg of ticket.towLegs) {
+    if (typeof leg?.toShopId === "string" && leg.toShopId !== "") {
+      out.add(leg.toShopId);
+    }
+  }
+  return out;
 }

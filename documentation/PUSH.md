@@ -17,7 +17,11 @@ BE `documentation/PIPELINE.md`; this file covers the mobile side.
 `services/push.ts`, native FCM tokens via `getDevicePushTokenAsync` (never
 Expo push tokens — the BE sends through the Admin SDK directly).
 `App.tsx:PushSync` registers on login (`POST /push/register`);
-`AuthContext.signOut` unregisters best-effort. Registration is
+`AuthContext.signOut` unregisters best-effort. Every login reconciles
+unconditionally (no skip when storage looks current), and the server gives a
+presented token single ownership — registering under a new account pulls it
+from the old one, so an account switch without sign-out can never leave a
+device buzzing for two accounts. Registration is
 permission-independent: a denied notification permission degrades to
 foreground-only updates, never to an unregistered token. Tokens are deduped
 per uid in `AsyncStorage`.
@@ -25,7 +29,7 @@ per uid in `AsyncStorage`.
 ## Handling
 
 `subscribeHazardPush` serves foreground receipts and tray taps, deduped per
-`flagId` for 120 s, recording the last receipt for diagnostics.
+`flagId` + status for 120 s, recording the last receipt for diagnostics.
 
 - Route screen: pins refresh plus a silent no-fit route refetch, so the
   hazard count (derived from route warnings) updates on its own. Skipped
@@ -36,7 +40,11 @@ per uid in `AsyncStorage`.
 
 ## Dispatch pushes
 
-`subscribeDispatchPush` matches on `ticketId` (deduped per ticket for 120 s).
+`subscribeDispatchPush` matches on `ticketId` (deduped per ticket + status
+for 120 s, so a follow-up status inside the window still lands while retries
+and tap-echoes collapse).
+Every receipt is recorded for diagnostics before dedup, so "arrived" and
+"acted on" stay distinguishable.
 The Assist screen reloads (tickets + feed) on every receipt and refetches the
 active ticket when the payload carries a status; a `WALK_IN` payload
 additionally focuses the Records tab. The payload shape (`ticketId`,
@@ -45,12 +53,32 @@ additionally focuses the Records tab. The payload shape (`ticketId`,
 decline reason renders in the Records row even before the refetch lands.
 Sweep-cancelled walk-ins now push too (`CANCELLED` body), so an expired row
 announces itself instead of silently vanishing. Operator-audience pushes
-(quote approvals, rider cancels with shop context, late pickups, destination
+(quote approvals, rider cancels/arrivals/resolves with shop context, late pickups, destination
 edits/declines on assigned tows) fan out
 through the same `ticketId`-keyed drain — the operator's Records reload on
 receipt with no client change, since the payload shape is unchanged
 (`ticketId`, `ticketType`, `status`) and only the server copy varies.
 Destination-decline notices go rider-side through the same path.
+Tows naming a shop destination additionally notify that shop's operator
+(`destination-shop` audience, "Incoming tow" — informational, the shop still
+cannot accept a tow) on creation and on shop retargets; a retarget away
+notifies the previous shop ("Drop-off changed"); a rider cancel notifies the
+drop-off shop ("Tow cancelled"); an expired walk-in notifies its shop
+("Walk-in expired"); the resolve-time
+walk-in push is unchanged. What a destination shop hears across the job:
+
+| Moment | Copy | Action attached |
+|---|---|---|
+| Tow filed / retargeted onto it | "Incoming tow" | Decline drop-off (any non-terminal status) |
+| Retargeted away | "Drop-off changed" | none |
+| Rider cancels | "Tow cancelled" | none |
+| Shop declines | rider hears "pick another drop-off", tower hears "await the rider's new drop-off" | rider picks a new drop-off; tower waits, ETAs restamp on update |
+| Tow resolves | "Walk-in request" | accept / decline the walk-in |
+
+Push receipts announce, not just reload: after the push-triggered refetch, a
+ticket landing inbound on a shop you operate flips to Records with a "new
+tow" notice (tower-candidate copies stay quiet — the distinction comes from
+the refreshed feed, since the payload shape is shared).
 Withdrawn-tow pushes (`tower-candidates` audience, no `status` in payload)
 parse cleanly and reload the board like any other receipt.
 Manual rider cancels push the rider a confirmation alongside the operator
@@ -142,6 +170,16 @@ ETA/remaining, and trip fraction on turn change or every ~20 s (3% progress
 steps); cleared on unmount. Expo's static location-service row stays
 alongside (OS requirement). No new permissions.
 
+## Freshness contract
+
+Stale-data-after-event has bitten twice (cancel pushes swallowed, reloads
+served from cache), so the rule is written down: dedup keys include the
+event status on both push paths; every push-receipt handler busts its domain
+caches (`bustTicketCaches`, `bustFlagCaches`) before reloading, including the
+15 s live-job poll; every mutation busts its domain at the call site;
+single-row reads (`getTicket`, `getFlag`) stay uncached. The contract tests
+next to `apiCache.test.ts` pin the key shapes and the bust behavior.
+
 ## Permissions and diagnostics
 
 `services/permissions.ts` reads/requests notification and background
@@ -150,4 +188,12 @@ re-prompting. The More tab hosts a permissions card (live pills, focus
 refresh) and a Diagnostics screen with Push / Location / Audio / Network
 tabs — each runnable alone, multi-selectable, or all at once. The Push tab
 names the exact failing call (token exception, registration error), which is
-the first thing to check when pushes go quiet.
+the first thing to check when pushes go quiet. Push checks: notification
+permission, raw device token, token kind (`FCM` vs `EXPO` — an Expo token
+means no Play Services, typically Waydroid, and the BE Admin SDK can never
+use it), BE registration echo (whether this token is present, how many, and
+when), local display test (permission/channel/system UI without FCM),
+`POST /push/ping` round trip (BE accepted and FCM accepted the send),
+last hazard push, and last dispatch push (recorded on receipt before dedup).
+Battery optimization and autostart are not queryable from RN — the copyable
+output lists them as manual steps, never as fake checks.

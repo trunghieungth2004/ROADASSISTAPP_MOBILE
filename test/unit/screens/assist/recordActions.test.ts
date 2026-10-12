@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canEditWork, canMarkReady, canRate, canRateRider, canSendQuote, canStartWork, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canSendQuote, canStartWork, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -62,15 +62,62 @@ test("operator starts arrived jobs and walk-ins from matched", () => {
   expect(canMarkReady("out", "6", true)).toBe(false);
 });
 
-test("destination decline belongs to the destination shop once matched", () => {
+test("destination decline belongs to the destination shop from pending on", () => {
   const mine = new Set(["shop-1"]);
+  expect(canDeclineDestination("1", "shop-1", mine)).toBe(true);
   expect(canDeclineDestination("2", "shop-1", mine)).toBe(true);
   for (const s of ["3", "6", "7"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(true);
-  expect(canDeclineDestination("1", "shop-1", mine)).toBe(false);
   for (const s of ["4", "5", "8"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(false);
   expect(canDeclineDestination("2", "shop-2", mine)).toBe(false);
   expect(canDeclineDestination("2", null, mine)).toBe(false);
   expect(canDeclineDestination("2", "", mine)).toBe(false);
+});
+
+test("drop-off edit belongs to the rider on editable tow tickets", () => {
+  for (const s of ["1", "2", "3"]) expect(canEditDestination("out", s, "TOW")).toBe(true);
+  for (const s of ["4", "5", "8", "6", "7", "9"]) expect(canEditDestination("out", s, "TOW")).toBe(false);
+  expect(canEditDestination("in", "1", "TOW")).toBe(false);
+  expect(canEditDestination("out", "1", "WALK_IN")).toBe(false);
+  expect(canEditDestination("out", "1", "SOS")).toBe(false);
+});
+
+test("retarget shortcut needs a destination-less editable tow", () => {
+  const row = (overrides?: object) => ({
+    id: "t6",
+    ticketType: "TOW",
+    status: "1",
+    direction: "out",
+    lat: 10.71,
+    lng: 106.61,
+    ...overrides,
+  }) as Parameters<typeof retargetableLiveTicket>[0][number];
+  const feed = [row()];
+  expect(retargetableLiveTicket(feed, "t6")).toBe(feed[0]);
+  expect(retargetableLiveTicket(feed, "missing")).toBeNull();
+  expect(retargetableLiveTicket([row({direction: "in"})], "t6")).toBeNull();
+  expect(retargetableLiveTicket([row({status: "4"})], "t6")).toBeNull();
+  expect(retargetableLiveTicket([row({ticketType: "SOS"})], "t6")).toBeNull();
+  expect(retargetableLiveTicket([row({destinationSnapshot: {lat: 10.75, lng: 106.65}})], "t6")).toBeNull();
+});
+
+test("shop-addressed pushes announce, board copies stay quiet", () => {
+  const mine = new Set(["shop-1"]);
+  const row = (overrides?: object) => ({
+    id: "t6",
+    ticketType: "TOW",
+    status: "1",
+    direction: "in",
+    lat: 10.71,
+    lng: 106.61,
+    ...overrides,
+  }) as Parameters<typeof announcesShopPush>[0][number];
+  expect(announcesShopPush([row({destinationShopId: "shop-1"})], mine, "t6")).toBe(true);
+  expect(announcesShopPush([row({providerId: "shop-1"})], mine, "t6")).toBe(true);
+  expect(announcesShopPush([row({destinationShopId: "shop-2"})], mine, "t6")).toBe(false);
+  expect(announcesShopPush([row({destinationShopId: "shop-1", direction: "out"})], mine, "t6")).toBe(false);
+  expect(announcesShopPush([row({destinationShopId: "shop-1", status: "2"})], mine, "t6")).toBe(false);
+  expect(announcesShopPush([row({destinationShopId: "shop-1"})], mine, "missing")).toBe(false);
+  expect(announcesShopPush([], mine, "t6")).toBe(false);
 });
 
 test("quote handshake gates both sides", () => {

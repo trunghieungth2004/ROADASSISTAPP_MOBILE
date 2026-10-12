@@ -22,7 +22,7 @@ type Props = {
   selectedShop: Provider | null;
   pillTextForShop: (shop: Provider) => string | null;
   walkRoute: RouteOption | null;
-  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null} | null;
+  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null; status: string} | null;
   onMapReady: () => void;
 };
 
@@ -47,6 +47,7 @@ export default function AssistMapView(props: Props) {
             "a-dot": require("../../../assets/map/route/a-dot.png"),
             "ticket-dot": require("../../../assets/map/route/ticket-dot.png"),
             "b-dot": require("../../../assets/map/route/b-dot.png"),
+            "tower-dot": require("../../../assets/map/route/tower-dot.png"),
             "shop-pin": require("../../../assets/map/shops/shop-pin.png"),
             "shop-pin-closed": require("../../../assets/map/shops/shop-pin-closed.png"),
           }}
@@ -65,7 +66,7 @@ export default function AssistMapView(props: Props) {
         ) : null}
         {props.jobLayers && props.jobLayers.tower ? (
           <GeoJSONSource id="tow-job-tower" data={pointFeature(props.jobLayers.tower.lng, props.jobLayers.tower.lat)}>
-            <StyledLayer type="symbol" id="tow-job-tower-icon" style={{iconImage: "a-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+            <StyledLayer type="symbol" id="tow-job-tower-icon" style={{iconImage: "tower-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
         {props.jobLayers ? (
@@ -78,14 +79,20 @@ export default function AssistMapView(props: Props) {
             <StyledLayer type="symbol" id="tow-job-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.jobLayers && props.jobLayers.tower ? (
+        {(() => {
+          const layers = props.jobLayers;
+          if (!layers || !layers.tower) return null;
+          const far = layers.status === "3" ? layers.dest : layers.pickup;
+          if (!far) return null;
+          return (
           <GeoJSONSource
             id="tow-job-line"
-            data={{type: "Feature", geometry: {type: "LineString", coordinates: [[props.jobLayers.tower.lng, props.jobLayers.tower.lat], [props.jobLayers.pickup.lng, props.jobLayers.pickup.lat]]}, properties: {}}}
+            data={{type: "Feature", geometry: {type: "LineString", coordinates: [[layers.tower.lng, layers.tower.lat], [far.lng, far.lat]]}, properties: {}}}
           >
             <StyledLayer type="line" id="tow-job-line-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
-        ) : null}
+          );
+        })()}
         {props.selectedShop ? (
           <>
           <GeoJSONSource id="assist-shop-sel" data={pointFeature(props.selectedShop.lng, props.selectedShop.lat)}>

@@ -112,6 +112,11 @@ export async function unflag(flagId: string, token: string): Promise<{unflagged:
   return res;
 }
 
+export function bustFlagCaches(token: string): void {
+  cacheClear(`flagsNear:${token}:`);
+  cacheDel(`flagsMine:${token}`);
+}
+
 export async function flagsNear(lat: number, lng: number, radiusMeters: number, token: string): Promise<Flag[]> {
   const key = `flagsNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters}`;
   const list = await withCache(key, CACHE_TTL_MS.flagsNear, () => api.post<FlagWire[]>("/flags/near", {lat, lng, radiusMeters}, token));

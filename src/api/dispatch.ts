@@ -104,6 +104,7 @@ export type DispatchTicket = {
   fulfilledByShopId?: string | null;
   declineReason?: string | null;
   declineNote?: string | null;
+  towLegs?: Array<{toShopId?: string; km?: number; actual?: boolean; at?: string}> | null;
   createdAt?: string;
 };
 
@@ -118,6 +119,7 @@ export type CreateTicketPayload = {
   vehicleType?: string;
   vehicleWidth?: number;
   vehicleLabel?: string;
+  force?: boolean;
 };
 
 export async function createTicket(payload: CreateTicketPayload, token: string): Promise<DispatchTicket> {
@@ -167,6 +169,8 @@ function bustTicketCaches(token: string): void {
   cacheClear(`ticketsNear:${token}:`);
 }
 
+export {bustTicketCaches};
+
 export async function declineTicket(ticketId: string, shopId: string, reason: string, note: string | undefined, token: string): Promise<{declined: boolean}> {
   const res = await api.post<{declined: boolean}>("/dispatch/decline", {ticketId, shopId, reason, note}, token);
   bustTicketCaches(token);
@@ -201,6 +205,18 @@ export async function approveQuote(ticketId: string, token: string): Promise<{ap
 
 export async function declineDestination(ticketId: string, token: string): Promise<{declined: boolean; legKm: number}> {
   const res = await api.post<{declined: boolean; legKm: number}>("/dispatch/destination/decline", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function refreshTowEta(ticketId: string, token: string): Promise<{updated: number}> {
+  const res = await api.post<{updated: number}>("/dispatch/eta/refresh", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function updateTicketDestination(ticketId: string, dest: {destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}}, token: string): Promise<DispatchTicket> {
+  const res = await api.post<DispatchTicket>("/dispatch/destination", {ticketId, ...dest}, token);
   bustTicketCaches(token);
   return res;
 }

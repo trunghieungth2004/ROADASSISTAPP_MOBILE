@@ -10,7 +10,7 @@ import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
 import {formatPoint, reverseLabel} from "../../api/places";
 import {distBetween} from "../navigation/navUtils";
 import {timeAgoLabel} from "../hazards/hazardFilter";
-import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canEditWork, canMarkReady, canRate, canRateRider, canResolve, canSendQuote, canStartWork} from "./recordActions";
+import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canResolve, canSendQuote, canStartWork} from "./recordActions";
 import {declineReasonLabel, stageLabel, statusPillColor, statusStages, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./ticketLabels";
 import {directionOf} from "./recordFilter";
 import StatusStepper from "./StatusStepper";
@@ -37,7 +37,8 @@ type Props = {
   onOpenShop: (ticket: FeedTicket) => void;
   onOpenDestination: (ticket: FeedTicket) => void;
   onNavigateJob: ((ticket: FeedTicket) => void) | null;
-  acceptDisabled: boolean;
+  acceptHidden: boolean;
+  acceptOffDuty: boolean;
   towPreview: {ready: boolean; summary: string | null; busy: boolean; error: string | null} | null;
   onPreviewTowRoute: ((ticket: FeedTicket) => void) | null;
   linked: FeedTicket | null;
@@ -47,6 +48,7 @@ type Props = {
   onRateRider: (ticket: FeedTicket) => void;
   ownShopIds: Set<string>;
   onDeclineDestination: (ticket: FeedTicket) => void;
+  onEditDestination: ((ticket: FeedTicket) => void) | null;
 };
 
 type Party = {
@@ -224,7 +226,7 @@ function Timeline({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: Feed
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptDisabled, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, onDeclineDestination}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, onDeclineDestination, onEditDestination}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -243,10 +245,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
     (typeof ticket.providerId === "string" && ticket.providerId !== "" && ownShopIds.has(ticket.providerId));
   const riderMeters = inbound && gps ? Math.round(distBetween(gps, {lat: ticket.lat, lng: ticket.lng})) : null;
   const riderDistance = riderMeters === null ? null : riderMeters < 1000 ? t.shop.radiusM.replace("{n}", String(riderMeters)) : t.shop.radiusKm.replace("{n}", (riderMeters / 1000).toFixed(1));
-  const isDestShop = typeof ticket.destinationShopId === "string" &&
-    ticket.destinationShopId !== "" &&
-    party.id !== null &&
-    party.id === ticket.destinationShopId;
   const showShop = party.kind === "SHOP" && (party.label !== null || party.openNow !== null || (party.ratingAvg !== null && party.ratingCount !== null));
   const roleLabel = party.kind === "SHOP" ? t.roles.shop : party.kind === "TOW" ? t.roles.tow : party.kind === "VOLUNTEER" ? t.roles.volunteer : party.kind === "RIDER" ? t.roles.rider : null;
   const displayName = roleLabel !== null && party.name === t.assist.unassigned ? roleLabel : party.name;
@@ -257,7 +255,15 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   };
   const pickupIn = !inbound && ticket.ticketType === "TOW" ? etaInMin(ticket.etaPickupAt) : null;
   const dropoffIn = !inbound && ticket.ticketType === "TOW" ? etaInMin(ticket.etaDropoffAt) : null;
-  const etaPill = towPreview && towPreview.summary ? towPreview.summary : pickupIn !== null ? t.shop.etaPickup.replace("{n}", String(pickupIn)) : null;
+  const previewFresh = towPreview && towPreview.summary && (ticket.status === "1" || ticket.status === "2");
+  const towerFix = !inbound && ticket.ticketType === "TOW" && ticket.towerFix !== null && typeof ticket.towerFix === "object" &&
+    typeof ticket.towerFix.lat === "number" && typeof ticket.towerFix.lng === "number" ?
+    {lat: ticket.towerFix.lat, lng: ticket.towerFix.lng} :
+    null;
+  const towerMeters = towerFix ? Math.round(distBetween(towerFix, {lat: ticket.lat, lng: ticket.lng})) : null;
+  const towerDistance = towerMeters === null ? null : towerMeters < 1000 ? t.shop.radiusM.replace("{n}", String(towerMeters)) : t.shop.radiusKm.replace("{n}", (towerMeters / 1000).toFixed(1));
+  const etaPickupText = pickupIn !== null ? t.shop.etaPickup.replace("{n}", String(pickupIn)) : null;
+  const etaPill = previewFresh ? towPreview.summary : etaPickupText !== null && towerDistance !== null ? `${towerDistance} · ${etaPickupText}` : etaPickupText;
   const destSnap = ticket.destinationSnapshot ?? null;
   const destLat = typeof destSnap?.lat === "number" ? destSnap.lat : typeof ticket.destinationPoint?.lat === "number" ? ticket.destinationPoint.lat : null;
   const destLng = typeof destSnap?.lng === "number" ? destSnap.lng : typeof ticket.destinationPoint?.lng === "number" ? ticket.destinationPoint.lng : null;
@@ -287,10 +293,12 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
     actions.push({label: t.assist.confirmCancel, tone: "danger", busy, onPress: () => onConfirmCancel(ticket.id)});
   }
   if (canAccept(ticket.direction, ticket.status) && !declineOpen) {
-    if (onDecline) {
+    if (onDecline && ticket.ticketType === "WALK_IN") {
       actions.push({label: t.provider.decline, tone: "danger", outline: true, onPress: () => { setDeclineReason("FULL"); setDeclineNote(""); setDeclineOpen(true); }});
     }
-    actions.push({label: t.assist.accept, tone: "primary", busy, disabled: acceptDisabled, onPress: () => onAccept(ticket)});
+    if (!acceptHidden) {
+      actions.push({label: t.assist.accept, tone: "primary", busy, onPress: () => onAccept(ticket)});
+    }
     if (towPreview && onPreviewTowRoute) {
       actions.push({label: t.assist.towRoutePreview, tone: "neutral", outline: true, disabled: !towPreview.ready || towPreview.busy, onPress: () => onPreviewTowRoute(ticket)});
     }
@@ -332,6 +340,9 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   }
   if (canDeclineDest) {
     actions.push({label: t.assist.declineDestination, tone: "danger", outline: true, busy, onPress: () => onDeclineDestination(ticket)});
+  }
+  if (onEditDestination && canEditDestination(ticket.direction, ticket.status, ticket.ticketType)) {
+    actions.push({label: t.assist.changeDropOff, tone: "neutral", outline: true, busy, onPress: () => onEditDestination(ticket)});
   }
   return (
     <Overlay
@@ -375,19 +386,14 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
           </Section>
         </View>
         {showShop ? (
-          <>
-            {isDestShop ? (
-              <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.dropOffPoint}</Text>
-            ) : null}
-            <ShopCard
-              theme={theme}
-              t={t}
-              shop={{name: party.name, label: party.label, avg: party.ratingAvg, count: party.ratingCount, phone: party.phone, openNow: party.openNow}}
-              onPress={() => onOpenShop(ticket)}
-            />
-          </>
+          <ShopCard
+            theme={theme}
+            t={t}
+            shop={{name: party.name, label: party.label, avg: party.ratingAvg, count: party.ratingCount, phone: party.phone, openNow: party.openNow}}
+            onPress={() => onOpenShop(ticket)}
+          />
         ) : null}
-        {destShop !== null && !(destShop.id !== null && party.id !== null && destShop.id === party.id) ? (
+        {destShop !== null ? (
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
             <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.dropOffPoint}</Text>
             <ShopCard
@@ -405,6 +411,18 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
               <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(destLat, destLng)}</Text>
             </Section>
           </View>
+        ) : ticket.ticketType === "TOW" ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.dropOffPoint}</Text>
+            <Section theme={theme} icon="flag">
+              <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.noDropOff}</Text>
+            </Section>
+            {onEditDestination && canEditDestination(ticket.direction, ticket.status, ticket.ticketType) ? (
+              <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.primary}]} onPress={() => onEditDestination(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.changeDropOff}>
+                <Text style={{color: theme.primary}}>{t.assist.changeDropOff}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         {canDeclineDest ? (
           <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.declineDestinationHint}</Text>
@@ -419,13 +437,13 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
               </View>
             ) : towPreview.error ? (
               <Text style={[styles.coords, {color: theme.danger}]}>{towPreview.error}</Text>
-            ) : towPreview.summary ? (
+            ) : previewFresh && towPreview.summary ? (
               <Text style={[styles.coords, {color: theme.text}]}>{towPreview.summary}</Text>
             ) : null}
           </View>
         ) : null}
-        {acceptDisabled ? (
-          <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.towAcceptHint}</Text>
+        {acceptHidden ? (
+          <Text style={[styles.coords, {color: theme.muted}]}>{acceptOffDuty ? t.assist.towNotAccepting : t.assist.towAcceptHint}</Text>
         ) : null}
         {inbound ? (
           <View style={[styles.shopBlock, {borderColor: theme.border}]}>

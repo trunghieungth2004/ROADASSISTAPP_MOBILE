@@ -13,9 +13,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
+      - run: yarn typecheck
+      - run: yarn test
+      - run: yarn typecheck
+      - run: yarn test
+      - name: Unlock git-crypt
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
+        run: |
+          sudo apt-get install -y git-crypt
+          echo "$GIT_CRYPT_KEY" | base64 -d > /tmp/git-crypt-key
+          git crypt unlock /tmp/git-crypt-key
+          rm /tmp/git-crypt-key
+      - name: Verify Firebase config
+        run: |
+          python3 - <<'EOF'
+          import json
+          doc = json.load(open("google-services.json"))
+          project_id = doc["project_info"]["project_id"]
+          assert project_id == "roadassistapp-c2e37", project_id
+          print("google-services.json OK")
+          EOF
+      - name: Check tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VER=$(node -p "require('./app.json').expo.version")
+          test "v$VER" = "$GITHUB_REF_NAME"
+      - name: Stamp versionCode
+        run: |
+          node -e "const fs=require('fs');const p='app.json';const j=JSON.parse(fs.readFileSync(p));j.expo.android.versionCode=Number(process.env.GITHUB_RUN_NUMBER);fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+          node -p "require('./app.json').expo.android.versionCode"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

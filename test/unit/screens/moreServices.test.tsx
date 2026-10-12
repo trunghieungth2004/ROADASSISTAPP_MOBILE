@@ -48,6 +48,36 @@ function textsUnder(node: ReactTestInstance): string[] {
   });
 }
 
+function setServices(services: string[]): void {
+  const mod = jest.requireMock("../../../src/context/ProfileContext") as {useProfile: unknown};
+  mod.useProfile = () => ({
+    user: {id: "u1", role: "2", services},
+    refresh: async () => null,
+    markOnboarded: async () => undefined,
+  });
+}
+
+test("duplicated licenses render a single badge each", async () => {
+  setServices(["RIDER", "VOLUNTEER", "VOLUNTEER"]);
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <MoreScreen />
+      </SafeAreaProvider>,
+    );
+  });
+  if (!renderer) throw new Error("mount failed");
+  try {
+    const all = textsUnder(renderer.root);
+    expect(all.filter((text) => text === en.roles.volunteer).length).toBe(1);
+    expect(all.filter((text) => text === en.roles.rider).length).toBe(1);
+  } finally {
+    renderer.unmount();
+    setServices(["RIDER", "VOLUNTEER"]);
+  }
+});
+
 test("role picker stays unmounted until services opens", async () => {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
