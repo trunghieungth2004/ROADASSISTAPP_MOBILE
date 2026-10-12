@@ -57,12 +57,14 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/roadassist-release.keystore
+          echo "" >> android/gradle.properties
           cat >> android/gradle.properties <<'EOF'
           ROADASSIST_RELEASE_STORE_FILE=roadassist-release.keystore
           ROADASSIST_RELEASE_STORE_PASSWORD=${{ secrets.ANDROID_STORE_PASSWORD }}
           ROADASSIST_RELEASE_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
           ROADASSIST_RELEASE_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
           EOF
+          grep -qx 'expo.inlineModules.watchedDirectories=\[\]' android/gradle.properties
       - name: Wire release signing into build.gradle
         run: |
           python3 - <<'EOF'
