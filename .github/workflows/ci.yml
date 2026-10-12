@@ -11,6 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Unlock secrets or stub for gates
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
+        run: |
+          if [ -n "$GIT_CRYPT_KEY" ]; then
+            sudo apt-get install -y git-crypt
+            echo "$GIT_CRYPT_KEY" | base64 -d > /tmp/git-crypt-key
+            git crypt unlock /tmp/git-crypt-key
+            rm /tmp/git-crypt-key
+          else
+            cat > src/config/secrets.ts <<'EOF'
+          export const secrets = {
+            firebase: {apiKey: "", authDomain: "", projectId: ""},
+            apiBaseUrl: "",
+            maptilerKey: "",
+          };
+          EOF
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
