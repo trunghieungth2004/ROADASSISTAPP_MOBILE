@@ -98,7 +98,7 @@ jobs:
           open(p, "w").write(s)
           print("signing wired")
           EOF
-      - run: ./gradlew assembleRelease --no-daemon
+      - run: ./gradlew assembleRelease --no-daemon --stacktrace
         working-directory: android
         env:
           NODE_OPTIONS: --max-old-space-size=4096
