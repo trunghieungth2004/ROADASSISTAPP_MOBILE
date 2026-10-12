@@ -70,6 +70,18 @@ jobs:
           p = "android/app/build.gradle"
           s = open(p).read()
           assert "ROADASSIST_RELEASE_STORE_FILE" not in s, "already patched"
+          lines = s.split("\n")
+          bt = [i for i, l in enumerate(lines) if l.strip() == "buildTypes {"]
+          assert len(bt) == 1, f"buildTypes count {len(bt)}"
+          rel = [i for i in range(bt[0], len(lines)) if re.match(r"\s*release\s*\{", lines[i])]
+          assert len(rel) == 1, f"release count {len(rel)}"
+          tgt = [i for i in range(rel[0], len(lines)) if "signingConfig signingConfigs.debug" in lines[i]]
+          assert len(tgt) >= 1, "no signingConfig line in release block"
+          lines[tgt[0]] = lines[tgt[0]].replace(
+            "signingConfig signingConfigs.debug",
+            "if (project.hasProperty('ROADASSIST_RELEASE_STORE_FILE')) { signingConfig signingConfigs.release } else { signingConfig signingConfigs.debug }",
+          )
+          s = "\n".join(lines)
           signing = """
               signingConfigs {
                   release {
@@ -83,8 +95,6 @@ jobs:
               }
           """
           s = s.replace("buildTypes {", signing + "\n    buildTypes {", 1)
-          s, n = re.subn(r"(buildTypes\s*\{\s*release\s*\{)", r"\1\n            if (project.hasProperty('ROADASSIST_RELEASE_STORE_FILE')) { signingConfig signingConfigs.release }", s, count=1)
-          assert n == 1, "release buildType not found"
           open(p, "w").write(s)
           print("signing wired")
           EOF
