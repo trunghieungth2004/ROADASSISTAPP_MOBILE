@@ -696,7 +696,7 @@ export default function RouteScreen() {
         </Overlay>
       ) : null}
       {savedOpen ? (
-        <Overlay visible variant="dialog" title={t.saved.title} closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setSavedOpen(false); }}>
+        <Overlay visible variant="sheet" title={t.saved.title} closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setSavedOpen(false); }}>
           <SavedRoutesSheet t={t} token={token} onOpen={(id) => void onOpenSaved(id)} />
         </Overlay>
       ) : null}

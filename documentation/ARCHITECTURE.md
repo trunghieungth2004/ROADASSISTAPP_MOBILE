@@ -402,6 +402,56 @@ goes through a name dialog (120 chars). Confirmations and save failures
 use the shared `Snack` (4 s auto-hide); contextual errors stay inline in
 the card.
 
+It presents as a bottom sheet (`variant="sheet"`), matching saved places.
+Both saved managers are browsable lists that sit under a Fab or a header
+button, not decisions — a sheet keeps the list near the thumb and gives the
+content the full width, where a centred dialog floats it mid-screen with a
+cancel row it doesn't need.
+
+## In-app updates (`services/appUpdate.ts`, Android only)
+
+No backend: the app compares its native version against the public
+`releases/latest` tag and downloads `roadassist-<tag>.apk` straight from
+GitHub. Cold start offers once (skippable per tag, auto-check toggleable in
+About, manual check alongside); the dialog shows notes with Download /
+Skip / Not now, progress inline, then the system installer via content URI.
+iOS renders nothing — sideload doesn't exist there.
+
+## More → Settings / About
+
+Mihon-shaped: `MoreScreen` is a hub, not a settings dump. It keeps only
+identity (avatar, name, licence/role/provider badges, points/reports stats)
+plus two rows that push `Settings` and `About`, then sign out. No accordions
+— every destination is a pushed screen (two stack registrations, same
+pattern as `Diagnostics`).
+
+`SettingsScreen` holds everything that *configures behaviour*: appearance,
+language, the permissions card (notifications / background location /
+battery), provider registration + accepting switches, and the volunteer
+toggle with radius/capability chips. `AboutScreen` holds everything that
+*identifies the app*: name, version + build number, backend URL, check-for-
+updates + auto toggle (Android), diagnostics link, GitHub source link.
+
+Why split rather than one screen: the hub stays scannable on a phone, and
+"which server am I on" is a question you only ask while debugging. Note the
+volunteer location heartbeat moved with the toggle to `SettingsScreen` —
+it is gated on that screen's focus, since that is where the state lives.
+
+## Saved places live in place search
+
+`SavedPlacesSheet` is reached from a bookmark button in the `PlaceSearchScreen`
+header (next to close, since the action row is full) rather than from More.
+Saved places are route-planning data consumed at pick time, so the entry
+point belongs where they are used; it works in every mode the picker runs
+in. Add/delete call `search.refreshSaved()` so the results behind the dialog
+stay true.
+
+Both saved lists size to their content — no `minHeight` floor. `Overlay`
+already handles the two cases correctly: the body is `flexShrink: 1` inside
+a container capped at `maxHeight` (85% dialog / 70% sheet), so a short list
+produces a short dialog and a long one scrolls. A floor would buy a taller
+empty state at the cost of dead space on every non-empty one.
+
 ## Build / verify
 
 ```

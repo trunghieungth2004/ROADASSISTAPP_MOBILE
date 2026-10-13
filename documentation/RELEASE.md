@@ -34,7 +34,9 @@ git tag v0.2.0 && git push origin main v0.2.0
 
 The workflow asserts the tag equals `v<app.json version>` and stamps
 `versionCode` from the run number (monotonic, so reinstalls are always
-accepted as upgrades). The APK is named `roadassist-<tag>.apk`.
+accepted as upgrades). The APK is named `roadassist-<tag>.apk` — that name
+is a contract: the in-app updater locates the download by it, so renaming
+breaks updates without a compile error anywhere.
 
 ### Secrets (repo Settings → Secrets → Actions)
 

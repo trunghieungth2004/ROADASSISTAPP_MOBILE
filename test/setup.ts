@@ -76,3 +76,16 @@ jest.mock("expo-clipboard", () => ({
 jest.mock("expo-intent-launcher", () => ({
   startActivityAsync: jest.fn(async () => undefined),
 }));
+
+jest.mock("expo-file-system", () => ({
+  cacheDirectory: "file:///cache/",
+  createDownloadResumable: jest.fn(() => ({
+    downloadAsync: jest.fn(async () => ({uri: "file:///cache/roadassist-update.apk"})),
+  })),
+  getContentUriAsync: jest.fn(async () => "content:///apk"),
+}));
+
+jest.mock("expo-application", () => ({
+  nativeApplicationVersion: "0.1.0",
+  nativeBuildVersion: "1",
+}));

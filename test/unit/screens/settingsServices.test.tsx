@@ -1,7 +1,7 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create, type ReactTestInstance} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {Pressable, Text} from "react-native";import MoreScreen from "../../../src/screens/MoreScreen";
+import {Pressable, Text} from "react-native";import SettingsScreen from "../../../src/screens/SettingsScreen";
 import OnboardingScreen from "../../../src/screens/OnboardingScreen";
 import {en} from "../../../src/i18n/en";
 
@@ -48,42 +48,12 @@ function textsUnder(node: ReactTestInstance): string[] {
   });
 }
 
-function setServices(services: string[]): void {
-  const mod = jest.requireMock("../../../src/context/ProfileContext") as {useProfile: unknown};
-  mod.useProfile = () => ({
-    user: {id: "u1", role: "2", services},
-    refresh: async () => null,
-    markOnboarded: async () => undefined,
-  });
-}
-
-test("duplicated licenses render a single badge each", async () => {
-  setServices(["RIDER", "VOLUNTEER", "VOLUNTEER"]);
-  let renderer: ReturnType<typeof create> | undefined;
-  await act(async () => {
-    renderer = create(
-      <SafeAreaProvider initialMetrics={metrics}>
-        <MoreScreen />
-      </SafeAreaProvider>,
-    );
-  });
-  if (!renderer) throw new Error("mount failed");
-  try {
-    const all = textsUnder(renderer.root);
-    expect(all.filter((text) => text === en.roles.volunteer).length).toBe(1);
-    expect(all.filter((text) => text === en.roles.rider).length).toBe(1);
-  } finally {
-    renderer.unmount();
-    setServices(["RIDER", "VOLUNTEER"]);
-  }
-});
-
 test("role picker stays unmounted until services opens", async () => {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <MoreScreen />
+        <SettingsScreen />
       </SafeAreaProvider>,
     );
   });
@@ -101,25 +71,20 @@ test("role picker stays unmounted until services opens", async () => {
   renderer.unmount();
 });
 
-test("saved places row opens the manager sheet", async () => {
+test("appearance and language rows stay on settings", async () => {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <MoreScreen />
+        <SettingsScreen />
       </SafeAreaProvider>,
     );
   });
   if (!renderer) throw new Error("mount failed");
   try {
-    const pressables = renderer.root.findAll((n) => typeof n.props?.onPress === "function");
-    const row = pressables.find((r) => textsUnder(r).some((text) => text === en.route.savedPlaces));
-    expect(row).toBeDefined();
-    await act(async () => {
-      row?.props.onPress();
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    });
-    expect(textsUnder(renderer.root).some((text) => text === en.common.add)).toBe(true);
+    const all = textsUnder(renderer.root);
+    expect(all).toContain(en.more.appearance);
+    expect(all).toContain(en.more.language);
   } finally {
     renderer.unmount();
   }

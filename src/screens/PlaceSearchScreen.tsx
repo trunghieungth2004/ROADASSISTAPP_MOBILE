@@ -1,11 +1,15 @@
 import {useState, type ComponentProps} from "react";
-import {ActivityIndicator, FlatList, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, FlatList, Keyboard, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import {usePlaceSearch, type Place, type PlaceSearch, type ShopFetcher} from "../components/place-search";
+import SavedPlacesSheet from "../components/place-search/SavedPlacesSheet";
+import MapPickOverlay from "../components/map/MapPickOverlay";
+import Overlay from "../components/overlay/Overlay";
 import type {PlaceSource} from "../components/place-search/PlaceSearch.types";
+import {listSavedPlaces, removeSavedPlace, savePlace, type SavedPlace} from "../api/places";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import {darkTheme, lightTheme} from "../theme";
@@ -41,6 +45,14 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
   const search = provided ?? internal;
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [savedBusy, setSavedBusy] = useState(false);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [pickingSaved, setPickingSaved] = useState(false);
+  const [draftPoint, setDraftPoint] = useState<{lat: number; lng: number} | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
   const grouped: {header: string | null; item: Place}[] = [];
   let last: string | null = null;
   for (const p of search.options) {
@@ -64,6 +76,55 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
       setLocating(false);
     }
   }
+  async function loadSavedPlaces(): Promise<void> {
+    if (!token) {
+      setSavedPlaces([]);
+      return;
+    }
+    setSavedLoading(true);
+    try {
+      setSavedPlaces(await listSavedPlaces(token));
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedLoading(false);
+    }
+  }
+  function openSavedManager(): void {
+    setSavedError(null);
+    setSavedOpen(true);
+    void loadSavedPlaces();
+  }
+  async function onSaveDraftPlace(): Promise<void> {
+    if (!token || !draftPoint || savedBusy) return;
+    const label = draftLabel.trim();
+    if (!label) return;
+    setSavedBusy(true);
+    try {
+      await savePlace({label, lat: draftPoint.lat, lng: draftPoint.lng}, token);
+      setDraftPoint(null);
+      setDraftLabel("");
+      await loadSavedPlaces();
+      search.refreshSaved();
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedBusy(false);
+    }
+  }
+  async function onDeleteSavedPlace(id: string): Promise<void> {
+    if (!token || savedBusy) return;
+    setSavedBusy(true);
+    try {
+      await removeSavedPlace(id, token);
+      await loadSavedPlaces();
+      search.refreshSaved();
+    } catch (err) {
+      setSavedError(toMessage(err));
+    } finally {
+      setSavedBusy(false);
+    }
+  }
   return (
     <View style={[styles.screen, {backgroundColor: theme.background, paddingTop: insets.top + 12}]}>
       <View style={styles.searchRow}>
@@ -72,6 +133,11 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
           <Text style={[styles.title, {color: theme.text}]}>{title}</Text>
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={placeholder} placeholderTextColor={theme.muted} value={search.input} onChangeText={search.handleInput} accessibilityLabel={placeholder} autoFocus />
         </View>
+        {token ? (
+          <Pressable style={[styles.savedBtn, {borderColor: theme.border}]} onPress={openSavedManager} accessibilityRole="button" accessibilityLabel={t.route.savedPlaces}>
+            <MaterialIcons name="bookmark" size={20} color={theme.primary} />
+          </Pressable>
+        ) : null}
       </View>
       {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
       <View style={styles.actionBtns}>
@@ -109,6 +175,35 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
         </View>
         );
       }} />
+      {savedOpen ? (
+        <SavedPlacesSheet
+          t={t}
+          places={savedPlaces}
+          loading={savedLoading}
+          busy={savedBusy}
+          error={savedError}
+          onAdd={() => { setSavedError(null); setPickingSaved(true); }}
+          onDelete={(id) => void onDeleteSavedPlace(id)}
+          onClose={() => { Keyboard.dismiss(); setSavedOpen(false); }}
+        />
+      ) : null}
+      {pickingSaved ? (
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setPickingSaved(false)}>
+          <MapPickOverlay
+            t={t}
+            lang={lang}
+            title={t.route.savePlace}
+            initial={null}
+            onPick={(lat, lng, label) => {
+              setDraftPoint({lat, lng});
+              setDraftLabel(label);
+              setPickingSaved(false);
+              void onSaveDraftPlace();
+            }}
+            onClose={() => setPickingSaved(false)}
+          />
+        </Overlay>
+      ) : null}
     </View>
   );
 }
@@ -116,6 +211,7 @@ const styles = StyleSheet.create({
   screen: {flex: 1, paddingHorizontal: 12, paddingBottom: 12, gap: 8},
   searchRow: {flexDirection: "row", gap: 8, alignItems: "flex-start"},
   closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
+  savedBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   searchCol: {flex: 1, gap: 8, minWidth: 0},
   title: {fontSize: 16, fontWeight: "700"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14},

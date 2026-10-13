@@ -13,9 +13,14 @@ import {darkTheme, lightTheme} from "./src/theme";
 import Tabs from "./src/navigation/Tabs";
 import NavigationScreen from "./src/screens/NavigationScreen";
 import DiagnosticsScreen from "./src/screens/DiagnosticsScreen";
-import {useEffect} from "react";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import AboutScreen from "./src/screens/AboutScreen";
+import {useEffect, useState} from "react";
 import {ensurePushConfigured, syncPushToken} from "./src/services/push";
 import {warmAudio} from "./src/services/sound";
+import {shouldOfferUpdate, skipRelease, type AppRelease} from "./src/services/appUpdate";
+import UpdateDialog from "./src/components/UpdateDialog";
+import {useStrings} from "./src/context/LanguageContext";
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +32,31 @@ function PushSync() {
     void syncPushToken(token, uid);
   }, [token, uid]);
   return null;
+}
+function UpdateCheck() {
+  const {t} = useStrings();
+  const [release, setRelease] = useState<AppRelease | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void shouldOfferUpdate().then((r) => {
+      if (alive && r) setRelease(r);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!release) return null;
+  return (
+    <UpdateDialog
+      t={t}
+      release={release}
+      onSkip={() => {
+        void skipRelease(release.tag);
+        setRelease(null);
+      }}
+      onClose={() => setRelease(null)}
+    />
+  );
 }
 export default function App() {
   const [fontsLoaded] = useFonts(APP_FONTS);
@@ -45,11 +75,14 @@ function ThemedApp() {
           <ProfileProvider>
             <NavSessionProvider>
               <PushSync />
+              <UpdateCheck />
               <NavigationContainer theme={{...navTheme, colors: {...navTheme.colors, background: theme.background, card: theme.paper, text: theme.text, primary: theme.primary, border: theme.border}}}>
                 <Stack.Navigator>
                   <Stack.Screen name="Tabs" component={Tabs} options={{headerShown: false}} />
                   <Stack.Screen name="Navigation" component={NavigationScreen} options={{headerShown: false, gestureEnabled: false}} />
                   <Stack.Screen name="Diagnostics" component={DiagnosticsScreen} />
+                  <Stack.Screen name="Settings" component={SettingsScreen} />
+                  <Stack.Screen name="About" component={AboutScreen} />
                 </Stack.Navigator>
               </NavigationContainer>
               <StatusBar style={scheme === "dark" ? "light" : "dark"} />
