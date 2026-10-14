@@ -12,8 +12,9 @@ const metrics: Metrics = {
 const tower = {lat: 10.69, lng: 106.59};
 const pickup = {lat: 10.71, lng: 106.61};
 const dest = {lat: 10.75, lng: 106.65};
+const lineGeometry = {type: "LineString", coordinates: [[106.59, 10.69], [106.61, 10.71]]} as {type: "LineString"; coordinates: [number, number][]};
 
-async function renderMap(status: string, withDest: boolean) {
+async function renderMap(status: string, withDest: boolean, route: boolean) {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
@@ -26,7 +27,7 @@ async function renderMap(status: string, withDest: boolean) {
           selectedShop={null}
           pillTextForShop={() => null}
           walkRoute={null}
-          jobLayers={{tower, pickup, dest: withDest ? dest : null, status}}
+          jobLayers={{tower, pickup, dest: withDest ? dest : null, status, route: route ? {source: "test", geometry: lineGeometry} : null}}
           onMapReady={() => undefined}
         />
       </SafeAreaProvider>,
@@ -41,7 +42,7 @@ function sourceById(renderer: ReturnType<typeof create>, id: string) {
 }
 
 test("tower pin uses the tower icon", async () => {
-  const renderer = await renderMap("2", true);
+  const renderer = await renderMap("2", true, false);
   try {
     const towerSources = sourceById(renderer, "tow-job-tower");
     expect(towerSources.length).toBeGreaterThan(0);
@@ -54,7 +55,7 @@ test("tower pin uses the tower icon", async () => {
 });
 
 test("matched leg draws tower to pickup", async () => {
-  const renderer = await renderMap("2", true);
+  const renderer = await renderMap("2", true, false);
   try {
     const lines = sourceById(renderer, "tow-job-line");
     expect(lines.length).toBeGreaterThan(0);
@@ -66,7 +67,7 @@ test("matched leg draws tower to pickup", async () => {
 });
 
 test("arrived leg draws tower to destination", async () => {
-  const renderer = await renderMap("3", true);
+  const renderer = await renderMap("3", true, false);
   try {
     const lines = sourceById(renderer, "tow-job-line");
     expect(lines.length).toBeGreaterThan(0);
@@ -78,11 +79,32 @@ test("arrived leg draws tower to destination", async () => {
 });
 
 test("arrived without a destination draws no connector", async () => {
-  const renderer = await renderMap("3", false);
+  const renderer = await renderMap("3", false, false);
   try {
     expect(sourceById(renderer, "tow-job-line").length).toBe(0);
     expect(sourceById(renderer, "tow-job-dest").length).toBe(0);
     expect(sourceById(renderer, "tow-job-pickup").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("routed polyline replaces the straight connector", async () => {
+  const renderer = await renderMap("2", true, true);
+  try {
+    expect(sourceById(renderer, "tow-job-line").length).toBe(0);
+    expect(sourceById(renderer, "tow-job-route").length).toBeGreaterThan(0);
+    expect(sourceById(renderer, "tow-job-route-casing").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("no route keeps the straight connector", async () => {
+  const renderer = await renderMap("2", true, false);
+  try {
+    expect(sourceById(renderer, "tow-job-route").length).toBe(0);
+    expect(sourceById(renderer, "tow-job-line").length).toBeGreaterThan(0);
   } finally {
     renderer.unmount();
   }

@@ -186,28 +186,33 @@ test("vehicle classes default to both and keep at least one", async () => {
   }
 });
 
-test("shop submit rejects a non-numeric fee", async () => {
+test("shop submit sends no fee or duty keys", async () => {
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (jest.fn(async () =>
-    ({ok: true, status: 200, text: async () => JSON.stringify({statusCode: 200, status: "SUCCESS", data: {id: "p1"}})}),
-  ) as unknown) as typeof fetch;
+  const seen: unknown[] = [];
+  globalThis.fetch = (jest.fn(async (_url: unknown, init: unknown) => {
+    seen.push(init);
+    return {ok: true, status: 200, text: async () => JSON.stringify({statusCode: 200, status: "SUCCESS", data: {id: "p1"}})};
+  }) as unknown) as typeof fetch;
   try {
     const {latest, renderer} = await draftFor("SHOP");
     try {
       await act(async () => {
         latest()?.setName("Good Shop");
         latest()?.onPickPlace({label: "Here", lat: 10.7, lng: 106.6, source: "map"});
-        latest()?.setServiceFee("12a");
       });
       const ok = await (async () => {
         let result = true;
         await act(async () => {
-          result = await (latest()?.submit("tok") ?? true);
+          result = await (latest()?.submit("tok") ?? false);
         });
         return result;
       })();
-      expect(ok).toBe(false);
-      expect(latest()?.error).toBe(en.provider.invalidAmount);
+      expect(ok).toBe(true);
+      const body = JSON.parse(String((seen[0] as {body?: unknown})?.body ?? "{}")) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("serviceFee");
+      expect(body).not.toHaveProperty("towBaseFee");
+      expect(body).not.toHaveProperty("towPerKmFee");
+      expect(body).not.toHaveProperty("accepting");
     } finally {
       renderer.unmount();
     }

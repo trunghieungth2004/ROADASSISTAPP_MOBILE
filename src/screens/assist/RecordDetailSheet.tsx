@@ -39,7 +39,7 @@ type Props = {
   onNavigateJob: ((ticket: FeedTicket) => void) | null;
   acceptHidden: boolean;
   acceptOffDuty: boolean;
-  towPreview: {ready: boolean; summary: string | null; busy: boolean; error: string | null} | null;
+  towPreview: {ready: boolean; summary: string | null; fareEstimate?: number | null; busy: boolean; error: string | null} | null;
   onPreviewTowRoute: ((ticket: FeedTicket) => void) | null;
   linked: FeedTicket | null;
   onOpenLinked: (ticket: FeedTicket) => void;
@@ -49,6 +49,7 @@ type Props = {
   ownShopIds: Set<string>;
   onDeclineDestination: (ticket: FeedTicket) => void;
   onEditDestination: ((ticket: FeedTicket) => void) | null;
+  allowTowerCancel: boolean;
 };
 
 type Party = {
@@ -226,7 +227,7 @@ function Timeline({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: Feed
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, onDeclineDestination, onEditDestination}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, onDeclineDestination, onEditDestination, allowTowerCancel}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -253,10 +254,10 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
     const mins = Math.round((Date.parse(iso) - Date.now()) / 60000);
     return mins > 0 ? mins : null;
   };
-  const pickupIn = !inbound && ticket.ticketType === "TOW" ? etaInMin(ticket.etaPickupAt) : null;
-  const dropoffIn = !inbound && ticket.ticketType === "TOW" ? etaInMin(ticket.etaDropoffAt) : null;
-  const previewFresh = towPreview && towPreview.summary && (ticket.status === "1" || ticket.status === "2");
-  const towerFix = !inbound && ticket.ticketType === "TOW" && ticket.towerFix !== null && typeof ticket.towerFix === "object" &&
+  const pickupIn = ticket.ticketType === "TOW" ? etaInMin(ticket.etaPickupAt) : null;
+  const dropoffIn = ticket.ticketType === "TOW" ? etaInMin(ticket.etaDropoffAt) : null;
+  const previewFresh = towPreview && towPreview.summary && (ticket.status === "1" || ticket.status === "2" || ticket.status === "3");
+  const towerFix = ticket.ticketType === "TOW" && ticket.towerFix !== null && typeof ticket.towerFix === "object" &&
     typeof ticket.towerFix.lat === "number" && typeof ticket.towerFix.lng === "number" ?
     {lat: ticket.towerFix.lat, lng: ticket.towerFix.lng} :
     null;
@@ -279,16 +280,17 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
     phone: typeof destParty.phone === "string" ? destParty.phone : null,
     openNow: typeof destParty.openNow === "boolean" ? destParty.openNow : null,
   } : null;
-  const placeHeader = ticket.ticketType === "TOW" ? t.assist.pickup : ticket.ticketType === "WALK_IN" ? t.assist.startPoint : null;
+  const placeHeader = ticket.ticketType === "WALK_IN" ? t.assist.startPoint : ticket.ticketType === "TOW" || ticket.ticketType === "SOS" || ticket.ticketType === "MECHANIC" ? t.assist.pickup : null;
   const canDeclineDest = canDeclineDestination(ticket.status, ticket.destinationShopId, ownShopIds);
   const actions: OverlayAction[] = [];
   if (!inbound && canRate(ticket.status)) {
     actions.push({label: hasRated ? t.rating.editRating : t.assist.rate, tone: "primary", busy, onPress: () => onRate(ticket)});
   }
-  if (!inbound && canCancel(ticket.status) && !confirmCancel) {
+  const showCancel = (!inbound && canCancel(ticket.status)) || allowTowerCancel;
+  if (showCancel && !confirmCancel) {
     actions.push({label: t.assist.cancel, tone: "danger", outline: true, onPress: () => setConfirmCancel(true)});
   }
-  if (!inbound && canCancel(ticket.status) && confirmCancel) {
+  if (showCancel && confirmCancel) {
     actions.push({label: t.assist.keepRequest, tone: "neutral", outline: true, onPress: () => setConfirmCancel(false)});
     actions.push({label: t.assist.confirmCancel, tone: "danger", busy, onPress: () => onConfirmCancel(ticket.id)});
   }
@@ -415,7 +417,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
             <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.dropOffPoint}</Text>
             <Section theme={theme} icon="flag">
-              <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.noDropOff}</Text>
+              <Text style={[styles.coords, {color: theme.muted}]}>{inbound ? t.assist.noDropOffAssigned : t.assist.noDropOff}</Text>
             </Section>
             {onEditDestination && canEditDestination(ticket.direction, ticket.status, ticket.ticketType) ? (
               <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.primary}]} onPress={() => onEditDestination(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.changeDropOff}>
@@ -423,9 +425,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
               </Pressable>
             ) : null}
           </View>
-        ) : null}
-        {canDeclineDest ? (
-          <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.declineDestinationHint}</Text>
         ) : null}
         {towPreview ? (
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
@@ -440,6 +439,9 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             ) : previewFresh && towPreview.summary ? (
               <Text style={[styles.coords, {color: theme.text}]}>{towPreview.summary}</Text>
             ) : null}
+            {towPreview.fareEstimate !== null && towPreview.fareEstimate !== undefined ? (
+              <Text style={[styles.coords, {color: theme.text}]}>{`${t.assist.fareEstimate}: ${towPreview.fareEstimate.toLocaleString()} VND`}</Text>
+            ) : null}
           </View>
         ) : null}
         {acceptHidden ? (
@@ -452,6 +454,16 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
               <Text style={[styles.coords, {color: theme.muted}]}>
                 {formatPoint(ticket.lat, ticket.lng)}{riderDistance ? ` · ${riderDistance}` : ""}
               </Text>
+            </Section>
+            <Stars theme={theme} avg={party.ratingAvg} count={party.ratingCount} />
+            {party.phone !== null ? <CallRow theme={theme} phone={party.phone} /> : null}
+          </View>
+        ) : null}
+        {!inbound && roleLabel !== null ? (
+          <View style={[styles.shopBlock, {borderColor: theme.border}]}>
+            <Section theme={theme} icon="person-pin-circle">
+              <Text style={{color: theme.text}}>{displayName}</Text>
+              <Text style={[styles.coords, {color: theme.muted}]}>{roleLabel}</Text>
             </Section>
             <Stars theme={theme} avg={party.ratingAvg} count={party.ratingCount} />
             {party.phone !== null ? <CallRow theme={theme} phone={party.phone} /> : null}
@@ -483,8 +495,14 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             </Text>
           </Section>
         ) : null}
-        {inbound && ticket.status === "9" ? (
-          <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.quoteAwaiting}</Text>
+        {ticket.ticketType === "TOW" && ticket.towFare !== null && typeof ticket.towFare === "object" && typeof ticket.towFare.estimate === "number" ? (
+          <Section theme={theme} icon="payments">
+            <Text style={[styles.coords, {color: theme.text}]}>
+              {typeof ticket.towFare.final === "number" ?
+                `${ticket.towFare.partial === true ? t.assist.farePartial : t.assist.fareFinal}: ${ticket.towFare.final.toLocaleString()} VND` :
+                `${t.assist.fareUpTo}: ${ticket.towFare.ceiling.toLocaleString()} VND`}
+            </Text>
+          </Section>
         ) : null}
         <Timeline t={t} theme={theme} ticket={ticket} />
         {linked ? (
@@ -520,7 +538,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
           </View>
           );
         })}
-        {!inbound && canCancel(ticket.status) && confirmCancel ? (
+        {showCancel && confirmCancel ? (
           <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.cancelMessage}</Text>
         ) : null}
         {declineOpen ? (

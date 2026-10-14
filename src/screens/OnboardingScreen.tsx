@@ -1,11 +1,9 @@
 import {useState} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import * as Location from "expo-location";
 import {toMessage} from "../api/client";
 import {formatPoint} from "../api/places";
-import {getFix} from "../services/geo";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import type {Strings} from "../i18n/en";
 import {darkTheme, lightTheme} from "../theme";
@@ -77,22 +75,6 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [towSearch, setTowSearch] = useState(false);
   const [towMap, setTowMap] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [locBusy, setLocBusy] = useState(false);
-  async function stampTowPosition(): Promise<void> {
-    if (locBusy) return;
-    setLocBusy(true);
-    setFieldError(null);
-    try {
-      const {status} = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") throw new Error(t.nav.locationDenied);
-      const pos = await getFix();
-      setTowPoint({lat: pos.lat, lng: pos.lng});
-    } catch (err) {
-      setFieldError(toMessage(err));
-    } finally {
-      setLocBusy(false);
-    }
-  }
   function onPickShopPlace(place: Place): void {
     setShopPoint({lat: place.lat, lng: place.lng, label: place.label});
     setShopSearch(false);
@@ -230,9 +212,6 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
             <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={width} onChangeText={setWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
             <Pressable disabled={busy} onPress={() => setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
               <Text style={{color: towPoint ? theme.text : theme.muted}} numberOfLines={1}>{towPoint ? formatPoint(towPoint.lat, towPoint.lng) : t.provider.towAddressUnset}</Text>
-            </Pressable>
-            <Pressable disabled={busy || locBusy} onPress={() => void stampTowPosition()} style={[styles.chip, {borderColor: theme.primary}, locBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.provider.useLocation}>
-              {locBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary}}>{t.provider.useLocation}</Text>}
             </Pressable>
             {towPoint ? <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionSet}</Text> : <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionUnset}</Text>}
           </View>

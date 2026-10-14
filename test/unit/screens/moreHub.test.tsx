@@ -113,3 +113,20 @@ test("hub no longer hosts permissions, providers, or saved places", async () => 
     renderer.unmount();
   }
 });
+
+test("duty toggles sit between the profile header and settings", async () => {
+  const renderer = await mount();
+  try {
+    const all = textsUnder(renderer.root);
+    const profileAt = all.indexOf("—");
+    const dutyAt = all.indexOf(en.more.volTitle);
+    const settingsAt = all.indexOf(en.more.settings);
+    expect(dutyAt).toBeGreaterThan(-1);
+    expect(profileAt).toBeGreaterThan(-1);
+    expect(settingsAt).toBeGreaterThan(-1);
+    expect(dutyAt).toBeGreaterThan(profileAt);
+    expect(dutyAt).toBeLessThan(settingsAt);
+  } finally {
+    renderer.unmount();
+  }
+});

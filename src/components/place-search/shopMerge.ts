@@ -66,12 +66,16 @@ export async function fetchShopPlaces(
   gps: {lat: number; lng: number},
   vehicleClass?: string,
   radiusMeters?: number,
+  shopOnly = false,
 ): Promise<ShopEntry[]> {
   const shops = await searchProviders(gps.lat, gps.lng, query, token, {
+    ...(shopOnly ? {kind: "SHOP"} : {}),
     ...(vehicleClass ? {vehicleClass} : {}),
     ...(radiusMeters ? {radiusMeters} : {}),
   });
-  return shops.map((s) => ({id: s.id, name: s.name, lat: s.lat, lng: s.lng}));
+  return shops
+    .filter((s) => !shopOnly || s.kind === "SHOP")
+    .map((s) => ({id: s.id, name: s.name, lat: s.lat, lng: s.lng}));
 }
 
 export function mergeShopResults(

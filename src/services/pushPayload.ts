@@ -15,6 +15,7 @@ export type DispatchPushData = {
   lng?: number;
   status?: string;
   declineReason?: string;
+  urgent?: boolean;
 };
 
 function num(v: unknown): number | undefined {
@@ -47,5 +48,6 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
     lng: num(d.lng),
     status: typeof d.status === "string" ? d.status : undefined,
     declineReason: typeof d.declineReason === "string" ? d.declineReason : undefined,
+    urgent: d.urgent === true || d.urgent === "true" || undefined,
   };
 }

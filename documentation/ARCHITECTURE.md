@@ -183,8 +183,30 @@ the newest own out-direction tow at matched/arrived pins itself, so riders
 get the live view without ever accepting. A pending tow pins from the
 get-go: with a destination it shows an info card (drop-off name, default
 border, no tracking), without one it pins alert-only (amber border, no
-layers, no poll) as the visible "pick a drop-off" nudge. A quiet 15 s feed poll keeps the
-tracking fresh while the job is live and focused. The tow board reuses the pending
+layers, no poll) as the visible "pick a drop-off" nudge. The live card carries
+the same amber signal: a matched/arrived tow that has lost its drop-off (the
+BE's 3-field clear after a destination decline) shows an amber border, amber
+truck icon, and an extra amber line under the normal job info — the rider
+reads "pick one," the tower reads "waiting for the rider to update the
+drop-off." The info line stays in both cases, since tower distance and ETA
+are still worth reading. The card title is the job name alone (the truck
+icon already says tow), and the info line is status-aware: matched reads
+tower distance plus pickup ETA, arrived reads rider distance to the drop-off
+plus drop-off ETA. The tower dot is the heartbeat fix for the rider's view
+and the viewer's own GPS for the tower's — "where the truck is" to the best
+data each side has. The polyline fits the camera once per geometry key,
+never on poll ticks.
+The test for "has a drop-off" walks the name ladder (`destinationParty.name`
+→ snapshot `name`/`label` → point `label`) rather than reusing `towDestOf`,
+which needs coordinates and would false-positive on a shop the feed returns
+without them. A quiet 15 s feed poll keeps the
+tracking fresh while the job is live and focused. The live card draws the
+routed polyline once per geometry change (accept, retarget, decline-clear —
+never the 15 s poll, which only moves the tower dot): whole-way
+tower → pickup → shop, direct tower → shop after arrival since the pickup is
+behind. The straight connector stays as the fallback while the route loads
+or when routing fails, and hides once the polyline lands so the two never
+stack. The tow board reuses the pending
 radar filtered to `TOW` (the BE already gates it to active tow providers).
 Tapping a board row opens the same record sheet as a ticket (rider name,
 pickup and destination blocks, timeline, Accept in the footer — Decline is
@@ -282,16 +304,25 @@ the only detail UI. Tapping a row opens `RecordDetailSheet` (bottom sheet,
 same language as shop details): type-only title with the status as a header
 pill, then the counterparty hero (direction chip, name, role caption —
 repair shop / tow operator / volunteer / rider — relative age), a bordered
-place container (labeled Pickup on TOW, Start point on walk-in, with a
-reverse-geocoded label over the coordinates), the shop card when the party is
+place container (labeled Pickup on tow, SOS and mechanic tickets, Start point
+on walk-in, with a reverse-geocoded label over the coordinates), the shop card when the party is
 a shop (name title, address, stars, phone with the open-status pill —
 tapping it opens the full shop modal, which owns the route action), a
 drop-off section whenever a destination exists (full shop card from
 `destinationParty` for registered shops, compact labeled point otherwise),
-a rider-location block (name, coords plus distance,
-stars, tappable phone) on inbound rows, icon fact rows (note, decline, VND
+an empty drop-off block on destination-less tows (rider wording plus the
+change action for the rider, neutral assigned-yet wording for inbound
+viewers), a people card on both sides (rider-location block with name,
+coords plus distance, stars, tappable phone on inbound rows; mirrored helper
+card with role, stars and tappable phone on outbound rows), icon fact rows (note, decline, VND
 amounts with separators), a vertical dot-and-connector timeline built from
-`statusHistory` (`StatusStepper` only for legacy rows without history), tow ETArows ("driver arrives in ~N min", only while future), a linked-ticket row
+`statusHistory` (`StatusStepper` only for legacy rows without history), tow ETA
+pill and drop-off line for both viewers on live tows (the same arrival fields
+read as tower-distance by the rider and as own-arrival by the tower), the
+live route summary on matched and arrived tows alongside the pending preview,
+tow fare rows in the money block (board preview estimate, "up to" ceiling
+while live, final on resolve, recorded partial on cancel — all read from the
+stored ticket quote, never recomputed for display), a linked-ticket row
 jumping to the auto-spawned shop ticket on resolved tows, and
 the rating thread with reply (ratee-only: the reply affordance hides on your
 own ratings; every row is a shared `RatingRow` — initial avatar, author
@@ -419,23 +450,45 @@ iOS renders nothing — sideload doesn't exist there.
 
 ## More → Settings / About
 
-Mihon-shaped: `MoreScreen` is a hub, not a settings dump. It keeps only
-identity (avatar, name, licence/role/provider badges, points/reports stats)
-plus two rows that push `Settings` and `About`, then sign out. No accordions
-— every destination is a pushed screen (two stack registrations, same
-pattern as `Diagnostics`).
+Mihon-shaped: `MoreScreen` is a hub, not a settings dump. It keeps identity
+(avatar, name, licence/role/provider badges, points/reports stats), then a
+Duty card with one switch row per held role (volunteer / tow / shop) right
+under the profile header, then two rows that push `Settings` and `About`,
+then sign out. No accordions — every destination is a pushed screen (four
+stack registrations beside `Diagnostics`: Settings, About, Permissions,
+Providers).
 
-`SettingsScreen` holds everything that *configures behaviour*: appearance,
-language, the permissions card (notifications / background location /
-battery), provider registration + accepting switches, and the volunteer
-toggle with radius/capability chips. `AboutScreen` holds everything that
-*identifies the app*: name, version + build number, backend URL, check-for-
-updates + auto toggle (Android), diagnostics link, GitHub source link.
+`SettingsScreen` is a hub of rows: services onboarding, appearance,
+language, then pushed `Permissions` (notifications / background location /
+battery, moved wholesale) and `Providers` (Vehicle-pattern header with
+per-missing-kind register buttons on top, per-row switches + edit below,
+create/edit dialogs moved with it). Volunteer radius/capability chips stay
+in Settings as switch-less options, shown while volunteer mode is on.
+`AboutScreen` holds everything that *identifies the app*: name, version +
+build number, backend URL, check-for-updates + auto toggle (Android),
+diagnostics link, GitHub source link.
 
 Why split rather than one screen: the hub stays scannable on a phone, and
-"which server am I on" is a question you only ask while debugging. Note the
-volunteer location heartbeat moved with the toggle to `SettingsScreen` —
-it is gated on that screen's focus, since that is where the state lives.
+"which server am I on" is a question you only ask while debugging. The
+volunteer location heartbeat lives on More (where its switch lives),
+gated on that screen's focus; tower beats stay on Assist.
+
+## Duty rows (More, under the profile card)
+
+One row per held role, Mihon-style: title, consequence summary, switch.
+Volunteer keeps its existing card (mode + radius + capability). Tow duty
+drives every held tower's `accepting` at once and pings location on the way
+up so the tower is visible immediately, not at the next 5-minute beat. Shop
+duty reads Open/Closed and drives `accepting` — the server enforces it
+inbound (walk-in filing rejected, shop pushes skipped), so off means off.
+The tow subtitle reports effective visibility from beat freshness ("waiting
+for location" on a cold start), because the switch alone can't promise what
+the radius can't see. Per-provider switches stay as the source of truth for
+multi-provider edge cases; the volunteer row's outer is a pressable so the
+switch is tappable, matching the appearance row. Registration and edit forms
+carry no fees and no duty switch — pricing is platform-side (pending) and
+duty lives in these rows; the server still accepts the legacy fee columns
+so older builds keep saving.
 
 ## Saved places live in place search
 
@@ -445,6 +498,12 @@ Saved places are route-planning data consumed at pick time, so the entry
 point belongs where they are used; it works in every mode the picker runs
 in. Add/delete call `search.refreshSaved()` so the results behind the dialog
 stay true.
+
+Assist centers on the rider the same way route does: a mount-time
+`centerOnLocal` with the shared retry helper, so a slow first fix no longer
+leaves the map stranded at the default center. The drop-off picker passes
+`kind: "SHOP"` to provider search and filters client-side too, so tower
+listings can't be picked as destinations.
 
 Both saved lists size to their content — no `minHeight` floor. `Overlay`
 already handles the two cases correctly: the body is `flexShrink: 1` inside

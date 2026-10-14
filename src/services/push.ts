@@ -12,6 +12,9 @@ const LAST_PUSH_KEY = "roadassist.push.last";
 const LAST_DISPATCH_PUSH_KEY = "roadassist.push.lastDispatch";
 const CLAIM_TTL_MS = 120000;
 
+const DISPATCH_CHANNEL = "dispatch";
+const URGENT_DISPATCH_CHANNEL = "dispatch-urgent";
+
 let configured = false;
 const claimed = new Map<string, number>();
 let navForeground = false;
@@ -36,8 +39,10 @@ export function ensurePushConfigured(): void {
   configured = true;
   navForeground = false;
   Notifications.setNotificationHandler({
-    handleNotification: async () =>
-      navForeground
+    handleNotification: async (req) => {
+      const urgent = parseDispatchPush(req.request.content.data)?.urgent === true;
+      const quiet = navForeground && !urgent;
+      return quiet
         ? {
             shouldShowBanner: false,
             shouldShowList: false,
@@ -49,11 +54,21 @@ export function ensurePushConfigured(): void {
             shouldShowList: true,
             shouldPlaySound: true,
             shouldSetBadge: false,
-          },
+          };
+    },
   });
   if (Platform.OS === "android") {
     void Notifications.setNotificationChannelAsync("hazard", {
       name: "Hazards",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+    }).catch(() => undefined);
+    void Notifications.setNotificationChannelAsync(DISPATCH_CHANNEL, {
+      name: "Dispatch",
+      importance: Notifications.AndroidImportance.DEFAULT,
+    }).catch(() => undefined);
+    void Notifications.setNotificationChannelAsync(URGENT_DISPATCH_CHANNEL, {
+      name: "Dispatch (urgent)",
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
     }).catch(() => undefined);

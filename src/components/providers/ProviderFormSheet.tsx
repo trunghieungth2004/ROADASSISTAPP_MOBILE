@@ -1,6 +1,5 @@
-import {ActivityIndicator, Pressable, StyleSheet, Switch, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
-import {MaterialIcons} from "@expo/vector-icons";
 import {formatPoint} from "../../api/places";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme, type AppTheme} from "../../theme";
@@ -52,8 +51,6 @@ export default function ProviderFormSheet({t, draft}: Props) {
               );
             })}
           </View>
-          <Text style={[styles.label, {color: theme.text}]}>{t.provider.feeService}</Text>
-          <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.serviceFee} onChangeText={draft.setServiceFee} placeholder={t.provider.feeService} placeholderTextColor={theme.muted} keyboardType="numeric" />
         </>
       ) : (
         <>
@@ -66,13 +63,6 @@ export default function ProviderFormSheet({t, draft}: Props) {
               <Pressable onPress={() => draft.setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
                 <Text style={{color: theme.text}} numberOfLines={1}>{t.provider.towAddress}</Text>
               </Pressable>
-              <Pressable style={[styles.chip, {borderColor: theme.primary}, draft.locBusy && styles.disabled]} disabled={draft.locBusy} onPress={() => void draft.stampTowPoint()} accessibilityRole="button" accessibilityLabel={t.provider.useLocation}>
-                {draft.locBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary}}>{t.provider.useLocation}</Text>}
-              </Pressable>
-              <Text style={[styles.label, {color: theme.text}]}>{t.provider.feeBase}</Text>
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towBaseFee} onChangeText={draft.setTowBaseFee} placeholder={t.provider.feeBase} placeholderTextColor={theme.muted} keyboardType="numeric" />
-              <Text style={[styles.label, {color: theme.text}]}>{t.provider.feePerKm}</Text>
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towPerKmFee} onChangeText={draft.setTowPerKmFee} placeholder={t.provider.feePerKm} placeholderTextColor={theme.muted} keyboardType="numeric" />
             </>
           ) : (
             <>
@@ -86,17 +76,10 @@ export default function ProviderFormSheet({t, draft}: Props) {
                 ))}
               </View>
               <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towWidth} onChangeText={draft.setTowWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
-              <Text style={[styles.label, {color: theme.text}]}>{t.provider.feeBase}</Text>
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towBaseFee} onChangeText={draft.setTowBaseFee} placeholder={t.provider.feeBase} placeholderTextColor={theme.muted} keyboardType="numeric" />
-              <Text style={[styles.label, {color: theme.text}]}>{t.provider.feePerKm}</Text>
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towPerKmFee} onChangeText={draft.setTowPerKmFee} placeholder={t.provider.feePerKm} placeholderTextColor={theme.muted} keyboardType="numeric" />
               <Text style={[styles.label, {color: theme.text}]}>{t.provider.towPosition}</Text>
               {draft.towPoint ? <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionSet}</Text> : <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionUnset}</Text>}
               <Pressable onPress={() => draft.setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
                 <Text style={{color: draft.towPoint ? theme.text : theme.muted}} numberOfLines={1}>{draft.towPoint ? formatPoint(draft.towPoint.lat, draft.towPoint.lng) : t.provider.towAddressUnset}</Text>
-              </Pressable>
-              <Pressable style={[styles.chip, {borderColor: theme.primary}, draft.locBusy && styles.disabled]} disabled={draft.locBusy} onPress={() => void draft.stampTowPoint()} accessibilityRole="button" accessibilityLabel={t.provider.useLocation}>
-                {draft.locBusy ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary}}>{t.provider.useLocation}</Text>}
               </Pressable>
             </>
           )}
@@ -107,13 +90,6 @@ export default function ProviderFormSheet({t, draft}: Props) {
           <Text style={[styles.label, {color: theme.text}]}>{t.provider.hours}</Text>
           <ShopHoursEditor t={t} week={draft.week} setDay={draft.setDay} />
         </>
-      ) : null}
-      {provider ? (
-        <View style={styles.acceptRow}>
-          <MaterialIcons name="store" size={20} color={theme.primary} />
-          <Text style={[styles.acceptText, {color: theme.text}]}>{t.provider.accepting}</Text>
-          <Switch value={draft.accepting} onValueChange={draft.setAccepting} disabled={!draft.editable} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
-        </View>
       ) : null}
     </View>
   );
@@ -128,7 +104,4 @@ const styles = StyleSheet.create({
   row: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start"},
   coords: {fontSize: 12},
-  acceptRow: {flexDirection: "row", alignItems: "center", gap: 12},
-  acceptText: {flex: 1, fontSize: 15, fontWeight: "500"},
-  disabled: {opacity: 0.6},
 });

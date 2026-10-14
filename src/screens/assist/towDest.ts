@@ -24,6 +24,28 @@ export function towDestOf(  ticket: Pick<TowRouteTicket, "destinationParty" | "d
   return null;
 }
 
+export function hasDropOff(
+  ticket: Pick<TowRouteTicket, "destinationParty" | "destinationSnapshot" | "destinationPoint">,
+): boolean {
+  const party = ticket.destinationParty;
+  if (party !== null && typeof party === "object" &&
+    typeof party.name === "string" && party.name !== "") {
+    return true;
+  }
+  const snap = ticket.destinationSnapshot;
+  if (snap && typeof snap === "object" &&
+    ((typeof snap.name === "string" && snap.name !== "") ||
+      (typeof snap.label === "string" && snap.label !== ""))) {
+    return true;
+  }
+  const point = ticket.destinationPoint;
+  if (point && typeof point === "object" &&
+    typeof point.label === "string" && point.label !== "") {
+    return true;
+  }
+  return towDestOf(ticket) !== null;
+}
+
 export function declinedShopIds(
   ticket: Pick<DispatchTicket, "towLegs">,
 ): Set<string> {

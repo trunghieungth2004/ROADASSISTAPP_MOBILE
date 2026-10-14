@@ -2132,14 +2132,10 @@ test("tower active job shows a buttonless mini card into the modal", async () =>
     expect(hasText(renderer.root, "Rider Nine")).toBe(true);
     const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
-    const miniTitles = (mini?.findAll((n) => Array.isArray(n.props?.children) &&
-      (n.props.children as unknown[]).includes(en.assist.activeJob)) ?? []);
+    const miniTitles = (mini?.findAll((n) => n.props?.children === en.assist.activeJob) ?? []);
     expect(miniTitles.length).toBeGreaterThan(0);
-    for (const node of miniTitles.slice(0, 1)) {
-      const parts = node.props.children as unknown[];
-      expect(parts).toContain(en.assist.typeTow);
-      expect(parts.some((c) => typeof c === "string" && c.includes("Matched"))).toBe(false);
-    }
+    const cardTexts = mini?.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string) ?? [];
+    expect(cardTexts.some((text) => text.includes(en.assist.typeTow))).toBe(false);
     await act(async () => {
       await mini?.props.onPress();
       await flush(12);
@@ -2355,6 +2351,219 @@ test("destination-less pending tow pins an amber alert card into the sheet", asy
       await flush(12);
     });
     expect(actionLabels(renderer)).toContain(en.assist.changeDropOff);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test.each([["2", "Matched"], ["3", "Arrived"]])(
+  "matched/arrived tow (%s) lost its drop-off goes amber",
+  async (status, statusLabel) => {
+    const renderer = await mount();
+    try {
+      mockFeed = [{
+        id: "t8",
+        userId: "u1",
+        ticketType: "TOW",
+        lat: 10.71,
+        lng: 106.61,
+        status,
+        direction: "out",
+        otherParty: {id: "tow9", name: "Tow Nine", kind: "TOW"},
+        destinationShopId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }];
+      const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+      await act(async () => {
+        await refresh?.props.onPress();
+        await flush();
+      });
+      const mini = texts(renderer.root, `Tow · ${statusLabel}`).find((n) => typeof n.props?.onPress === "function");
+      expect(mini).toBeDefined();
+      expect(JSON.stringify(mini?.props.style)).toContain("f59e0b");
+      expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBeGreaterThan(0);
+      expect(mini?.findAll((n) => n.props?.children === "Tow Nine").length).toBeGreaterThan(0);
+    } finally {
+      teardown(renderer);
+    }
+  },
+);
+
+test("tower fan-out tap switches to the tow tab with a notice", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE"}];
+    mockFeed = [];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const notifMock = jest.requireMock("expo-notifications") as {
+      addNotificationReceivedListener: jest.Mock;
+    };
+    const received = notifMock.addNotificationReceivedListener.mock.calls
+      .map((call) => call[0] as (n: unknown) => void)
+      .at(-1);
+    expect(received).toBeDefined();
+    await act(async () => {
+      received?.({request: {content: {data: {ticketId: "t9", ticketType: "TOW", lat: "10.7", lng: "106.6"}}}});
+      await flush(12);
+    });
+    expect(hasText(renderer.root, en.assist.newTowNearby)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("live job card shows no tow suffix and flips its line on arrival", async () => {
+  const renderer = await mount();
+  try {
+    jest.mocked(Location.getCurrentPositionAsync).mockResolvedValue({coords: {latitude: 10.7, longitude: 106.6}} as never);
+    const future = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+    mockFeed = [{
+      id: "t8",
+      userId: "u1",
+      ticketType: "TOW",
+      lat: 10.71,
+      lng: 106.61,
+      status: "3",
+      direction: "out",
+      otherParty: {id: "tow9", name: "Tow Nine", kind: "TOW"},
+      towerFix: {lat: 10.69, lng: 106.59},
+      etaDropoffAt: future,
+      destinationShopId: "shop-2",
+      destinationParty: {id: "shop-2", name: "Fix Two", kind: "SHOP", lat: 10.75, lng: 106.65},
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush(12);
+    });
+    const mini = texts(renderer.root, "Tow · Arrived").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    const titles = mini?.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string) ?? [];
+    expect(titles.some((text) => text.includes("· Tow"))).toBe(false);
+    expect(titles.some((text) => text.includes("km") && text.includes("min"))).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("live job route fetches once per geometry, not per poll", async () => {
+  const renderer = await mount();
+  try {
+    jest.mocked(Location.getCurrentPositionAsync).mockResolvedValue({coords: {latitude: 10.7, longitude: 106.6}} as never);
+    mockFeed = [{
+      id: "t8",
+      userId: "u1",
+      ticketType: "TOW",
+      lat: 10.71,
+      lng: 106.61,
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow9", name: "Tow Nine", kind: "TOW"},
+      towerFix: {lat: 10.69, lng: 106.59},
+      destinationShopId: "shop-2",
+      destinationParty: {id: "shop-2", name: "Fix Two", kind: "SHOP", lat: 10.75, lng: 106.65},
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush(12);
+    });
+    const first = seen.filter((call) => call.path === "/routes").length;
+    expect(first).toBeGreaterThan(0);
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush(12);
+    });
+    expect(seen.filter((call) => call.path === "/routes").length).toBe(first);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("inbound matched tow without a drop-off goes amber with a waiting line", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE"}];
+    mockOne = {id: "t8", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, destinationShopId: null};
+    mockFeed = [{id: "t8", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, destinationShopId: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await AsyncStorage.setItem("roadassist.activeTicket", "t8");
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    expect(JSON.stringify(mini?.props.style)).toContain("f59e0b");
+    expect(mini?.findAll((n) => n.props?.children === en.assist.waitingDropOff).length).toBeGreaterThan(0);
+    expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBe(0);
+    expect(mini?.findAll((n) => n.props?.children === "Rider Nine").length).toBeGreaterThan(0);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("matched tow that keeps its drop-off stays on the primary card", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{
+      id: "t8",
+      userId: "u1",
+      ticketType: "TOW",
+      lat: 10.71,
+      lng: 106.61,
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow9", name: "Tow Nine", kind: "TOW"},
+      destinationShopId: "shop-2",
+      destinationParty: {id: "shop-2", name: "Fix Two", kind: "SHOP", lat: 10.75, lng: 106.65},
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    expect(JSON.stringify(mini?.props.style)).not.toContain("f59e0b");
+    expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBe(0);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("a drop-off shop name alone keeps the card off amber without coordinates", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{
+      id: "t8",
+      userId: "u1",
+      ticketType: "TOW",
+      lat: 10.71,
+      lng: 106.61,
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow9", name: "Tow Nine", kind: "TOW"},
+      destinationShopId: "shop-3",
+      destinationParty: {id: "shop-3", name: "Fix Three", kind: "SHOP"},
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    expect(mini).toBeDefined();
+    expect(JSON.stringify(mini?.props.style)).not.toContain("f59e0b");
+    expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBe(0);
   } finally {
     teardown(renderer);
   }

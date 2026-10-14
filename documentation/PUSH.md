@@ -43,11 +43,29 @@ per uid in `AsyncStorage`.
 `subscribeDispatchPush` matches on `ticketId` (deduped per ticket + status
 for 120 s, so a follow-up status inside the window still lands while retries
 and tap-echoes collapse).
-Every receipt is recorded for diagnostics before dedup, so "arrived" and
-"acted on" stay distinguishable.
+
+### Channels and banner policy
+
+`ensurePushConfigured` creates three Android channels: `hazard` and
+`dispatch-urgent` at HIGH importance with a vibration pattern, `dispatch` at
+DEFAULT. The BE picks the channel per push (see its `PIPELINE.md` tier table)
+— the client never overrides it, it only guarantees the channel exists so the
+server's `channelId` resolves. Channel names are English-only, matching the
+existing `Hazards` channel; they are device settings, not copy.
+
+The notification handler suppresses banners while navigation is foregrounded,
+so hazard heads-ups come from the in-app surface instead of stacking over the
+map. Urgent dispatch pushes opt out of that suppression: a MATCHED or
+CANCELLED arriving mid-turn still banners, because the rider must act now.
+The opt-out keys off the `urgent` data flag, not the ticket type — hazards and
+routine dispatch traffic stay quiet as before.
+
+`subscribeDispatchPush` records every receipt for diagnostics before dedup, so
+"arrived" and "acted on" stay distinguishable.
 The Assist screen reloads (tickets + feed) on every receipt and refetches the
 active ticket when the payload carries a status; a `WALK_IN` payload
-additionally focuses the Records tab. The payload shape (`ticketId`,
+additionally focuses the Records tab. A status-less TOW offer received by a
+tower switches to the tow tab with a notice instead of landing silently. The payload shape (`ticketId`,
 `ticketType`, `status`, `declineReason`) is parsed in
 `services/pushPayload.ts` — the server sends all four on status pushes, so the
 decline reason renders in the Records row even before the refetch lands.

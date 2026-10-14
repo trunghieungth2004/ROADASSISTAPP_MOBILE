@@ -4,7 +4,7 @@ import {parseDispatchPush, parseHazardPush} from "../../../src/services/pushPayl
 test("parses a dispatch offer payload", () => {
   expect(
     parseDispatchPush({ticketId: "t1", ticketType: "SOS", lat: "10.7", lng: "106.6"}),
-  ).toEqual({ticketId: "t1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: undefined});
+  ).toEqual({ticketId: "t1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: undefined, declineReason: undefined, urgent: undefined});
 });
 
 test("parses a dispatch status payload", () => {
@@ -14,7 +14,17 @@ test("parses a dispatch status payload", () => {
     lat: undefined,
     lng: undefined,
     status: "2",
+    declineReason: undefined,
+    urgent: undefined,
   });
+});
+
+test("reads the urgent flag from string and boolean forms", () => {
+  expect(parseDispatchPush({ticketId: "t1", urgent: "true"})?.urgent).toBe(true);
+  expect(parseDispatchPush({ticketId: "t1", urgent: true})?.urgent).toBe(true);
+  expect(parseDispatchPush({ticketId: "t1", urgent: "false"})?.urgent).toBeUndefined();
+  expect(parseDispatchPush({ticketId: "t1", urgent: "yes"})?.urgent).toBeUndefined();
+  expect(parseDispatchPush({ticketId: "t1"})?.urgent).toBeUndefined();
 });
 
 test("rejects hazard payloads and junk", () => {

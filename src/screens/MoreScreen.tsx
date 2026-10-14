@@ -2,8 +2,9 @@ import {useCallback, useState} from "react";
 import {Keyboard, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {useFocusEffect, useNavigation} from "@react-navigation/native";
-import {updateProfile} from "../api/users";
+import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
+import {updateProfile, volunteerHeartbeat} from "../api/users";
+import {capturePosition, markBeat, useLocationBeat} from "../services/locationBeats";
 import {operatedKinds, serviceLabel} from "./more/providerUi";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
@@ -16,6 +17,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import {myFlags} from "../api/flags";
 import {myProviders, type Provider} from "../api/providers";
 import Overlay from "../components/overlay/Overlay";
+import DutySection from "./DutySection";
 import {useThemeMode} from "../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 
@@ -37,6 +39,7 @@ export default function MoreScreen() {
   const [nameDraft, setNameDraft] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [dutyError, setDutyError] = useState<string | null>(null);
   const navigation = useNavigation();
   const [reportCount, setReportCount] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
@@ -54,6 +57,15 @@ export default function MoreScreen() {
   const displayName = user?.displayName || user?.email || "—";
   const services = user?.services ?? [];
   const isAdmin = user?.role === "1";
+  const volunteerOn = user?.volunteerAvailable === true;
+  const moreFocused = useIsFocused();
+  useLocationBeat(!!token && volunteerOn && moreFocused, 5 * 60 * 1000, async () => {
+    if (!token) return;
+    const pos = await capturePosition();
+    if (!pos) return;
+    await volunteerHeartbeat(pos.lat, pos.lng, token);
+    markBeat("volunteer");
+  });
   const operated = operatedKinds(providers);
   function openEdit() { setNameDraft(user?.displayName ?? ""); setEditError(null); setEditOpen(true); }
   async function onSaveName() {
@@ -99,6 +111,15 @@ export default function MoreScreen() {
             </View>
           </View>
         </View>
+        <DutySection
+          providers={providers}
+          onProvidersChanged={() => {
+            if (!token) return;
+            void myProviders(token).then(setProviders).catch(() => undefined);
+          }}
+          onNotice={(message) => setNotice(message)}
+          onError={(message) => setDutyError(message)}
+        />
         <Overlay
           visible={editOpen}
           variant="dialog"
@@ -129,6 +150,9 @@ export default function MoreScreen() {
         </View>
       </ScrollView>
       <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+      {dutyError ? (
+        <Snack message={dutyError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setDutyError(null)} />
+      ) : null}
     </ScreenContainer>
   );
 }

@@ -1,9 +1,7 @@
 import {useState} from "react";
 import {Keyboard} from "react-native";
-import * as Location from "expo-location";
 import {createProvider, nearProviders, updateProvider, type Provider} from "../../api/providers";
 import {toMessage} from "../../api/client";
-import {getFix} from "../../services/geo";
 import type {Place} from "../place-search/PlaceSearch.types";
 import type {Strings} from "../../i18n/en";
 import {DOW, buildOpenHours, parseOpenHours, validateWeek, type WeekHours} from "../../screens/more/shopHours";
@@ -22,30 +20,18 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
   const [towType, setTowType] = useState(typeof provider?.vehicleType === "string" ? provider.vehicleType : "VAN");
   const [towWidth, setTowWidth] = useState(typeof provider?.vehicleWidth === "number" ? String(provider.vehicleWidth) : "");
   const [week, setWeek] = useState<WeekHours>(() => parseOpenHours(typeof provider?.openHours === "string" ? provider.openHours : null));
-  const [accepting, setAccepting] = useState(provider?.accepting !== false);
   const [vehicleClasses, setVehicleClasses] = useState<string[]>(() =>
     Array.isArray(provider?.vehicleClasses) && provider.vehicleClasses.length > 0 ? [...provider.vehicleClasses] : ["SOLO_BIKE", "CAR"],
   );
-  const [serviceFee, setServiceFee] = useState(typeof provider?.serviceFee === "number" ? String(provider.serviceFee) : "");
-  const [towBaseFee, setTowBaseFee] = useState(typeof provider?.towBaseFee === "number" ? String(provider.towBaseFee) : "");
-  const [towPerKmFee, setTowPerKmFee] = useState(typeof provider?.towPerKmFee === "number" ? String(provider.towPerKmFee) : "");
   const [shopSearch, setShopSearch] = useState(false);
   const [towSearch, setTowSearch] = useState(false);
   const [mapPick, setMapPick] = useState(false);
   const [mapTarget, setMapTarget] = useState<"shop" | "tow" | null>(null);
-  const [locBusy, setLocBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nearbyExisting, setNearbyExisting] = useState<Provider[]>([]);
   const hoursOk = validateWeek(week);
   const plateOk = plate.trim() === "" || isValidTowPlate(plate);
-  const editable = !provider || provider.status === "ACTIVE";
-  function parseFee(raw: string): number | undefined | null {
-    const trimmed = raw.trim();
-    if (trimmed === "") return undefined;
-    if (!/^\d+$/.test(trimmed)) return null;
-    return Number(trimmed);
-  }
   function toggleVehicleClass(cls: string): void {
     setVehicleClasses((prev) => {
       if (prev.includes(cls)) {
@@ -89,22 +75,6 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
       return;
     }
   }
-  async function stampTowPoint(): Promise<void> {
-    if (locBusy) return;
-    setLocBusy(true);
-    setError(null);
-    try {
-      const {status} = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") throw new Error(t.nav.locationDenied);
-      const pos = await getFix();
-      setTowPoint({lat: pos.lat, lng: pos.lng});
-      setLocTouched(true);
-    } catch (err) {
-      setError(toMessage(err));
-    } finally {
-      setLocBusy(false);
-    }
-  }
   async function submit(token: string | null): Promise<boolean> {
     if (!token || busy) return false;
     if (name.trim() === "") {
@@ -138,22 +108,13 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     setError(null);
     try {
       Keyboard.dismiss();
-      const feeParsed = kind === "SHOP" ? parseFee(serviceFee) : undefined;
-      const baseParsed = kind === "TOW" ? parseFee(towBaseFee) : undefined;
-      const perKmParsed = kind === "TOW" ? parseFee(towPerKmFee) : undefined;
-      if (feeParsed === null || baseParsed === null || perKmParsed === null) {
-        setError(t.provider.invalidAmount);
-        return false;
-      }
       if (provider) {
         await updateProvider({
           providerId: provider.id,
           name: name.trim(),
           ...(locTouched && point && kind === "SHOP" ? {lat: point.lat, lng: point.lng, label: point.label ?? null} : {}),
           ...(locTouched && towPoint && kind === "TOW" ? {lat: towPoint.lat, lng: towPoint.lng} : {}),
-          ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses, ...(feeParsed !== undefined ? {serviceFee: feeParsed} : {})} : {}),
-          ...(kind === "TOW" ? {...(baseParsed !== undefined ? {towBaseFee: baseParsed} : {}), ...(perKmParsed !== undefined ? {towPerKmFee: perKmParsed} : {})} : {}),
-          accepting,
+          ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
         }, token);
       } else if (kind === "TOW" && towPoint) {
         await createProvider({
@@ -164,8 +125,6 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
           plate: normalizeTowPlate(plate),
           vehicleType: towType,
           vehicleWidth: parseTowWidth(towWidth) ?? undefined,
-          ...(baseParsed !== undefined ? {towBaseFee: baseParsed} : {}),
-          ...(perKmParsed !== undefined ? {towPerKmFee: perKmParsed} : {}),
         }, token);
       } else if (kind === "SHOP" && point) {
         const hours = buildOpenHours(week);
@@ -177,7 +136,6 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
           ...(point.label ? {label: point.label} : {}),
           ...(hours ? {openHours: hours} : {}),
           vehicleClasses,
-          ...(feeParsed !== undefined ? {serviceFee: feeParsed} : {}),
         }, token);
       }
       return true;
@@ -202,16 +160,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     towWidth,
     setTowWidth,
     week,
-    accepting,
-    setAccepting,
     vehicleClasses,
     toggleVehicleClass,
-    serviceFee,
-    setServiceFee,
-    towBaseFee,
-    setTowBaseFee,
-    towPerKmFee,
-    setTowPerKmFee,
     shopSearch,
     setShopSearch,
     towSearch,
@@ -220,16 +170,13 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     setMapPick,
     openMapPick,
     onConfirmMapPoint,
-    locBusy,
     busy,
     error,
     hoursOk,
     plateOk,
-    editable,
     setDay,
     onPickPlace,
     onPickTowPlace,
-    stampTowPoint,
     nearbyExisting,
     refreshNearbyExisting,
     submit,

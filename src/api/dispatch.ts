@@ -69,6 +69,17 @@ export function riderActionsFor(status: string): RiderAction[] {
   return [];
 }
 
+export type TowFare = {
+  estimate: number;
+  ceiling: number;
+  final?: number | null;
+  partial?: boolean;
+  deadheadKm: number;
+  loadedKm: number;
+  night: boolean;
+  vehicleClass?: string | null;
+};
+
 export type DispatchTicket = {
   id: string;
   userId: string;
@@ -93,6 +104,8 @@ export type DispatchTicket = {
   assignedShopId?: string | null;
   assignedKind?: string | null;
   towPlate?: string | null;
+  towFare?: TowFare | null;
+  cancelledBy?: string | null;
   workType?: string | null;
   priceEstimate?: number | null;
   priceCurrency?: string | null;
@@ -214,6 +227,20 @@ export async function refreshTowEta(ticketId: string, token: string): Promise<{u
   bustTicketCaches(token);
   return res;
 }
+
+export async function estimateTowFare(ticketId: string, lat: number, lng: number, token: string): Promise<TowFareQuote> {
+  const res = await api.post<TowFareQuote>("/dispatch/fare/estimate", {ticketId, lat, lng}, token);
+  return res;
+}
+
+export type TowFareQuote = {
+  estimate: number;
+  ceiling: number;
+  deadheadKm: number;
+  loadedKm: number;
+  night: boolean;
+  vehicleClass: string;
+};
 
 export async function updateTicketDestination(ticketId: string, dest: {destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}}, token: string): Promise<DispatchTicket> {
   const res = await api.post<DispatchTicket>("/dispatch/destination", {ticketId, ...dest}, token);

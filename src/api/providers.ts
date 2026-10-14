@@ -50,13 +50,14 @@ export function nearProviders(lat: number, lng: number, token: string, options?:
 }
 
 export type SearchProvidersOptions = {
+  kind?: string;
   vehicleClass?: string;
   radiusMeters?: number;
   limit?: number;
 };
 
 export function searchProviders(lat: number, lng: number, query: string, token: string, options?: SearchProvidersOptions): Promise<Provider[]> {
-  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.vehicleClass ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"}`;
+  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.kind ?? "-"},${options?.vehicleClass ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"}`;
   return withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/search", {lat, lng, query, ...options}, token));
 }
 

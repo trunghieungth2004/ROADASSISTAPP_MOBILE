@@ -65,6 +65,7 @@ async function render(overrides?: Partial<Props>) {
           ownShopIds={new Set(["shop-1"])}
           onDeclineDestination={onDeclineDestination}
           onEditDestination={null}
+          allowTowerCancel={false}
           acceptOffDuty={false}
           {...overrides}
         />
@@ -188,12 +189,12 @@ test("shop block leads with the name above address, stars, phone and status", as
   }
 });
 
-test("non-tow tickets show no pickup label", async () => {
+test("sos tickets label the pickup like tow tickets", async () => {
   const {renderer} = await render({
     ticket: ticket({ticketType: "SOS", direction: "out", otherParty: null}),
   });
   try {
-    expect(texts(renderer)).not.toContain(en.assist.pickup);
+    expect(texts(renderer)).toContain(en.assist.pickup);
   } finally {
     renderer.unmount();
   }
@@ -270,7 +271,7 @@ test("tapping the drop-off shop card opens the destination modal", async () => {
   }
 });
 
-test("place container falls back to coordinates without a geocode hit", async () => {
+test("tow rows never offer the walk-in decline", async () => {
   await clearGeocodeCache();
   const {renderer} = await render({
     ticket: ticket({ticketType: "TOW", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}}),
@@ -297,13 +298,13 @@ test("pending tow with an owned destination offers decline drop-off", async () =
   });
   try {
     expect(actionLabels(renderer)).toContain(en.assist.declineDestination);
-    expect(texts(renderer)).toContain(en.assist.declineDestinationHint);
+    expect(texts(renderer)).not.toContain("Can't take this vehicle");
   } finally {
     renderer.unmount();
   }
 });
 
-test("tow rows never offer the walk-in decline", async () => {
+test("place container falls back to coordinates without a geocode hit", async () => {
   const {renderer} = await render({
     ticket: ticket({
       ticketType: "TOW",
@@ -493,5 +494,188 @@ test("tow ETA pill prefixes the live tower distance", async () => {
     expect(pill.every((text) => text.includes(" m "))).toBe(true);
   } finally {
     renderer.unmount();
+  }
+});
+
+test("inbound tow sees the same ETA pill as the rider", async () => {
+  const future = new Date(Date.now() + 12 * 60 * 1000).toISOString();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "in",
+      otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"},
+      etaPickupAt: future,
+      towerFix: {lat: 10.7109, lng: 106.6109, at: future},
+    }),
+  });
+  try {
+    const pill = texts(renderer).filter((text) => text.includes(en.shop.etaPickup.replace("{n}", "12")));
+    expect(pill.length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("outbound tow shows a helper card with call action", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW", phone: "0901234567", ratingAvg: 5, ratingCount: 3},
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain("0901234567");
+    expect(texts(renderer)).toContain(en.roles.tow);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("inbound empty drop-off stays neutral without a pick nudge", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "in",
+      otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"},
+      destinationShopId: null,
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.noDropOffAssigned);
+    expect(texts(renderer)).not.toContain(en.assist.noDropOff);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("live tow with a route shows the summary in the sheet", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+    }),
+    towPreview: {ready: true, summary: "1.5 km · 10 min", busy: false, error: null},
+  });
+  try {
+    expect(texts(renderer)).toContain("1.5 km · 10 min");
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("engaged tower sees cancel with confirm on a live tow", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "in",
+      assignedShopId: "tow1",
+      otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"},
+    }),
+    allowTowerCancel: true,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.assist.cancel);
+    expect(actionLabels(renderer)).not.toContain(en.assist.confirmCancel);
+    const cancel = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.assist.cancel && typeof n.props?.onPress === "function")
+      .at(0);
+    await act(async () => {
+      await cancel?.props.onPress();
+    });
+    expect(actionLabels(renderer)).toContain(en.assist.confirmCancel);
+    expect(actionLabels(renderer)).toContain(en.assist.keepRequest);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("tower without engagement sees no cancel", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "in",
+      assignedShopId: "tow1",
+      otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"},
+    }),
+  });
+  try {
+    expect(actionLabels(renderer)).not.toContain(en.assist.cancel);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("board preview shows the fare estimate beside the summary", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "1",
+      direction: "out",
+      otherParty: null,
+      destinationShopId: "shop-1",
+      destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65},
+    }),
+    towPreview: {ready: true, summary: "1.5 km", fareEstimate: 200000, busy: false, error: null},
+  });
+  try {
+    expect(texts(renderer)).toContain(`${en.assist.fareEstimate}: 200,000 VND`);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("matched tow shows the ceiling as up-to", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+      towFare: {estimate: 200000, ceiling: 220000, final: null, deadheadKm: 2, loadedKm: 8, night: false, vehicleClass: "SOLO_BIKE"},
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain(`${en.assist.fareUpTo}: 220,000 VND`);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("resolved tow shows the final and cancelled shows the partial", async () => {
+  const settled = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "4",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+      towFare: {estimate: 200000, ceiling: 220000, final: 200000, deadheadKm: 2, loadedKm: 8, night: false, vehicleClass: "SOLO_BIKE"},
+    }),
+  });
+  try {
+    expect(texts(settled.renderer)).toContain(`${en.assist.fareFinal}: 200,000 VND`);
+  } finally {
+    settled.renderer.unmount();
+  }
+  const cancelled = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "5",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+      towFare: {estimate: 0, ceiling: 0, final: 20000, partial: true, deadheadKm: 2, loadedKm: 0, night: false, vehicleClass: "SOLO_BIKE"},
+    }),
+  });
+  try {
+    expect(texts(cancelled.renderer)).toContain(`${en.assist.farePartial}: 20,000 VND`);
+  } finally {
+    cancelled.renderer.unmount();
   }
 });

@@ -22,7 +22,7 @@ type Props = {
   selectedShop: Provider | null;
   pillTextForShop: (shop: Provider) => string | null;
   walkRoute: RouteOption | null;
-  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null; status: string} | null;
+  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null; status: string; route: RouteOption | null} | null;
   onMapReady: () => void;
 };
 
@@ -81,7 +81,7 @@ export default function AssistMapView(props: Props) {
         ) : null}
         {(() => {
           const layers = props.jobLayers;
-          if (!layers || !layers.tower) return null;
+          if (!layers || !layers.tower || layers.route) return null;
           const far = layers.status === "3" ? layers.dest : layers.pickup;
           if (!far) return null;
           return (
@@ -93,6 +93,16 @@ export default function AssistMapView(props: Props) {
           </GeoJSONSource>
           );
         })()}
+        {props.jobLayers?.route ? (
+          <GeoJSONSource id="tow-job-route-casing" data={{type: "Feature", geometry: props.jobLayers.route.geometry, properties: {}}}>
+            <StyledLayer type="line" id="tow-job-route-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
+        {props.jobLayers?.route ? (
+          <GeoJSONSource id="tow-job-route" data={{type: "Feature", geometry: props.jobLayers.route.geometry, properties: {}}}>
+            <StyledLayer type="line" id="tow-job-route-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} />
+          </GeoJSONSource>
+        ) : null}
         {props.selectedShop ? (
           <>
           <GeoJSONSource id="assist-shop-sel" data={pointFeature(props.selectedShop.lng, props.selectedShop.lat)}>

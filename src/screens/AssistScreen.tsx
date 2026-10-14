@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, approveQuote, bustTicketCaches, cancelTicket, createTicket, declineDestination, declineTicket, feedTickets, getTicket, myTickets, nearTickets, refreshTowEta, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketType} from "../api/dispatch";
+import {acceptTicket, approveQuote, bustTicketCaches, cancelTicket, createTicket, declineDestination, declineTicket, estimateTowFare, feedTickets, getTicket, myTickets, nearTickets, refreshTowEta, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketType} from "../api/dispatch";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
@@ -25,7 +25,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import {Fab, FabColumn} from "../components/ui/Fab";
 import VehiclePickerSheet from "../components/vehicles/VehiclePickerSheet";
 import {ensurePushConfigured, drainDispatchLaunch, subscribeDispatchPush} from "../services/push";
-import {capturePosition, useLocationBeat} from "../services/locationBeats";
+import {capturePosition, markBeat, useLocationBeat} from "../services/locationBeats";
 import {getFix} from "../services/geo";
 import {statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./assist/ticketLabels";
 import {announcesShopPush, retargetableLiveTicket} from "./assist/recordActions";
@@ -42,10 +42,11 @@ import RecordDetailSheet, {type WorkPatch} from "./assist/RecordDetailSheet";
 import TicketSheet from "./assist/TicketSheet";
 import RatingSheet from "./assist/RatingSheet";
 import {boundsOf} from "./route/routeGeo";
+import {shouldRetryCenter} from "./route/cameraIntent";
 import {distBetween} from "./navigation/navUtils";
 import AssistMapView from "./assist/AssistMapView";
 import ShopRadiusOverlay from "./assist/ShopRadiusOverlay";
-import {declinedShopIds, towDestOf, type TowRouteTicket} from "./assist/towDest";
+import {declinedShopIds, hasDropOff, towDestOf, type TowRouteTicket} from "./assist/towDest";
 import TowRoutePreview from "./assist/TowRoutePreview";
 import {checkInAtShop} from "./assist/checkIn";
 import ShopDetailSheet from "./assist/ShopDetailSheet";
@@ -82,8 +83,9 @@ export default function AssistScreen() {
   const [boardDetail, setBoardDetail] = useState<FeedTicket | null>(null);
   const [editDestFor, setEditDestFor] = useState<FeedTicket | null>(null);
   const [duplicateFor, setDuplicateFor] = useState<{ticketId: string} | null>(null);
-  const [towPreview, setTowPreview] = useState<{ticketId: string; route: RouteOption | null; busy: boolean; error: string | null} | null>(null);
+  const [towPreview, setTowPreview] = useState<{ticketId: string; route: RouteOption | null; fareEstimate: number | null; busy: boolean; error: string | null} | null>(null);
   const [towPreviewMap, setTowPreviewMap] = useState(false);
+  const [jobRoute, setJobRoute] = useState<{ticketId: string; key: string; route: RouteOption | null} | null>(null);
   useEffect(() => {
     setDetailFor((prev) => {
       if (!prev) return prev;
@@ -117,6 +119,9 @@ export default function AssistScreen() {
     return t.assist.dropOffPoint;
   }
   const liveTow = activeFeed !== null && activeFeed.ticketType === "TOW" && (activeFeed.status === "2" || activeFeed.status === "3");
+  const liveTowNoDest = liveTow && activeFeed !== null && !hasDropOff(activeFeed);
+  const liveTowNoDestOut = liveTowNoDest && activeFeed !== null && activeFeed.direction === "out";
+  const liveTowTone = liveTowNoDest ? "#f59e0b" : theme.primary;
   const activeName = activeFeed !== null && typeof activeFeed.otherParty === "object" && activeFeed.otherParty !== null && typeof activeFeed.otherParty.name === "string" ?
     activeFeed.otherParty.name :
     t.assist.unassigned;
@@ -124,6 +129,18 @@ export default function AssistScreen() {
     Math.round((Date.parse(activeFeed.etaPickupAt) - Date.now()) / 60000) :
     null;
   function activeJobLine(): string {
+    const dest = activeFeed !== null && activeFeed.ticketType === "TOW" ? towDestOf(activeFeed) : null;
+    if (activeFeed !== null && activeFeed.status === "3" && dest !== null && gps !== null) {
+      const meters = Math.round(distBetween(gps, dest));
+      const distance = meters < 1000 ? t.shop.radiusM.replace("{n}", String(meters)) : t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1));
+      const dropEta = typeof activeFeed.etaDropoffAt === "string" ?
+        Math.round((Date.parse(activeFeed.etaDropoffAt) - Date.now()) / 60000) :
+        null;
+      if (dropEta !== null && dropEta > 0) {
+        return `${activeName} · ${distance} · ~${t.shop.walkMinutesShort.replace("{n}", String(dropEta))}`;
+      }
+      return `${activeName} · ${distance}`;
+    }
     const towerMeters = activeFeed !== null && activeFeed.ticketType === "TOW" && activeFeed.towerFix !== null && typeof activeFeed.towerFix === "object" &&
       typeof activeFeed.towerFix.lat === "number" && typeof activeFeed.towerFix.lng === "number" ?
       Math.round(distBetween(activeFeed.towerFix, {lat: activeFeed.lat, lng: activeFeed.lng})) :
@@ -136,11 +153,40 @@ export default function AssistScreen() {
     return activeName;
   }
   const jobLayers = liveTow && activeFeed ? {
-    tower: activeFeed.direction === "out" && activeFeed.towerFix ? {lat: activeFeed.towerFix.lat, lng: activeFeed.towerFix.lng} : null,
+    tower: activeFeed.direction === "out" ?
+      (activeFeed.towerFix ? {lat: activeFeed.towerFix.lat, lng: activeFeed.towerFix.lng} : null) :
+      gps,
     pickup: {lat: activeFeed.lat, lng: activeFeed.lng},
     dest: towDestOf(activeFeed),
     status: activeFeed.status,
+    route: jobRoute && jobRoute.ticketId === activeFeed.id ? jobRoute.route : null,
   } : null;
+  const jobRouteKey = liveTow && activeFeed ? `${activeFeed.id}:${activeFeed.status}:${JSON.stringify(towDestOf(activeFeed) ?? null)}` : null;
+  useEffect(() => {
+    if (!jobRouteKey || !liveTow || !activeFeed || !token) {
+      if (!jobRouteKey) setJobRoute(null);
+      return;
+    }
+    if (jobRoute && jobRoute.ticketId === activeFeed.id && jobRoute.key === jobRouteKey) return;
+    const ticket = activeFeed;
+    const key = jobRouteKey;
+    let alive = true;
+    void fetchTowRoute(ticket, ticket.status === "3").then((route) => {
+      if (!alive) return;
+      setJobRoute({ticketId: ticket.id, key, route});
+      if (route) {
+        const b = boundsOf(route.geometry.coordinates);
+        if (b) {
+          void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
+        }
+      }
+    }).catch(() => {
+      if (alive) setJobRoute({ticketId: ticket.id, key, route: null});
+    });
+    return () => {
+      alive = false;
+    };
+  });
   const assistFocused = useIsFocused();
   const hasJobCard = (liveTow && activeFeed !== null) || needsDropOff !== null || pendingOwnTow !== null;
   useEffect(() => {
@@ -151,6 +197,7 @@ export default function AssistScreen() {
     const pos = await capturePosition();
     if (!pos) return;
     await pingProviderLocation(pos.lat, pos.lng, token);
+    markBeat("tower");
   });
   async function onReport(): Promise<void> {
     if (!token || !reportFor || reportBusy) return;
@@ -229,6 +276,26 @@ export default function AssistScreen() {
     void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800});
     return true;
   }
+  async function centerOnLocal(): Promise<void> {
+    for (let attempt = 0; shouldRetryCenter(centeredRef.current, attempt, 3); attempt++) {
+      if (attempt > 0) await new Promise<void>((resolve) => setTimeout(resolve, 4000));
+      try {
+        const {status} = await Location.getForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        if (!pendingCenterRef.current) {
+          try {
+            pendingCenterRef.current = await getFix();
+          } catch {}
+        }
+        if (applyCenter()) return;
+      } catch {}
+    }
+    if (!centeredRef.current && !pendingCenterRef.current) setError(t.route.locationUnavailable);
+  }
+  useEffect(() => {
+    if (centeredRef.current) return;
+    void centerOnLocal();
+  }, []);
   function fitWalk(route: RouteOption): void {
     const b = boundsOf(route.geometry.coordinates);
     if (b) void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
@@ -368,6 +435,11 @@ export default function AssistScreen() {
         if (announcesShopPush(rows, mine, data.ticketId)) {
           setSection("records");
           setNotice(t.assist.newTowAtShop);
+          return;
+        }
+        if (!data.status && data.ticketType === "TOW" && ownTowId !== null) {
+          setSection("tow");
+          setNotice(t.assist.newTowNearby);
         }
       })();
     };
@@ -407,7 +479,8 @@ export default function AssistScreen() {
   }, [shopSheet, shopSel, mapSel, section]);
   const fetchAssistShops = useCallback(async (q: string) => {
     if (!token || !gps) return [];
-    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, shopSearchMode === "tow" ? 20000 : undefined);
+    const towMode = shopSearchMode === "tow";
+    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, towMode ? 20000 : undefined, towMode);
   }, [token, gps, vehicleClass, shopSearchMode]);
   async function currentPoint(): Promise<{lat: number; lng: number}> {
     const {status} = await Location.requestForegroundPermissionsAsync();
@@ -599,7 +672,7 @@ export default function AssistScreen() {
     const minutes = `${Math.max(1, Math.round((route.durationSeconds ?? 0) / 60))} ${t.route.min}`;
     return viaPickup ? `${distance} · ${minutes} ${t.assist.towViaPickup}` : `${distance} · ${minutes}`;
   }
-  async function fetchTowRoute(ticket: TowRouteTicket): Promise<RouteOption | null> {
+  async function fetchTowRoute(ticket: TowRouteTicket, direct = false): Promise<RouteOption | null> {
     if (!token) return null;
     const legs = towLegsFor(ticket);
     if (!legs) return null;
@@ -609,7 +682,7 @@ export default function AssistScreen() {
         originLng: legs.origin.lng,
         destLat: (legs.dest ?? legs.pickup).lat,
         destLng: (legs.dest ?? legs.pickup).lng,
-        ...(legs.dest ? {stops: [legs.pickup]} : {}),
+        ...(legs.dest && !direct ? {stops: [legs.pickup]} : {}),
         ...(typeof ticket.vehicleType === "string" ? {vehicleType: ticket.vehicleType} : {}),
         ...(typeof ticket.vehicleWidth === "number" ? {width: ticket.vehicleWidth} : {}),
       },
@@ -619,18 +692,19 @@ export default function AssistScreen() {
   }
   async function loadTowPreview(ticket: FeedTicket, openMap = false): Promise<void> {
     if (!token || !gps) {
-      setTowPreview({ticketId: ticket.id, route: null, busy: false, error: t.route.locationUnavailable});
+      setTowPreview({ticketId: ticket.id, route: null, fareEstimate: null, busy: false, error: t.route.locationUnavailable});
       return;
     }
-    setTowPreview({ticketId: ticket.id, route: null, busy: true, error: null});
+    setTowPreview({ticketId: ticket.id, route: null, fareEstimate: null, busy: true, error: null});
     setError(null);
     try {
       const route = await fetchTowRoute(ticket);
       if (!route) throw new Error(t.route.noResults);
-      setTowPreview({ticketId: ticket.id, route, busy: false, error: null});
+      const fare = await estimateTowFare(ticket.id, gps.lat, gps.lng, token).catch(() => null);
+      setTowPreview({ticketId: ticket.id, route, fareEstimate: fare?.estimate ?? null, busy: false, error: null});
       if (openMap) setTowPreviewMap(true);
     } catch (err) {
-      setTowPreview({ticketId: ticket.id, route: null, busy: false, error: toMessage(err)});
+      setTowPreview({ticketId: ticket.id, route: null, fareEstimate: null, busy: false, error: toMessage(err)});
     }
   }
   function onPreviewTowRoute(ticket: FeedTicket): void {
@@ -721,10 +795,18 @@ export default function AssistScreen() {
           {
             ready: towPreview.route !== null,
             summary: towPreview.route ? towSummary(towPreview.route, towLegsFor(ticket)?.dest !== null) : null,
+            fareEstimate: towPreview.fareEstimate,
             busy: towPreview.busy,
             error: towPreview.error,
           } :
-          null}
+          ticket.ticketType === "TOW" && (ticket.status === "2" || ticket.status === "3") && jobRoute && jobRoute.ticketId === ticket.id && jobRoute.route ?
+            {
+              ready: true,
+              summary: towSummary(jobRoute.route, towDestOf(ticket) !== null),
+              busy: false,
+              error: null,
+            } :
+            null}
         onPreviewTowRoute={(item) => onPreviewTowRoute(item)}
         linked={(() => {
           const ids = ticket.linkedTicketIds;
@@ -741,6 +823,7 @@ export default function AssistScreen() {
         ownShopIds={new Set(ownProviders.filter((p) => p.kind === "SHOP").map((p) => p.id))}
         onDeclineDestination={(item) => void onDeclineDestinationTicket(item)}
         onEditDestination={(item) => { setEditDestFor(item); setShopSearchMode("tow"); }}
+        allowTowerCancel={ticket.direction === "in" && ticket.ticketType === "TOW" && (ticket.status === "2" || ticket.status === "3") && ownTowId !== null && ticket.assignedShopId === ownTowId}
       />
     );
   }
@@ -1164,15 +1247,17 @@ export default function AssistScreen() {
       />
       {liveTow && activeFeed ? (
         <View style={[styles.bottomContainer, {bottom: insets.bottom + 12}]}>
-          <Pressable style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]} onPress={() => setDetailFor(activeFeed)} accessibilityRole="button" accessibilityLabel={ticketTitle(activeFeed, t)}>
+          <Pressable style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: liveTowTone}]} onPress={() => setDetailFor(activeFeed)} accessibilityRole="button" accessibilityLabel={ticketTitle(activeFeed, t)}>
             <View style={styles.activeHead}>
-              <MaterialCommunityIcons name="tow-truck" size={20} color={theme.primary} />
-              <Text style={[styles.cardTitle, styles.activeTitle, {color: theme.text}]}>{t.assist.activeJob} · {ticketTypeLabel(activeFeed.ticketType, t)}</Text>
+              <MaterialCommunityIcons name="tow-truck" size={20} color={liveTowTone} />
+              <Text style={[styles.cardTitle, styles.activeTitle, {color: theme.text}]}>{t.assist.activeJob}</Text>
               <View style={[styles.pill, {backgroundColor: statusPillColor(activeFeed.status, theme)}]}>
                 <Text style={styles.pillText}>{ticketStatusLabel(activeFeed.status, t)}</Text>
               </View>
             </View>
             <Text style={[styles.coords, {color: theme.muted}]}>{activeJobLine()}</Text>
+            {liveTowNoDestOut ? <Text style={[styles.coords, {color: "#f59e0b"}]}>{t.assist.noDropOff}</Text> : null}
+            {liveTowNoDest && !liveTowNoDestOut ? <Text style={[styles.coords, {color: "#f59e0b"}]}>{t.assist.waitingDropOff}</Text> : null}
           </Pressable>
         </View>
       ) : needsDropOff ? (
