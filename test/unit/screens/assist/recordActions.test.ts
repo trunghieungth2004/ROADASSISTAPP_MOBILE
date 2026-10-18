@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canSendQuote, canStartWork, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, canStartWork, estimateStateOf, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -130,4 +130,80 @@ test("quote handshake gates both sides", () => {
   expect(canApproveQuote("out", "2")).toBe(false);
   expect(canApproveQuote("in", "9")).toBe(false);
   expect(canCancel("9")).toBe(true);
+});
+
+test("dispute opens after dispatch on live tickets", () => {
+  expect(canDispute("1")).toBe(false);
+  for (const s of ["2", "3", "6", "7", "9", "10", "11", "13", "14", "15"]) expect(canDispute(s)).toBe(true);
+  for (const s of ["4", "5", "8", "12"]) expect(canDispute(s)).toBe(false);
+});
+
+test("resolved disputes stay open for a week on money tickets", () => {
+  const now = Date.parse("2026-10-18T12:00:00.000Z");
+  const within = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const edge = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const stale = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const row = (overrides?: object) => ({
+    status: "4",
+    towFare: {estimate: 200000, ceiling: 300000, deadheadKm: 2, loadedKm: 5, night: false},
+    statusHistory: [{status: "4", at: within, by: "u1"}],
+    ...overrides,
+  }) as Parameters<typeof canDisputeResolved>[0];
+  expect(canDisputeResolved(row(), now)).toBe(true);
+  expect(canDisputeResolved(row({statusHistory: [{status: "4", at: edge, by: "u1"}]}), now)).toBe(true);
+  expect(canDisputeResolved(row({statusHistory: [{status: "4", at: stale, by: "u1"}]}), now)).toBe(false);
+  expect(canDisputeResolved(row({towFare: null}), now)).toBe(false);
+  expect(canDisputeResolved(row({towFare: null, shopQuotedAmount: 150000}), now)).toBe(true);
+  expect(canDisputeResolved(row({status: "3"}), now)).toBe(false);
+  expect(canDisputeResolved(row({statusHistory: undefined}), now)).toBe(true);
+  expect(canDisputeResolved(row({statusHistory: [{status: "4", at: "not-a-date", by: "u1"}]}), now)).toBe(true);
+});
+
+test("estimate state tracks approval and expiry", () => {
+  const now = Date.parse("2026-10-18T12:00:00.000Z");
+  const future = new Date(now + 60 * 60 * 1000).toISOString();
+  const past = new Date(now - 60 * 60 * 1000).toISOString();
+  const row = (overrides?: object) => ({estimateAmount: 150000, ...overrides}) as Parameters<typeof estimateStateOf>[0];
+  expect(estimateStateOf({}, now)).toBe("none");
+  expect(estimateStateOf({estimateAmount: null}, now)).toBe("none");
+  expect(estimateStateOf(row(), now)).toBe("pending");
+  expect(estimateStateOf(row({estimateExpiresAt: future}), now)).toBe("pending");
+  expect(estimateStateOf(row({estimateExpiresAt: past}), now)).toBe("expired");
+  expect(estimateStateOf(row({estimateApprovedAt: past}), now)).toBe("approved");
+  expect(estimateStateOf(row({estimateApprovedAt: past, estimateExpiresAt: past}), now)).toBe("approved");
+});
+
+test("destination shop sends tow estimates until one is live", () => {
+  expect(canSendEstimate("in", "TOW", "1", true, "none")).toBe(true);
+  expect(canSendEstimate("in", "TOW", "2", true, "none")).toBe(true);
+  expect(canSendEstimate("in", "TOW", "3", true, "none")).toBe(true);
+  expect(canSendEstimate("in", "TOW", "1", true, "expired")).toBe(true);
+  expect(canSendEstimate("in", "TOW", "1", true, "pending")).toBe(false);
+  expect(canSendEstimate("in", "TOW", "1", true, "approved")).toBe(false);
+  for (const s of ["4", "5", "6", "7", "8", "9", "10", "11", "12"]) expect(canSendEstimate("in", "TOW", s, true, "none")).toBe(false);
+  expect(canSendEstimate("in", "TOW", "1", false, "none")).toBe(false);
+  expect(canSendEstimate("out", "TOW", "1", true, "none")).toBe(false);
+  expect(canSendEstimate("in", "WALK_IN", "1", true, "none")).toBe(false);
+  expect(canSendEstimate("in", "SOS", "1", true, "none")).toBe(false);
+});
+
+test("request photos follow the viewer gate", () => {
+  const mine = new Set(["shop-1"]);
+  const row = (overrides?: object) => ({
+    direction: "in",
+    assignedShopId: null,
+    providerId: null,
+    destinationShopId: null,
+    assignedUid: null,
+    ...overrides,
+  }) as Parameters<typeof canSeeRequestPhotos>[0];
+  expect(canSeeRequestPhotos(row({direction: "out"}), mine, "u1", false)).toBe(true);
+  expect(canSeeRequestPhotos(row({assignedShopId: "shop-1"}), mine, "u1", false)).toBe(true);
+  expect(canSeeRequestPhotos(row({providerId: "shop-1"}), mine, "u1", false)).toBe(true);
+  expect(canSeeRequestPhotos(row({destinationShopId: "shop-1"}), mine, "u1", false)).toBe(true);
+  expect(canSeeRequestPhotos(row({assignedShopId: "shop-2"}), mine, "u1", false)).toBe(false);
+  expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine, "u1", true)).toBe(true);
+  expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine, "u1", false)).toBe(false);
+  expect(canSeeRequestPhotos(row({assignedUid: "u2"}), mine, "u1", true)).toBe(false);
+  expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine, null, true)).toBe(false);
 });

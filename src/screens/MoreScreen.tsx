@@ -37,6 +37,7 @@ export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const [editOpen, setEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dutyError, setDutyError] = useState<string | null>(null);
@@ -69,10 +70,11 @@ export default function MoreScreen() {
   const operated = operatedKinds(providers);
   function openEdit() { setNameDraft(user?.displayName ?? ""); setEditError(null); setEditOpen(true); }
   async function onSaveName() {
-    if (!token || !nameDraft.trim()) return;
+    if (!token || !nameDraft.trim() || nameBusy) return;
     Keyboard.dismiss();
+    setNameBusy(true);
     setEditError(null);
-    try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); }
+    try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); } finally { setNameBusy(false); }
   }
   return (
     <ScreenContainer>
@@ -89,7 +91,7 @@ export default function MoreScreen() {
               <Text style={[styles.name, {color: theme.text}]}>{displayName}</Text>
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
               <View style={styles.badgeRow}>
-                <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.more.roleUser}</Text></View>
+                <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.roles.rider}</Text></View>
                 {[...new Set(services)].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
                 {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
                 {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
@@ -127,7 +129,7 @@ export default function MoreScreen() {
           closeLabel={t.common.cancel}
           onClose={() => { Keyboard.dismiss(); setEditOpen(false); }}
           scrollable={false}
-          actions={[{label: t.common.save, tone: "primary", disabled: !nameDraft.trim(), onPress: () => void onSaveName()}]}
+          actions={[{label: t.common.save, tone: "primary", busy: nameBusy, disabled: !nameDraft.trim(), onPress: () => void onSaveName()}]}
         >
           {editError ? <Text style={[styles.error, {color: theme.danger}]}>{editError}</Text> : null}
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} />

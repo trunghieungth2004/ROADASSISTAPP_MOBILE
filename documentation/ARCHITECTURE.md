@@ -3,9 +3,9 @@
 Expo (SDK 57) + React Native, New Architecture. Maps via
 `@maplibre/maplibre-react-native` v11 (vendored MapTiler styles:
 `streets-v4` light, `streets-dark-v4` dark — same planet tileset, key
-injected at runtime by `buildMapStyle`, so no secret ships in the JSON).
+injected at runtime by `buildMapStyle` into the `__MAPTILER_KEY__` template).
 All five map views (`Route`/`Assist`/`Hazards`/`Nav`/`MapPickOverlay`)
-pick the style from `useColorScheme()` via `bundledMapStyle(scheme)` and
+pick the style from `useColorScheme()` via `requireMapStyle(scheme)` and
 re-resolve it on scheme change, so toggling the app theme (which pushes
 through `Appearance.setColorScheme`) swaps the basemap live with the
 camera untouched. Swaps are masked by `MapStyleVeil`
@@ -23,12 +23,22 @@ backend over HTTPS (`src/api/*`), Firebase Auth, i18n `en`/`vi`
 
 ## Environment / API endpoint
 
-`src/config/secrets.ts` reads `EXPO_PUBLIC_API_URL` with a cloud fallback.
+`src/config/secrets.ts` (git-crypt encrypted at rest, public in the shipped
+JS bundle by Expo `EXPO_PUBLIC_*` design) reads five values. Firebase
+`apiKey` / `authDomain` / `projectId`, `apiBaseUrl`, and `maptilerKey` carry
+committed fallbacks so local and CI builds work without env; `requireMapStyle()`
+throws `Missing EXPO_PUBLIC_MAPTILER_KEY` only when the resolved key is empty
+instead of silently loading demo tiles. Map
+geocode degrades to `formatPoint` coordinates when the key is missing.
 Local development against the functions emulator uses an untracked `.env`
 (gitignored, never commit it):
 
 ```
 EXPO_PUBLIC_API_URL=http://127.0.0.1:5001/roadassistapp-c2e37/asia-southeast1/api
+EXPO_PUBLIC_FIREBASE_API_KEY=
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+EXPO_PUBLIC_MAPTILER_KEY=your-maptiler-key
 ```
 
 `127.0.0.1` inside Android means the device itself, so expose the host
@@ -65,6 +75,21 @@ be hidden): tap arms the nearest marker within `ARM_RADIUS`, a full-screen
 capped at `MAX_STOPS`). Sub-8px releases disarm without committing.
 `requestRoute` is sequence-guarded; camera `fitBounds` runs only on explicit
 search actions (Find/pick/swap), never on drag reroutes.
+
+Same-place trips never reach the network: when origin and destination are
+within 15 m and no stops are set, `requestRoute` shows `route.samePlace` and
+returns early (Start re-routes from live GPS and relies on the BE guard).
+Degenerate server geometry is inert client-side: `findRoute` drops options
+whose `LineString` has fewer than two coordinates, and every map view
+(`RouteMapView`, `NavMapView`, `AssistMapView`, `TowRoutePreview`) skips
+line sources for such geometry instead of mounting them — MapLibre throws
+on one-point lines.
+
+Routing never blocks on a missing vehicle: `RouteCard` shows a centred
+inline `route.vehicleHint` row whenever no vehicle is active (tap opens the
+vehicle picker). The BE stays permissive — with no width/type in the request
+it runs scooter costing and skips the narrow-alley width probe — so the hint
+is the only signal that width checks are off.
 
 Pick-on-map uses the same fullscreen `MapPickOverlay` as every other search
 surface: the search closes, the overlay opens with the field's current point
@@ -273,7 +298,7 @@ are gone; the background map is display-only again (GPS dot, tow destination,
 selected-shop context). Tow name-search runs at a 20 km radius (the BE
 defaults provider search to 2 km, which is why tow drop-offs felt locked);
 the overlay passes its own radius explicitly.
-The onboarding shop form carries the same
+The onboarding shop step carries the same
 vehicle-class chips, so fresh shops declare at signup.
 Adding a shop address (place pick or map pick) also runs a one-shot
 `POST /providers/near` at 300 m and, when registered shops come back (this
@@ -357,10 +382,11 @@ or a retarget to a cleared point) shows an explicit empty drop-off block, and
 the rider gets a **Change drop-off** action (`canEditDestination`: own tow,
 pending/matched/arrived) that reuses the creation picker and posts
 `POST /dispatch/destination` — the open sheet refreshes from the reloaded
-feed, so the new block appears in place. Shops recorded in the ticket's
-`towLegs` render disabled with a "declined" note in the tow picker (the
-server refuses them anyway); map-point picks and full refiles stay
-unblocked by design. Rider cancel is guarded against
+feed, so the new block appears in place. The tow picker passes `ticketId`
+into provider near/search, so shops that already declined arrive with
+`declined: true` and render marked (greyed but still tappable); map-point
+picks and full refiles stay unblocked by design, and the server refuses a
+re-pick regardless. Rider cancel is guarded against
 double-submit and closes the sheet on success, so a dead ticket can never be
 cancelled twice into an "already closed" error. It posts
 `POST /dispatch/destination/decline`, which clears the destination without
@@ -368,8 +394,8 @@ touching the ticket status (the tower keeps the job and waits for the rider's
 new drop-off; no travel leg is written when no tower is engaged) and the
 reload drops the block on success; the rider is told to pick another
 drop-off, and retargeting restamps the tower's ETAs from the live fix.
-Quotes are one-shot: sent amounts render locked in the work form (the server
-`400`s re-quotes and re-finals), and the shop block carries a route button
+Sent amounts are one-shot (the server `400`s re-quotes and re-finals), and
+the shop block carries a route button
 (resolves snapshot → known-shop coords into navigation) beside a shared row
 with the phone on the left and the open status on the right.
 The sheet stays open and live across accept, work-save, and status moves:
@@ -382,18 +408,34 @@ states, the work editor, and quotes are shop-ticket only — volunteer-held
 and tower-held tickets never see those controls (the server 403s them
 regardless; the client gates on the ticket touching one of your own SHOPs,
 so dual-role accounts see the workbench only on their shop jobs).
-Sending a quote (amount required) flips the ticket to `9` (Quoted, violet)
-for rider approval — Approve moves `9→6`, Decline reuses the cancel pair,
-and starting work is blocked while a quote pends, so no job starts
-unapproved. Either side's phone number rides the feed on live tickets
+The workbench is two-stage. The send-quote action posts a non-binding
+estimate (`POST /dispatch/estimate`, amount required, work-type text becomes
+`estimateNote`) — ticket `13` (Estimated) with an amber estimate card whose
+Approve moves `14` and whose Decline returns the ticket to pending and
+records the shop in `declinedShopIds`; the work form stays editable. Saving
+a work order with a freshly entered final posts the binding final
+(`POST /dispatch/quote` `finalAmount` → ticket `11` Final quoted) and shows
+the final card with fault photos; already stored amounts are never resent
+(`POST /dispatch/work` carries only work-type/quote edits). Rider Approve
+(quote or final, both `POST /dispatch/quote/approve`) moves `9`/`11`→`6` and
+requires a funded payment on the ticket; Decline reuses the cancel pair, and
+starting work is blocked while a quote pends, so no job starts unapproved.
+Either side's phone number rides the feed on live tickets
 (`2`/`3`/`4`/`6`/`7`/`9`, never pending or dead) and renders as a tappable
 `tel:` row in the matching block; absent when unregistered.
 
 ## Hazard report form (`FlagSheet`)
 
-Type label plus all three types in one row, radius label plus five chips in
-a second row — no dropdown, no note field, 48 px minimum targets,
-glove/rain usable. No new dependencies, no new copy.
+Photo zone first, centred: up to three 48 px preview tiles (✕ badge to
+remove) beside a dashed add tile; tapping the tile swaps in the "Take
+photo" / "Add photo" chips in place, so the camera/library choice never
+stacks a second modal. The old pin-preview + coordinate header is gone —
+the report point stays pinned on the map behind the dialog. Type and Radius
+split the control row 50/50 — "Type" and "Radius (m)" label lines over the
+three icon-only 44 px buttons (names kept as accessibility labels) and the
+five chips, each group centred in its half, chips capped at 40 px so they
+never outgrow the type buttons. The note field follows. The dialog stays
+non-scrolling with the submit in the footer.
 
 ## Services & roles
 
@@ -406,6 +448,35 @@ the license chips. Un-checking Volunteer revokes via
 license is irrevocable and admins keep the full grant/revoke path).
 A `DENIED` record of either kind reads as missing, so re-applying stays
 possible from the Services screen.
+
+`OnboardingScreen` is a step wizard, not an inline form dump: the roles step
+picks licenses (Rider locked, Volunteer a toggle; a registered SHOP/TOW reads
+"Registered" and locked), then Continue walks only the newly picked SHOP and
+TOW setup steps in sequence — each with a back button, progress dots, and its
+own inline validation — before the single `onFinish(services, shop, tow)`
+contract fires. Skip stays on the roles step. Both call sites (Tabs' sign-up
+gate, Settings' services sheet) get the same wizard, and services already
+held without a provider record route straight into their setup step.
+
+## Permissions & photo sources
+
+The first-run gate (`PermissionGateScreen`) runs after sign-up, before the
+tabs: one shared `PermissionRow` renders it and More → Permissions, so the
+two surfaces can't drift in copy or affordances. Notifications and (on
+Android) background location are required to finish; Camera and Photo library
+are optional and skippable, and the battery row stays a manual settings step.
+A row whose `canAskAgain` is false offers app settings instead of a dead
+request. Existing accounts never see the gate again (`roadassist.permGate` in
+AsyncStorage); the More screen carries the same rows for later.
+
+Every photo attach point uses the same pair — `takePhoto()` (camera) and
+`pickPhotos()` (library) — ticket dialog, dispute and unfixable evidence show
+the two chips directly, while the hazard report reveals them from its add
+tile. Both request their permission in context and throw the shared
+`photo-permission` error on denial, which each sheet maps to "enable it in
+More › Permissions". `app.json` carries the `expo-image-picker` plugin copy
+(camera/photo usage strings, microphone permission off so no `RECORD_AUDIO`
+is merged in; Android `CAMERA` arrives from the library manifest).
 
 ## Client caching
 
@@ -459,8 +530,8 @@ stack registrations beside `Diagnostics`: Settings, About, Permissions,
 Providers).
 
 `SettingsScreen` is a hub of rows: services onboarding, appearance,
-language, then pushed `Permissions` (notifications / background location /
-battery, moved wholesale) and `Providers` (Vehicle-pattern header with
+language, then pushed `Permissions` (notifications / camera / photo library /
+background location / battery, moved wholesale) and `Providers` (Vehicle-pattern header with
 per-missing-kind register buttons on top, per-row switches + edit below,
 create/edit dialogs moved with it). Volunteer radius/capability chips stay
 in Settings as switch-less options, shown while volunteer mode is on.
@@ -486,9 +557,9 @@ for location" on a cold start), because the switch alone can't promise what
 the radius can't see. Per-provider switches stay as the source of truth for
 multi-provider edge cases; the volunteer row's outer is a pressable so the
 switch is tappable, matching the appearance row. Registration and edit forms
-carry no fees and no duty switch — pricing is platform-side (pending) and
-duty lives in these rows; the server still accepts the legacy fee columns
-so older builds keep saving.
+carry no fees and no duty switch — pricing lives in server-side platform
+config and duty lives in these rows; the server still accepts the legacy fee
+columns so older builds keep saving.
 
 ## Saved places live in place search
 
@@ -510,6 +581,121 @@ already handles the two cases correctly: the body is `flexShrink: 1` inside
 a container capped at `maxHeight` (85% dialog / 70% sheet), so a short list
 produces a short dialog and a long one scrolls. A floor would buy a taller
 empty state at the cost of dead space on every non-empty one.
+
+## Quotes, payments & disputes
+
+### Two-stage estimate → final
+
+The record sheet money block renders every stage: `estimateAmount` (stage-1
+estimate) and `shopQuotedAmount` (legacy one-shot quote) as the estimate,
+`finalAmount` (binding) with fault photos, plus the tow fare rows
+(board-preview estimate, live "up to" ceiling, resolved final, recorded
+cancel partial — all read from the stored ticket, never recomputed). The
+workbench flow: send-quote posts the estimate (`13` Estimated, amber card
+with Approve/Decline for the rider — approve `14`, decline returns to
+pending and records the shop in `declinedShopIds`); saving a fresh final
+posts `11` Final quoted — Approve starts work `6` (server-side gated on a
+funded payment), Decline reuses the cancel pair. Sent amounts lock in the
+work form and are never resent. An on-site `UNFIXABLE` verdict (reason +
+evidence photos) closes the ticket at `15` with no `final` — the sheet shows
+the unfixable banner and the payment state (refunded/held), never a price.
+
+Tow estimates run the same handshake without the status machine. The
+drop-off shop (the ticket's `destinationShopId` owned by the viewer) sees a
+"Send estimate" chip on inbound live tows (`1`/`2`/`3`); tapping it opens an
+inline amount + note form and the footer submit appears once the amount is
+non-empty. The submit posts `POST /dispatch/estimate` — the ticket keeps its
+status, the estimate carries a 24-hour TTL, and the rider's card grows an
+awaiting/approved/expired state line. The rider's Approve (`estimateApprovedAt`
+only, advisory; never gates any claim) and Decline (estimate cleared, the
+shop appended to `declinedShopIds`, destination reopened with
+`needsNewDestination` when that shop held it) ride the estimate card. One
+live-or-approved estimate at a time; destination edits and declines drop the
+estimate, and an expired one frees a resend.
+
+### Destination-required tow
+
+The BE rejects destination-less `TOW` filings (`400 "Tow tickets need a
+destination"`), so the tow flow must always collect a drop-off before Send:
+registered shop (`destinationShopId`), free point, or saved place through
+the shared picker. The live-ticket `409` dialog's Change-drop-off branch now
+serves the `needsNewDestination` rematch (destination declined, tower waiting)
+rather than destination-less filing — the client treats an amber
+`needsNewDestination` card as "pick one," never as a file-time state.
+
+### Requeue with fresh GPS
+
+When a drop-off is declined the engaged tower keeps the job and waits; the
+rider's retarget (`POST /dispatch/destination`) restamps ETAs from the
+tower's live fix. A tower that bows out mid-tow instead requeues the ticket
+back to pending with the tow broadcast re-opened (`towerSearch: "ACTIVE"`,
+"Finding another tower" push) and a deadhead partial frozen on record — the
+tower cancel rides the sheet's cancel action (`allowTowerCancel` on engaged
+tows) and the server detects the tower actor on an engaged tow. Client side:
+the tower's 60 s location share already runs while a tow job is attached
+(Assist foreground; navigator session while navigating), so a waiting tower
+keeps its fix warm for the rematch — no extra ping needed. The BE writes
+`pickupHistory` on filing and cancels; the sheet does not render it as a
+timeline.
+
+### Waiting-timer UI
+
+While a tower is on site and work has not started, the record sheet shows
+the waiting block: elapsed minutes and the accrued fee from
+`POST /dispatch/waiting` (mapped to `{waitingMinutes, waitingFee}`),
+refreshed every 15 s while a live tow is on Assist. The server bills each
+started minute at the platform 15-minute rate, after a 10-minute grace and
+up to a 60-minute cap, only while the tower's fix sits within 200 m of the
+pin; the sheet falls back to the stored `towFare.waitingFee` when the
+summary is absent. Volunteer rescues never show the block.
+
+### Declined marking in search
+
+The tow picker passes `ticketId` (plus the optional `minRating`/`sortBy`
+ranking) into provider near/search, and rows arrive with `declined: true`
+for shops that already declined — rendered marked but still tappable; map
+picks and full refiles stay unblocked, and the server refuses declined
+re-picks for the life of the ticket.
+
+### Dispute popup
+
+`DisputeSheet` (`src/screens/assist/DisputeSheet.tsx`, `Overlay` dialog):
+reason chips (`RIDER_DISPUTE_REASONS`: `LATE`, `OVERCHARGE`, `NO_SHOW`,
+`RUDE`, `WRONG_ROUTE`, `OTHER`), free-text note (≤500), one evidence photo
+(camera or library chip) with thumbnail + remove. Submit requires a reason;
+filing posts `POST /disputes` with the alias `reason` and a Storage-path
+`photoUrl` — the server maps both to canonical kind/type/reasonCode and
+`photoUrls` — and the sheet only files and reports status, no polling or
+triage. Auto-filed records come from the server: mid-tow tower cancels and
+destination declines.
+
+### Dispute entry points
+
+One manual button per reason, gated in `recordActions.ts`. The shared footer
+chip renders only when no specialized dispute surface is active: live
+tickets past pending (`canDispute`), or resolved tickets still worth
+contesting — money on file (`towFare.estimate`/`shopQuotedAmount`/
+`finalAmount`) and within the 7-day window after the resolved status stamp
+(`canDisputeResolved`; permissive when the history or timestamp is missing,
+so legacy rows never silently lose their button). The tower-cancel banner
+(`cancelledBy` set on a non-terminal rider-side ticket; the server clears it
+on the next claim, dropping the banner), the shop-decline banner, and the
+final-quote card each carry their own chip, and the footer steps aside while
+they show. Every chip files through the `DisputeSheet` above.
+
+### Cash confirm vs SePay
+
+Two settlement UIs on the same money block. The operator confirms cash
+received roadside (`POST /payments/confirm-cash`, `PENDING` → `CONFIRMED`).
+The rider's pay action creates the charge (`POST /payments/create`
+`{ticketId, method: "SEPAY"}`) and the sheet renders the hosted checkout
+link (`ticket.qrUrl` → `payment.checkoutUrl` → `ticket.checkoutUrl`), opened
+in the system browser via `Linking.openURL`; funds land `HELD` (reserved —
+the sheet shows "Held"). The payment state re-reads on the next record
+reload — no payment push events exist server-side. Labels come from
+`paymentMethodLabel`/`paymentStatusLabel` (`Pending` / `Held` / `Confirmed` /
+`Refunded` / `Partial`); copy says "on record" for cash and "Held" for SePay
+until settled.
 
 ## Build / verify
 

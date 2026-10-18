@@ -21,7 +21,9 @@ import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import type {Flag} from "../api/flags";
-import {bustFlagCaches} from "../api/flags";
+import {bustFlagCaches, confirmFlag, denyFlag} from "../api/flags";
+import {markDenied, markVoted} from "../storage/votedFlags";
+import {toMessage} from "../api/client";
 import {flagTypeLabel} from "../i18n/labels";
 import {distBetween} from "./navigation/navUtils";
 import HazardMapView from "./hazards/HazardMapView";
@@ -42,6 +44,7 @@ export default function HazardScreen() {
   const [focus, setFocus] = useState<{lat: number; lng: number; n: number} | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
   const [pos, setPos] = useState<{lat: number; lng: number} | null>(null);
+  const [voteBusy, setVoteBusy] = useState(false);
   const focusN = useRef(0);
   const lastRefreshRef = useRef(0);
   const refreshMine = mine.refresh;
@@ -95,6 +98,34 @@ export default function HazardScreen() {
   function openFlag(flag: Flag): void {
     centerOn(flag);
     setSelected(flag);
+  }
+  async function onConfirm(flagId: string): Promise<void> {
+    if (!token || voteBusy) return;
+    setVoteBusy(true);
+    try {
+      await confirmFlag(flagId, token);
+      await markVoted(flagId);
+      setSelected(null);
+      refreshMine();
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setVoteBusy(false);
+    }
+  }
+  async function onDeny(flagId: string): Promise<void> {
+    if (!token || voteBusy) return;
+    setVoteBusy(true);
+    try {
+      await denyFlag(flagId, token);
+      await markDenied(flagId);
+      setSelected(null);
+      refreshMine();
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setVoteBusy(false);
+    }
   }
   async function onRemove(flagId: string): Promise<void> {
     const target = mine.flags.find((f) => f.id === flagId);
@@ -173,6 +204,7 @@ export default function HazardScreen() {
         <Overlay
           visible
           variant="dialog"
+          scrollable={false}
           title={flagTypeLabel(selected.type, t)}
           leading={<MaterialIcons name={hazardKind(selected.type).icon} size={22} color={hazardKind(selected.type).color} />}
           right={
@@ -188,9 +220,9 @@ export default function HazardScreen() {
             uid != null && selected.reporterId === uid,
             false,
             false,
-            mine.busyId !== null,
+            mine.busyId !== null || voteBusy,
             {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
-            {onConfirm: () => {}, onDeny: () => {}, onRemove: (id) => void onRemove(id)},
+            {onConfirm: (id) => void onConfirm(id), onDeny: (id) => void onDeny(id), onRemove: (id) => void onRemove(id)},
           )}
         >
           <FlagDetailSheet

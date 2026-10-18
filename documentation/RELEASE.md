@@ -42,7 +42,7 @@ breaks updates without a compile error anywhere.
 
 | Secret | Source | Notes |
 |---|---|---|
-| `GIT_CRYPT_KEY` | `git crypt export-key` on any unlocked machine, base64'd | Unlocks `google-services.json` + `src/config/secrets.ts` in CI; without it the build ships Firebase-dead |
+| `GIT_CRYPT_KEY` | `git crypt export-key` on any unlocked machine, base64'd | Unlocks `google-services.json` + `src/config/secrets.ts` in CI; without it the build ships Firebase-dead and Map-dead (CI stubs the keys to empty) |
 | `ANDROID_KEYSTORE_BASE64` | base64 of the upload keystore (below) | Write-only, masked in logs |
 | `ANDROID_STORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` | chosen at keystore creation | Same |
 

@@ -91,11 +91,11 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
         return false;
       }
     } else {
-      if (!provider && !isValidTowPlate(plate)) {
+      if (!isValidTowPlate(plate)) {
         setError(t.provider.invalidPlate);
         return false;
       }
-      if (!provider && parseTowWidth(towWidth) === null) {
+      if (parseTowWidth(towWidth) === null) {
         setError(t.provider.invalidWidth);
         return false;
       }
@@ -115,6 +115,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
           ...(locTouched && point && kind === "SHOP" ? {lat: point.lat, lng: point.lng, label: point.label ?? null} : {}),
           ...(locTouched && towPoint && kind === "TOW" ? {lat: towPoint.lat, lng: towPoint.lng} : {}),
           ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
+          ...(kind === "TOW" ? {plate: normalizeTowPlate(plate), vehicleType: towType, vehicleWidth: parseTowWidth(towWidth) ?? undefined} : {}),
         }, token);
       } else if (kind === "TOW" && towPoint) {
         await createProvider({

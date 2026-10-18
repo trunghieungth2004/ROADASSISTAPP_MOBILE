@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {nearProviders, providerRatings, type Provider, type ProviderRating} from "../../api/providers";
 import {toMessage} from "../../api/client";
 import {darkTheme, lightTheme} from "../../theme";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import StyledLayer from "../../components/map/StyledLayer";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
@@ -58,7 +58,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const [shops, setShops] = useState<Provider[]>([]);
@@ -155,6 +155,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
             images={{
               "shop-pin": require("../../../assets/map/shops/shop-pin.png"),
               "shop-pin-closed": require("../../../assets/map/shops/shop-pin-closed.png"),
+              "shop-pin-unknown": require("../../../assets/map/shops/shop-pin-unknown.png"),
             }}
           />
           {gps ? (
@@ -172,7 +173,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
               <StyledLayer
                 type="symbol"
                 id={`radius-shop-icon-${shop.id}`}
-                style={{iconImage: shop.openNow === false ? "shop-pin-closed" : "shop-pin", iconSize: shop.id === selectedId ? 0.6 : 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
+                style={{iconImage: shop.openNow === false ? "shop-pin-closed" : shop.openNow === true ? "shop-pin" : "shop-pin-unknown", iconSize: shop.id === selectedId ? 0.6 : 0.5, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}}
               />
             </GeoJSONSource>
           ))}

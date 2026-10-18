@@ -4,7 +4,7 @@ import {useAuth} from "./AuthContext";
 export type ProfileState = {bundle: MeBundle | null; loading: boolean; user: MeUser | null; vehicles: MeVehicle[]; activeVehicle: MeVehicle | null; hasVehicle: boolean; roleChosen: boolean; isRider: boolean; refresh: () => Promise<MeBundle | null>; activateVehicle: (profileId: string | null) => Promise<void>; markOnboarded: (service: string) => Promise<void>};
 const ProfileContext = createContext<ProfileState | null>(null);
 export function ProfileProvider({children}: {children: ReactNode}) {
-  const {uid, token} = useAuth();
+  const {uid, token, loaded} = useAuth();
   const [bundle, setBundle] = useState<MeBundle | null>(null);
   const [loading, setLoading] = useState(false);
   const seqRef = useRef(0);
@@ -19,14 +19,14 @@ export function ProfileProvider({children}: {children: ReactNode}) {
       if (seqRef.current !== seq) return next;
       setBundle(next);
       return next;
-    } catch {
+    } catch (err) {
       if (seqRef.current !== seq) return null;
-      return bundleRef.current;
+      throw err;
     } finally {
       if (seqRef.current === seq) setLoading(false);
     }
   }, [token]);
-  useEffect(() => { if (token) void refresh(); else setBundle(null); }, [token, refresh]);
+  useEffect(() => { if (!loaded) return; if (token) void refresh().catch(() => undefined); else setBundle(null); }, [token, refresh, loaded]);
   const activateVehicle = useCallback(async (profileId: string | null) => {
     if (!token) return;
     const res = await apiActivateVehicle({profileId}, token);

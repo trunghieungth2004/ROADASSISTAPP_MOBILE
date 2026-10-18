@@ -6,7 +6,7 @@ import {Camera, GeoJSONSource, Images, Map, type CameraRef} from "@maplibre/mapl
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import type {RouteOption} from "../../api/routes";
 import {darkTheme, lightTheme} from "../../theme";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import StyledLayer from "../../components/map/StyledLayer";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
@@ -30,7 +30,7 @@ export default function TowRoutePreview({t, summary, route, origin, pickup, dest
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const bounds = useMemo(
@@ -70,12 +70,16 @@ export default function TowRoutePreview({t, summary, route, origin, pickup, dest
               "b-dot": require("../../../assets/map/route/b-dot.png"),
             }}
           />
+          {route.geometry.coordinates.length > 1 ? (
           <GeoJSONSource id="tow-preview-line-casing" data={{type: "Feature", geometry: route.geometry, properties: {}}}>
             <StyledLayer type="line" id="tow-preview-line-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
+          ) : null}
+          {route.geometry.coordinates.length > 1 ? (
           <GeoJSONSource id="tow-preview-line" data={{type: "Feature", geometry: route.geometry, properties: {}}}>
             <StyledLayer type="line" id="tow-preview-line-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
+          ) : null}
           <GeoJSONSource id="tow-preview-origin" data={pointFeature(origin.lng, origin.lat)}>
             <StyledLayer type="circle" id="tow-preview-origin-dot" style={{circleRadius: 8, circleColor: "#0284c7", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}} />
           </GeoJSONSource>

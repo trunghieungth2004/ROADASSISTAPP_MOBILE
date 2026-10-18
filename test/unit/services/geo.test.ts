@@ -1,5 +1,5 @@
 import {expect, jest, test} from "@jest/globals";
-import {getFix} from "../../../src/services/geo";
+import {getFix, metersBetween} from "../../../src/services/geo";
 
 type LocationCoords = {coords: {latitude: number; longitude: number}};
 
@@ -61,4 +61,16 @@ test("total failure throws without a stale fallback when disabled", async () => 
   location().getLastKnownPositionAsync.mockResolvedValue(null);
   location().getCurrentPositionAsync.mockRejectedValueOnce(new Error("down"));
   await expect(getFix({staleFallback: false, timeoutMs: 20})).rejects.toThrow("Location unavailable");
+});
+
+test("metersBetween is zero for identical points", () => {
+  expect(metersBetween({lat: 10.7, lng: 106.6}, {lat: 10.7, lng: 106.6})).toBe(0);
+});
+
+test("metersBetween matches a short latitude step", () => {
+  expect(metersBetween({lat: 10.7, lng: 106.6}, {lat: 10.701, lng: 106.6})).toBeCloseTo(111.2, 0);
+});
+
+test("metersBetween grows across a longitude step", () => {
+  expect(metersBetween({lat: 10.7, lng: 106.6}, {lat: 10.7, lng: 106.601})).toBeCloseTo(109.3, 0);
 });

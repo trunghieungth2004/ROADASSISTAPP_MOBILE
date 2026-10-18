@@ -63,6 +63,7 @@ async function render(overrides?: Partial<Props>) {
           onReply={() => undefined}
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
+          showRequestPhotos
           onDeclineDestination={onDeclineDestination}
           onEditDestination={null}
           allowTowerCancel={false}

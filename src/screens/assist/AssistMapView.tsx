@@ -3,7 +3,7 @@ import {Camera, GeoJSONSource, Images, Map, Marker, type CameraRef} from "@mapli
 import type {RefObject} from "react";
 import {useMemo} from "react";
 import StyledLayer from "../../components/map/StyledLayer";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import type {AppTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
 import type {Provider} from "../../api/providers";
@@ -28,7 +28,7 @@ type Props = {
 
 export default function AssistMapView(props: Props) {
   const scheme = useColorScheme();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {theme} = props;
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   return (
@@ -50,10 +50,11 @@ export default function AssistMapView(props: Props) {
             "tower-dot": require("../../../assets/map/route/tower-dot.png"),
             "shop-pin": require("../../../assets/map/shops/shop-pin.png"),
             "shop-pin-closed": require("../../../assets/map/shops/shop-pin-closed.png"),
+            "shop-pin-unknown": require("../../../assets/map/shops/shop-pin-unknown.png"),
           }}
         />
-        {props.walkRoute ? <GeoJSONSource id="assist-walk-casing" data={{type: "Feature", geometry: props.walkRoute.geometry, properties: {}}}><StyledLayer type="line" id="assist-walk-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
-        {props.walkRoute ? <GeoJSONSource id="assist-walk" data={{type: "Feature", geometry: props.walkRoute.geometry, properties: {}}}><StyledLayer type="line" id="assist-walk-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.walkRoute && props.walkRoute.geometry.coordinates.length > 1 ? <GeoJSONSource id="assist-walk-casing" data={{type: "Feature", geometry: props.walkRoute.geometry, properties: {}}}><StyledLayer type="line" id="assist-walk-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.walkRoute && props.walkRoute.geometry.coordinates.length > 1 ? <GeoJSONSource id="assist-walk" data={{type: "Feature", geometry: props.walkRoute.geometry, properties: {}}}><StyledLayer type="line" id="assist-walk-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
         {props.gps ? (
           <GeoJSONSource id="assist-gps" data={pointFeature(props.gps.lng, props.gps.lat)}>
             <StyledLayer type="circle" id="assist-gps-dot" style={{circleRadius: 8, circleColor: "#0284c7", circleStrokeColor: "#ffffff", circleStrokeWidth: 3}} />
@@ -93,12 +94,12 @@ export default function AssistMapView(props: Props) {
           </GeoJSONSource>
           );
         })()}
-        {props.jobLayers?.route ? (
+        {props.jobLayers?.route && props.jobLayers.route.geometry.coordinates.length > 1 ? (
           <GeoJSONSource id="tow-job-route-casing" data={{type: "Feature", geometry: props.jobLayers.route.geometry, properties: {}}}>
             <StyledLayer type="line" id="tow-job-route-casing-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
         ) : null}
-        {props.jobLayers?.route ? (
+        {props.jobLayers?.route && props.jobLayers.route.geometry.coordinates.length > 1 ? (
           <GeoJSONSource id="tow-job-route" data={{type: "Feature", geometry: props.jobLayers.route.geometry, properties: {}}}>
             <StyledLayer type="line" id="tow-job-route-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>

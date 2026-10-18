@@ -2,11 +2,12 @@ import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-nat
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import {darkTheme, lightTheme} from "../theme";
 import Snack from "../components/ui/Snack";
 import {SNACK_GAP} from "../components/ui/snackOffset";
+import PermissionRow from "../components/permissions/PermissionRow";
 import type {Strings} from "../i18n/en";
-import type {AppPermissionStates, PermissionState} from "../services/permissions";
+import type {AppPermissionStates} from "../services/permissions";
 
 type Props = {
   t: Strings;
@@ -17,42 +18,15 @@ type Props = {
   grantError: string | null;
   onHideGrantError: () => void;
   onGrantNotifications: () => void;
+  onGrantCamera: () => void;
+  onGrantPhotos: () => void;
   onGrantBackground: () => void;
   onOpenBattery: () => void;
   onSkip: () => void;
   onDone: () => void;
 };
 
-function Row({t, theme, icon, title, desc, state, busy, onGrant}: {
-  t: Strings;
-  theme: AppTheme;
-  icon: string;
-  title: string;
-  desc: string;
-  state: PermissionState | null;
-  busy: boolean;
-  onGrant: () => void;
-}) {
-  const granted = state?.granted ?? false;
-  return (
-    <View style={[styles.row, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-      <MaterialIcons name={icon as never} size={26} color={theme.primary} />
-      <View style={styles.rowText}>
-        <Text style={[styles.rowTitle, {color: theme.text}]}>{title}</Text>
-        <Text style={[styles.rowDesc, {color: theme.muted}]}>{desc}</Text>
-      </View>
-      {granted ? (
-        <MaterialIcons name="check-circle" size={30} color={theme.primary} />
-      ) : (
-        <Pressable style={[styles.grantBtn, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={onGrant} accessibilityRole="button" accessibilityLabel={t.more.gateGrant}>
-          <Text style={styles.grantText}>{t.more.gateGrant}</Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
-export default function PermissionGateScreen({t, states, busy, showBackground, canDone, grantError, onHideGrantError, onGrantNotifications, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
+export default function PermissionGateScreen({t, states, busy, showBackground, canDone, grantError, onHideGrantError, onGrantNotifications, onGrantCamera, onGrantPhotos, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -61,23 +35,47 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
       <ScrollView contentContainerStyle={styles.body}>
         <MaterialIcons name="verified-user" size={48} color={theme.primary} />
         <Text style={[styles.title, {color: theme.text}]}>{t.more.gateTitle}</Text>
-        <Row
+        <PermissionRow
           t={t}
           theme={theme}
+          mode="gate"
           icon="notifications"
           title={t.more.permNotifications}
-          desc={t.more.permNotificationsHint}
+          hint={t.more.permNotificationsHint}
           state={states?.notifications ?? null}
           busy={busy}
           onGrant={onGrantNotifications}
         />
+        <PermissionRow
+          t={t}
+          theme={theme}
+          mode="gate"
+          icon="photo-camera"
+          title={t.more.permCamera}
+          hint={t.more.permCameraHint}
+          state={states?.camera ?? null}
+          busy={busy}
+          onGrant={onGrantCamera}
+        />
+        <PermissionRow
+          t={t}
+          theme={theme}
+          mode="gate"
+          icon="photo-library"
+          title={t.more.permPhotos}
+          hint={t.more.permPhotosHint}
+          state={states?.mediaLibrary ?? null}
+          busy={busy}
+          onGrant={onGrantPhotos}
+        />
         {showBackground ? (
-          <Row
+          <PermissionRow
             t={t}
             theme={theme}
+            mode="gate"
             icon="location-on"
             title={t.more.permBackground}
-            desc={t.more.permBackgroundHint}
+            hint={t.more.permBackgroundHint}
             state={states?.backgroundLocation ?? null}
             busy={busy}
             onGrant={onGrantBackground}
@@ -113,12 +111,9 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   body: {gap: 12, paddingHorizontal: 24, paddingBottom: 24, alignItems: "stretch"},
   title: {fontSize: 22, fontWeight: "700", textAlign: "center", marginVertical: 8},
-  row: {flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 16},
   rowText: {flex: 1, minWidth: 0, gap: 4},
   rowTitle: {fontSize: 16, fontWeight: "700"},
   rowDesc: {fontSize: 13},
-  grantBtn: {borderRadius: 999, paddingVertical: 10, paddingHorizontal: 20, alignItems: "center"},
-  grantText: {color: "#fff", fontWeight: "700", fontSize: 14},
   stepRow: {flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderStyle: "dashed", borderRadius: 16, padding: 16},
   stepManual: {fontSize: 12, fontStyle: "italic"},
   stepBtn: {flexDirection: "row", alignItems: "center", gap: 2, borderWidth: 1, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16},

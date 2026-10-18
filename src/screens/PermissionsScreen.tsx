@@ -8,43 +8,40 @@ import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
-import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import PermissionRow from "../components/permissions/PermissionRow";
+import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestCameraPermission, requestMediaLibraryPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
+
+type PermKey = "notifications" | "camera" | "mediaLibrary" | "backgroundLocation";
+
+const OFF: AppPermissionStates = {
+  notifications: {granted: false, canAskAgain: true},
+  camera: {granted: false, canAskAgain: true},
+  mediaLibrary: {granted: false, canAskAgain: true},
+  backgroundLocation: {granted: false, canAskAgain: true},
+};
 
 export default function PermissionsScreen() {
   const {t} = useStrings();
   const {token, uid} = useAuth();
   const {mode} = useThemeMode();
   const theme = mode === "dark" ? darkTheme : lightTheme;
-  const [perms, setPerms] = useState<AppPermissionStates>({notifications: {granted: false, canAskAgain: true}, backgroundLocation: {granted: false, canAskAgain: true}});
+  const [perms, setPerms] = useState<AppPermissionStates>(OFF);
   const [permsBusy, setPermsBusy] = useState(false);
   useFocusEffect(useCallback(() => {
     void getPermissionStates().then(setPerms).catch(() => undefined);
   }, []));
-  async function onEnableNotifications() {
+  async function onEnable(which: PermKey) {
     if (permsBusy) return;
-    setPermsBusy(true);
-    try {
-      if (perms.notifications.canAskAgain) {
-        const next = await requestNotificationPermission();
-        setPerms({...perms, notifications: next});
-        if (next.granted) await syncPushToken(token, uid);
-      } else {
-        openAppSettings();
-      }
-    } finally {
-      setPermsBusy(false);
+    if (!perms[which].canAskAgain) {
+      openAppSettings();
+      return;
     }
-  }
-  async function onEnableBackground() {
-    if (permsBusy) return;
     setPermsBusy(true);
     try {
-      if (perms.backgroundLocation.canAskAgain) {
-        setPerms({...perms, backgroundLocation: await requestBackgroundLocationPermission()});
-      } else {
-        openAppSettings();
-      }
+      const next = which === "notifications" ? await requestNotificationPermission() : which === "camera" ? await requestCameraPermission() : which === "mediaLibrary" ? await requestMediaLibraryPermission() : await requestBackgroundLocationPermission();
+      setPerms((prev) => ({...prev, [which]: next}));
+      if (which === "notifications" && next.granted) await syncPushToken(token, uid);
     } finally {
       setPermsBusy(false);
     }
@@ -53,29 +50,13 @@ export default function PermissionsScreen() {
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <View style={styles.listRow}>
-            <MaterialIcons name="notifications" size={20} color={theme.primary} />
-            <View style={styles.permText}>
-              <Text style={[styles.listText, {color: theme.text}]}>{t.more.permNotifications}</Text>
-              <Text style={[styles.permHint, {color: theme.muted}]}>{t.more.permNotificationsHint}</Text>
-            </View>
-            <View style={[styles.permPill, {backgroundColor: perms.notifications.granted ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{perms.notifications.granted ? t.more.permOn : t.more.permOff}</Text></View>
-            {!perms.notifications.granted ? (
-              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} disabled={permsBusy} onPress={() => void onEnableNotifications()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{perms.notifications.canAskAgain ? t.more.permEnable : t.more.permOpenSettings}</Text></Pressable>
-            ) : null}
-          </View>
+          <PermissionRow t={t} theme={theme} mode="manage" icon="notifications" title={t.more.permNotifications} hint={t.more.permNotificationsHint} state={perms.notifications} busy={permsBusy} onGrant={() => void onEnable("notifications")} />
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
-          <View style={styles.listRow}>
-            <MaterialIcons name="location-on" size={20} color={theme.primary} />
-            <View style={styles.permText}>
-              <Text style={[styles.listText, {color: theme.text}]}>{t.more.permBackground}</Text>
-              <Text style={[styles.permHint, {color: theme.muted}]}>{t.more.permBackgroundHint}</Text>
-            </View>
-            <View style={[styles.permPill, {backgroundColor: perms.backgroundLocation.granted ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{perms.backgroundLocation.granted ? t.more.permOn : t.more.permOff}</Text></View>
-            {!perms.backgroundLocation.granted ? (
-              <Pressable style={[styles.permBtn, {borderColor: theme.border}]} disabled={permsBusy} onPress={() => void onEnableBackground()}><Text style={[styles.permBtnText, {color: theme.primary}]}>{perms.backgroundLocation.canAskAgain ? t.more.permEnable : t.more.permOpenSettings}</Text></Pressable>
-            ) : null}
-          </View>
+          <PermissionRow t={t} theme={theme} mode="manage" icon="photo-camera" title={t.more.permCamera} hint={t.more.permCameraHint} state={perms.camera} busy={permsBusy} onGrant={() => void onEnable("camera")} />
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <PermissionRow t={t} theme={theme} mode="manage" icon="photo-library" title={t.more.permPhotos} hint={t.more.permPhotosHint} state={perms.mediaLibrary} busy={permsBusy} onGrant={() => void onEnable("mediaLibrary")} />
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <PermissionRow t={t} theme={theme} mode="manage" icon="location-on" title={t.more.permBackground} hint={t.more.permBackgroundHint} state={perms.backgroundLocation} busy={permsBusy} onGrant={() => void onEnable("backgroundLocation")} />
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <View style={styles.listRow}>
             <MaterialIcons name="battery-charging-full" size={20} color={theme.primary} />
@@ -98,8 +79,6 @@ const styles = StyleSheet.create({
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},
   permText: {flex: 1, minWidth: 0, gap: 2},
   permHint: {fontSize: 12},
-  permPill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10},
-  permPillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   permBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10},
   permBtnText: {fontSize: 13, fontWeight: "700"},
   divider: {height: 1, marginHorizontal: 16},

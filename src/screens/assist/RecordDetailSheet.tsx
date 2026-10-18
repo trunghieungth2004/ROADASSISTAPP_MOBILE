@@ -1,21 +1,32 @@
 import {useEffect, useState} from "react";
-import {ActivityIndicator, Linking, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Image, Linking, Pressable, StyleSheet, View, useColorScheme} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme, type AppTheme} from "../../theme";
-import {DECLINE_REASONS, type DeclineReason, type FeedTicket} from "../../api/dispatch";
+import {DECLINE_REASONS, DISPATCH_STATUS, isTerminal, type DeclineReason, type FeedTicket} from "../../api/dispatch";
+import {paymentMethodLabel, paymentStatusLabel} from "../../api/payments";
 import type {UserRating} from "../../api/ratings";
 import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
 import {formatPoint, reverseLabel} from "../../api/places";
 import {distBetween} from "../navigation/navUtils";
 import {timeAgoLabel} from "../hazards/hazardFilter";
-import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canResolve, canSendQuote, canStartWork} from "./recordActions";
+import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canResolve, canSendEstimate, canSendQuote, canStartWork, estimateStateOf} from "./recordActions";
+import {formatAmountInput} from "./money";
 import {declineReasonLabel, stageLabel, statusPillColor, statusStages, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./ticketLabels";
 import {directionOf} from "./recordFilter";
 import StatusStepper from "./StatusStepper";
 import RatingRow from "./RatingRow";
+import {usePhotoUrls} from "../../services/photos";
+import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 export type WorkPatch = {workType: string; quoted: string; final: string};
+
+export type TicketPaymentView = {
+  method?: string | null;
+  status?: string | null;
+  checkoutUrl?: string | null;
+  id?: string | null;
+};
 
 type Props = {
   t: Strings;
@@ -33,6 +44,7 @@ type Props = {
   onDecline: ((ticket: FeedTicket, reason: DeclineReason, note: string | undefined) => void) | null;
   onSaveWork: (ticket: FeedTicket, patch: WorkPatch) => void;
   onSendQuote: (ticket: FeedTicket, patch: WorkPatch) => void;
+  onOpenEstimate?: ((ticket: FeedTicket) => void) | null;
   onApproveQuote: (ticket: FeedTicket) => void;
   onOpenShop: (ticket: FeedTicket) => void;
   onOpenDestination: (ticket: FeedTicket) => void;
@@ -47,9 +59,20 @@ type Props = {
   onReply: (ratingId: string, text: string) => void;
   onRateRider: (ticket: FeedTicket) => void;
   ownShopIds: Set<string>;
+  showRequestPhotos: boolean;
   onDeclineDestination: (ticket: FeedTicket) => void;
   onEditDestination: ((ticket: FeedTicket) => void) | null;
   allowTowerCancel: boolean;
+  onApproveEstimate?: ((ticket: FeedTicket) => void) | null;
+  onDeclineEstimate?: ((ticket: FeedTicket) => void) | null;
+  onApproveFinal?: ((ticket: FeedTicket) => void) | null;
+  onConfirmCash?: ((ticket: FeedTicket) => void) | null;
+  onPayNow?: ((ticket: FeedTicket) => void) | null;
+  onOpenDispute?: ((ticket: FeedTicket) => void) | null;
+  onRequeue?: ((ticket: FeedTicket) => void) | null;
+  payment?: TicketPaymentView | null;
+  waiting?: {waitingMinutes: number; waitingFee: number} | null;
+  onMarkUnfixable?: ((ticket: FeedTicket) => void) | null;
 };
 
 type Party = {
@@ -227,7 +250,7 @@ function Timeline({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: Feed
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, onDeclineDestination, onEditDestination, allowTowerCancel}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onPayNow, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -237,10 +260,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   const [declineNote, setDeclineNote] = useState("");
   const [workOpen, setWorkOpen] = useState(false);
   const [workType, setWorkType] = useState(typeof ticket.workType === "string" ? ticket.workType : "");
-  const [quoted, setQuoted] = useState(typeof ticket.shopQuotedAmount === "number" ? String(ticket.shopQuotedAmount) : "");
-  const [final, setFinal] = useState(typeof ticket.finalAmount === "number" ? String(ticket.finalAmount) : "");
+  const [quoted, setQuoted] = useState(typeof ticket.shopQuotedAmount === "number" ? formatAmountInput(String(ticket.shopQuotedAmount)) : "");
+  const [final, setFinal] = useState(typeof ticket.finalAmount === "number" ? formatAmountInput(String(ticket.finalAmount)) : "");
   const [replyRatingId, setReplyRatingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const photoViewer = usePhotoViewer(t.common.cancel);
   const party = partyOf(ticket, t.assist.unassigned);
   const hasShop = (typeof ticket.assignedShopId === "string" && ticket.assignedShopId !== "" && ownShopIds.has(ticket.assignedShopId)) ||
     (typeof ticket.providerId === "string" && ticket.providerId !== "" && ownShopIds.has(ticket.providerId));
@@ -282,6 +306,31 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   } : null;
   const placeHeader = ticket.ticketType === "WALK_IN" ? t.assist.startPoint : ticket.ticketType === "TOW" || ticket.ticketType === "SOS" || ticket.ticketType === "MECHANIC" ? t.assist.pickup : null;
   const canDeclineDest = canDeclineDestination(ticket.status, ticket.destinationShopId, ownShopIds);
+  const estimateAmount = typeof ticket.estimateAmount === "number" ? ticket.estimateAmount : typeof ticket.shopQuotedAmount === "number" ? ticket.shopQuotedAmount : null;
+  const estimateNote = typeof ticket.estimateNote === "string" && ticket.estimateNote !== "" ? ticket.estimateNote : typeof ticket.workType === "string" && ticket.workType !== "" ? ticket.workType : null;
+  const faultPhotos = usePhotoUrls(ticket.faultPhotos);
+  const ticketPhotoPaths = showRequestPhotos && Array.isArray(ticket.photoUrls) ? ticket.photoUrls.filter((path): path is string => typeof path === "string" && path !== "") : [];
+  const ticketPhotos = usePhotoUrls(showRequestPhotos ? ticket.photoUrls : null);
+  const fareWaitingFee = ticket.towFare !== null && typeof ticket.towFare === "object" && typeof ticket.towFare.waitingFee === "number" ? ticket.towFare.waitingFee : null;
+  const waitingFee = typeof waiting?.waitingFee === "number" ? waiting.waitingFee : typeof ticket.waitingFee === "number" ? ticket.waitingFee : fareWaitingFee;
+  const fareWaitingMinutes = ticket.towFare !== null && typeof ticket.towFare === "object" && typeof ticket.towFare.waitingMinutes === "number" ? ticket.towFare.waitingMinutes : null;
+  const sinceMinutes = typeof ticket.waitingSince === "string" && ticket.waitingSince !== "" ? Math.max(0, Math.round((Date.now() - Date.parse(ticket.waitingSince)) / 60000)) : null;
+  const waitingMinutes = typeof waiting?.waitingMinutes === "number" ? waiting.waitingMinutes : typeof ticket.waitingMinutes === "number" ? ticket.waitingMinutes : fareWaitingMinutes ?? sinceMinutes;
+  const showWaiting = (waitingMinutes !== null && waitingMinutes > 0) || (waitingFee !== null && waitingFee > 0);
+  const payMethod = typeof payment?.method === "string" ? payment.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : null;
+  const payStatus = typeof payment?.status === "string" ? payment.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : null;
+  const qrUri = typeof ticket.qrUrl === "string" && ticket.qrUrl !== "" ? ticket.qrUrl : typeof payment?.checkoutUrl === "string" && payment.checkoutUrl !== "" ? payment.checkoutUrl : typeof ticket.checkoutUrl === "string" && ticket.checkoutUrl !== "" ? ticket.checkoutUrl : null;
+  const towerCancelled = ticket.direction === "out" && typeof ticket.cancelledBy === "string" && ticket.cancelledBy !== "" && !isTerminal(ticket.status);
+  const declinedLegs = Array.isArray(ticket.towLegs) ? ticket.towLegs.filter((leg) => typeof leg?.toShopId === "string" && (leg as {toShopId: string}).toShopId !== "") : [];
+  const shopDeclinedMid = declinedLegs.length > 0 && !isTerminal(ticket.status);
+  const showEstimateCard = estimateAmount !== null;
+  const showFinalCard = typeof ticket.finalAmount === "number";
+  const showUnfixable = ticket.unfixable === true;
+  const estimateState = estimateStateOf(ticket);
+  const destinationMine = typeof ticket.destinationShopId === "string" && ticket.destinationShopId !== "" && ownShopIds.has(ticket.destinationShopId);
+  const canEstimate = onOpenEstimate !== undefined && onOpenEstimate !== null && canSendEstimate(ticket.direction, ticket.ticketType, ticket.status, destinationMine, estimateState);
+  const disputeCovered = towerCancelled || shopDeclinedMid || showFinalCard;
+  const showDisputeFoot = onOpenDispute !== undefined && onOpenDispute !== null && ticket.direction === "out" && !disputeCovered && (canDispute(ticket.status) || canDisputeResolved(ticket));
   const actions: OverlayAction[] = [];
   if (!inbound && canRate(ticket.status)) {
     actions.push({label: hasRated ? t.rating.editRating : t.assist.rate, tone: "primary", busy, onPress: () => onRate(ticket)});
@@ -315,6 +364,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   if (quoteReady) {
     actions.push({label: t.assist.sendQuote, tone: "primary", busy, onPress: () => { onSendQuote(ticket, {workType, quoted, final}); setWorkOpen(false); }});
   }
+  const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && ticket.direction === "in" && hasShop && !showUnfixable &&
+    (ticket.status === DISPATCH_STATUS.ARRIVED || ticket.status === DISPATCH_STATUS.QUOTED || ticket.status === DISPATCH_STATUS.IN_SHOP || ticket.status === DISPATCH_STATUS.FINAL_QUOTED);
+  if (unfixableReady) {
+    actions.push({label: t.assist.unfixableAction, tone: "danger", outline: true, busy, onPress: () => onMarkUnfixable(ticket)});
+  }
   if (canApproveQuote(ticket.direction, ticket.status)) {
     actions.push({label: t.assist.approveQuote, tone: "primary", busy, onPress: () => onApproveQuote(ticket)});
   }
@@ -339,6 +393,9 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   }
   if (canRateRider(ticket.direction, ticket.status)) {
     actions.push({label: t.assist.rateRider, tone: "primary", onPress: () => onRateRider(ticket)});
+  }
+  if (canEstimate) {
+    actions.push({label: t.assist.sendEstimate, tone: "neutral", outline: true, onPress: () => onOpenEstimate?.(ticket)});
   }
   if (canDeclineDest) {
     actions.push({label: t.assist.declineDestination, tone: "danger", outline: true, busy, onPress: () => onDeclineDestination(ticket)});
@@ -474,12 +531,79 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             <Text style={{color: theme.text}}>{ticket.note}</Text>
           </Section>
         ) : null}
+        {typeof ticket.description === "string" && ticket.description ? (
+          <Section theme={theme} icon="description">
+            <Text style={{color: theme.text}}>{ticket.description}</Text>
+          </Section>
+        ) : null}
+        {showRequestPhotos && ticketPhotoPaths.length > 0 ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.photos}</Text>
+            <View style={styles.photoRow}>
+              {ticketPhotos.length > 0 ? (
+                ticketPhotos.map((uri, i) => (
+                  <Pressable key={`${i}-${uri}`} onPress={() => photoViewer.open(uri)} accessibilityRole="button" accessibilityLabel={`${t.assist.photos} ${i + 1}`}>
+                    <Image source={{uri}} style={styles.thumb} />
+                  </Pressable>
+                ))
+              ) : (
+                ticketPhotoPaths.map((path, i) => (
+                  <View key={`pending-${i}-${path}`} style={[styles.thumb, {backgroundColor: theme.border}]} />
+                ))
+              )}
+            </View>
+          </View>
+        ) : null}
         {typeof ticket.declineReason === "string" && ticket.declineReason ? (
           <Section theme={theme} icon="error-outline">
             <Text style={[styles.coords, {color: theme.danger}]}>
               {declineReasonLabel(ticket.declineReason, t)}{typeof ticket.declineNote === "string" && ticket.declineNote ? ` · ${ticket.declineNote}` : ""}
             </Text>
           </Section>
+        ) : null}
+        {showUnfixable ? (
+          <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
+            <MaterialIcons name="error-outline" size={16} color="#fff" />
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerTitle}>{t.assist.unfixableTitle}</Text>
+              <Text style={styles.bannerText}>{t.assist.unfixableRefund}</Text>
+            </View>
+          </View>
+        ) : null}
+        {towerCancelled ? (
+          <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
+            <MaterialIcons name="warning" size={16} color="#fff" />
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerText}>{t.assist.towerCancelMid}</Text>
+              <View style={styles.bannerRow}>
+                {onRequeue ? (
+                  <Pressable style={[styles.bannerBtn, {borderColor: "#fff"}]} onPress={() => onRequeue(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.requeue}>
+                    <Text style={styles.bannerBtnText}>{t.assist.requeue}</Text>
+                  </Pressable>
+                ) : null}
+                {onOpenDispute ? (
+                  <Pressable style={[styles.bannerBtn, {borderColor: "#fff"}]} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>
+                    <Text style={styles.bannerBtnText}>{t.assist.disputeTicket}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        ) : null}
+        {shopDeclinedMid ? (
+          <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
+            <MaterialIcons name="warning" size={16} color="#fff" />
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerText}>{t.assist.shopDeclineMid}</Text>
+              <View style={styles.bannerRow}>
+                {onOpenDispute ? (
+                  <Pressable style={[styles.bannerBtn, {borderColor: "#fff"}]} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>
+                    <Text style={styles.bannerBtnText}>{t.assist.disputeTicket}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
         ) : null}
         {typeof ticket.workType === "string" && ticket.workType ? (
           <Section theme={theme} icon="build">
@@ -494,6 +618,88 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
               {typeof ticket.finalAmount === "number" ? `${t.assist.finalPrice}: ${ticket.finalAmount.toLocaleString()} VND` : ""}
             </Text>
           </Section>
+        ) : null}
+        {showEstimateCard && estimateAmount !== null ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.label, {color: theme.text}]}>{t.assist.estimateTitle}</Text>
+            <Text style={[styles.amount, {color: theme.text}]}>{estimateAmount.toLocaleString()} VND</Text>
+            {estimateNote !== null ? <Text style={[styles.coords, {color: theme.muted}]}>{estimateNote}</Text> : null}
+            {typeof ticket.estimateAmount === "number" ? (
+              <Text style={[styles.coords, {color: estimateState === "expired" ? theme.danger : theme.muted}]}>{estimateState === "approved" ? t.assist.estimateStateApproved : estimateState === "expired" ? t.assist.estimateStateExpired : t.assist.estimateStateAwaiting}</Text>
+            ) : null}
+            {ticket.direction === "out" && estimateState === "pending" && (onApproveEstimate || onDeclineEstimate) ? (
+              <View style={styles.metaRow}>
+                {onDeclineEstimate ? (
+                  <Pressable style={[styles.chipBtn, {borderColor: theme.danger}]} disabled={busy} onPress={() => onDeclineEstimate(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.declineEstimate}>
+                    <Text style={{color: theme.danger}}>{t.assist.decline}</Text>
+                  </Pressable>
+                ) : null}
+                {onApproveEstimate ? (
+                  <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onApproveEstimate(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.approve}>
+                    <Text style={styles.actionText}>{t.assist.approve}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {showFinalCard && typeof ticket.finalAmount === "number" ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.label, {color: theme.text}]}>{t.assist.finalTitle}</Text>
+            <Text style={[styles.amount, {color: theme.text}]}>{(ticket.finalAmount as number).toLocaleString()} VND</Text>
+            {typeof ticket.workType === "string" && ticket.workType !== "" ? <Text style={[styles.coords, {color: theme.muted}]}>{ticket.workType}</Text> : null}
+            {faultPhotos.length > 0 ? (
+              <View style={styles.photoRow}>
+                {faultPhotos.map((uri, i) => (
+                  <Pressable key={`${i}-${uri}`} onPress={() => photoViewer.open(uri)} accessibilityRole="button" accessibilityLabel={`${t.assist.finalTitle} ${i + 1}`}>
+                    <Image source={{uri}} style={styles.thumb} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {ticket.direction === "out" ? (
+              <View style={styles.metaRow}>
+                {onApproveFinal ? (
+                  <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onApproveFinal(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.approve}>
+                    <Text style={styles.actionText}>{t.assist.approve}</Text>
+                  </Pressable>
+                ) : null}
+                {onPayNow ? (
+                  <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onPayNow(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
+                    <Text style={styles.actionText}>{t.assist.payNow}</Text>
+                  </Pressable>
+                ) : null}
+                {onOpenDispute ? (
+                  <Pressable style={[styles.chipBtn, {borderColor: theme.danger}]} disabled={busy} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>
+                    <Text style={{color: theme.danger}}>{t.assist.disputeTicket}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {showWaiting ? (
+          <View style={[styles.waitRow, {borderColor: "#f59e0b"}]}>
+            <MaterialIcons name="schedule" size={16} color="#f59e0b" />
+            <Text style={[styles.coords, {color: "#f59e0b"}]}>
+              {t.assist.waitingTitle}{waitingMinutes !== null && waitingMinutes > 0 ? ` · ${waitingMinutes} ${t.route.min}` : ""}{waitingFee !== null && waitingFee > 0 ? ` · ${waitingFee.toLocaleString()} VND` : ""}
+            </Text>
+          </View>
+        ) : null}
+        {payMethod !== null ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.coords, {color: theme.muted}]}>{paymentMethodLabel(payMethod)}{payStatus !== null ? ` · ${payStatus === "HELD" && payMethod === "SEPAY" ? t.assist.sepayHeld : paymentStatusLabel(payStatus)}` : ""}</Text>
+            {payMethod === "SEPAY" && qrUri !== null ? (
+              <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void Linking.openURL(qrUri)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
+                <Text style={styles.actionText}>{t.assist.payNow}</Text>
+              </Pressable>
+            ) : null}
+            {payMethod === "CASH" && payStatus !== "CONFIRMED" && ticket.direction === "in" && onConfirmCash ? (
+              <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onConfirmCash(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.cashConfirmReceipt}>
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{t.assist.cashConfirmReceipt}</Text>}
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         {ticket.ticketType === "TOW" && ticket.towFare !== null && typeof ticket.towFare === "object" && typeof ticket.towFare.estimate === "number" ? (
           <Section theme={theme} icon="payments">
@@ -566,16 +772,22 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             {typeof ticket.shopQuotedAmount === "number" ? (
               <TextInput style={[styles.input, styles.locked, {borderColor: theme.border, color: theme.muted}]} value={ticket.shopQuotedAmount.toLocaleString()} editable={false} accessibilityLabel={t.provider.quotedAmount} />
             ) : (
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={quoted} onChangeText={setQuoted} placeholder={t.provider.quotedAmount} placeholderTextColor={theme.muted} keyboardType="numeric" />
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={quoted} onChangeText={(value) => setQuoted(formatAmountInput(value))} placeholder={t.provider.quotedAmount} placeholderTextColor={theme.muted} keyboardType="number-pad" />
             )}
             <Text style={[styles.label, {color: theme.text}]}>{t.provider.finalAmount}</Text>
             {typeof ticket.finalAmount === "number" ? (
               <TextInput style={[styles.input, styles.locked, {borderColor: theme.border, color: theme.muted}]} value={ticket.finalAmount.toLocaleString()} editable={false} accessibilityLabel={t.provider.finalAmount} />
             ) : (
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={final} onChangeText={setFinal} placeholder={t.provider.finalAmount} placeholderTextColor={theme.muted} keyboardType="numeric" />
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={final} onChangeText={(value) => setFinal(formatAmountInput(value))} placeholder={t.provider.finalAmount} placeholderTextColor={theme.muted} keyboardType="number-pad" />
             )}
           </View>
         ) : null}
+        {showDisputeFoot && onOpenDispute ? (
+          <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.danger}]} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>
+            <Text style={{color: theme.danger}}>{t.assist.disputeTicket}</Text>
+          </Pressable>
+        ) : null}
+        {photoViewer.node}
       </View>
     </Overlay>
   );
@@ -621,4 +833,16 @@ const styles = StyleSheet.create({
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   locked: {opacity: 0.7},
   disabled: {opacity: 0.6},
+  amount: {fontSize: 16, fontWeight: "700"},
+  photoRow: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
+  thumb: {width: 64, height: 64, borderRadius: 8},
+  waitRow: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10},
+  banner: {flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10, alignItems: "flex-start"},
+  bannerBody: {flex: 1, gap: 6},
+  bannerTitle: {color: "#fff", fontSize: 13, fontWeight: "700"},
+  bannerText: {color: "#fff", fontSize: 12},
+  bannerRow: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
+  bannerBtn: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
+  bannerBtnText: {color: "#fff", fontWeight: "700"},
+  inlineAction: {flex: 1},
 });

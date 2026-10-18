@@ -14,7 +14,7 @@ const pickup = {lat: 10.71, lng: 106.61};
 const dest = {lat: 10.75, lng: 106.65};
 const lineGeometry = {type: "LineString", coordinates: [[106.59, 10.69], [106.61, 10.71]]} as {type: "LineString"; coordinates: [number, number][]};
 
-async function renderMap(status: string, withDest: boolean, route: boolean) {
+async function renderMap(status: string, withDest: boolean, route: boolean, routeCoords: [number, number][] = lineGeometry.coordinates) {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
@@ -27,7 +27,7 @@ async function renderMap(status: string, withDest: boolean, route: boolean) {
           selectedShop={null}
           pillTextForShop={() => null}
           walkRoute={null}
-          jobLayers={{tower, pickup, dest: withDest ? dest : null, status, route: route ? {source: "test", geometry: lineGeometry} : null}}
+          jobLayers={{tower, pickup, dest: withDest ? dest : null, status, route: route ? {source: "test", geometry: {type: "LineString", coordinates: routeCoords}} : null}}
           onMapReady={() => undefined}
         />
       </SafeAreaProvider>,
@@ -105,6 +105,17 @@ test("no route keeps the straight connector", async () => {
   try {
     expect(sourceById(renderer, "tow-job-route").length).toBe(0);
     expect(sourceById(renderer, "tow-job-line").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("single-point route geometry draws no polyline", async () => {
+  const renderer = await renderMap("2", true, true, [[106.59, 10.69]]);
+  try {
+    expect(sourceById(renderer, "tow-job-route").length).toBe(0);
+    expect(sourceById(renderer, "tow-job-route-casing").length).toBe(0);
+    expect(sourceById(renderer, "tow-job-line").length).toBe(0);
   } finally {
     renderer.unmount();
   }

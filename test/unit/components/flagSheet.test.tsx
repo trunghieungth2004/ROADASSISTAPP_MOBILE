@@ -1,11 +1,16 @@
-import {expect, test} from "@jest/globals";
+import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
 import FlagSheet, {useFlagDraft, type FlagDraftState} from "../../../src/components/flags/FlagSheet";
-import {lightTheme} from "../../../src/theme";
 import {en} from "../../../src/i18n/en";
 
+jest.mock("../../../src/services/photos", () => ({
+  takePhoto: jest.fn(async () => ["file://shot.jpg"]),
+  pickPhotos: jest.fn(async () => ["file://pick.jpg"]),
+  isPhotoPermissionError: jest.fn(() => false),
+}));
+
 function Probe({onDraft}: {onDraft: (d: FlagDraftState) => void}) {
-  onDraft(useFlagDraft());
+  onDraft(useFlagDraft(en));
   return null;
 }
 
@@ -19,7 +24,7 @@ async function render() {
   const sheet = await (async () => {
     let s: ReturnType<typeof create> | undefined;
     await act(async () => {
-      s = create(<FlagSheet t={en} lat={10.7} lng={106.6} draft={draft as FlagDraftState} />);
+      s = create(<FlagSheet t={en} draft={draft as FlagDraftState} />);
     });
     if (!s) throw new Error("render failed");
     return s;
@@ -42,7 +47,7 @@ test("type row shows all types and selects directly", async () => {
   async function sheetFor(d: FlagDraftState) {
     let s: ReturnType<typeof create> | undefined;
     await act(async () => {
-      s = create(<FlagSheet t={en} lat={10.7} lng={106.6} draft={d} />);
+      s = create(<FlagSheet t={en} draft={d} />);
     });
     if (!s) throw new Error("render failed");
     return s;
@@ -52,17 +57,15 @@ test("type row shows all types and selects directly", async () => {
   try {
     const first = await sheetFor(draft);
     expect(optionsOf(first)).toHaveLength(3);
-    const accident = optionsOf(first).find((n) =>
-      n.findAll((m) => m.props?.children === en.flag.accident).length > 0,
-    );
+    const accident = optionsOf(first).find((n) => n.props.accessibilityLabel === en.flag.accident);
     expect(accident?.props.accessibilityState?.checked).toBe(false);
     await act(async () => {
       await accident?.props.onPress();
     });
     first.unmount();
     const second = await sheetFor(draft as FlagDraftState);
-    const current = optionsOf(second).find((n) => n.props?.accessibilityState?.checked === true);
-    expect(current?.findAll((m) => m.props?.children === en.flag.accident).length).toBeGreaterThan(0);
+    const current = optionsOf(second).find((n) => n.props.accessibilityState?.checked === true);
+    expect(current?.props.accessibilityLabel).toBe(en.flag.accident);
     await act(async () => {
       second.unmount();
     });
@@ -78,6 +81,10 @@ test("no note field and five radius chips in one row", async () => {
   try {
     const note = sheet.root.findAll((n) => n.props?.placeholder === undefined && n.props?.maxLength === 280).find((n) => typeof n.props?.onChangeText === "function");
     expect(note).toBeUndefined();
+    const texts = sheet.root.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string);
+    expect(texts).toContain(en.flag.type);
+    const radiusLabel = sheet.root.findAll((n) => Array.isArray(n.props?.children) && n.props.children.join("") === `${en.flag.radius} (m)`);
+    expect(radiusLabel.length).toBeGreaterThan(0);
     const chips = [25, 50, 100, 200, 250].map((r) =>
       sheet.root.findAll((n) => n.props?.children === r || n.props?.children === String(r)),
     );
@@ -103,7 +110,7 @@ test("reselected type stays checked on reopen", async () => {
   async function sheetFor(d: FlagDraftState) {
     let s: ReturnType<typeof create> | undefined;
     await act(async () => {
-      s = create(<FlagSheet t={en} lat={10.7} lng={106.6} draft={d} />);
+      s = create(<FlagSheet t={en} draft={d} />);
     });
     if (!s) throw new Error("render failed");
     return s;
@@ -112,22 +119,86 @@ test("reselected type stays checked on reopen", async () => {
     sheet.root.findAll((n) => typeof n.props?.onPress === "function" && n.props?.accessibilityState?.checked !== undefined && n.findAll((m) => typeof m.props?.name === "string").length > 0);
   try {
     const first = await sheetFor(draft);
-    const obstruction = optionsOf(first).find((n) =>
-      n.findAll((m) => m.props?.children === en.flag.obstruction).length > 0,
-    );
+    const obstruction = optionsOf(first).find((n) => n.props.accessibilityLabel === en.flag.obstruction);
     await act(async () => {
       await obstruction?.props.onPress();
     });
     first.unmount();
     const second = await sheetFor(draft as FlagDraftState);
-    const current = optionsOf(second).find((n) => n.props?.accessibilityState?.checked === true);
-    expect(current?.findAll((m) => m.props?.children === en.flag.obstruction).length).toBeGreaterThan(0);
+    const current = optionsOf(second).find((n) => n.props.accessibilityState?.checked === true);
+    expect(current?.props.accessibilityLabel).toBe(en.flag.obstruction);
     await act(async () => {
       second.unmount();
     });
   } finally {
     await act(async () => {
       probe?.unmount();
+    });
+  }
+});
+
+test("camera tile takes a shot directly and previews the strip", async () => {
+  let draft: FlagDraftState | undefined;
+  let probe: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    probe = create(<Probe onDraft={(d) => { draft = d; }} />);
+  });
+  if (!probe || !draft) throw new Error("mount failed");
+  let sheet: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    sheet = create(<FlagSheet t={en} draft={draft as FlagDraftState} />);
+  });
+  if (!sheet) throw new Error("render failed");
+  try {
+    const addTile = sheet.root.find((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function");
+    await act(async () => {
+      await addTile.props.onPress();
+    });
+    expect(draft?.photoUris).toEqual(["file://shot.jpg"]);
+    await act(async () => {
+      sheet?.update(<FlagSheet t={en} draft={draft as FlagDraftState} />);
+    });
+    const strips = sheet.root.findAll((n) => n.props?.source?.uri === "file://shot.jpg");
+    expect(strips.length).toBeGreaterThan(0);
+    expect(flatStyle(strips[0].props.style)).toMatchObject({width: "100%", height: 48});
+    const remove = sheet.root.find((n) => n.props?.accessibilityLabel === en.common.delete && typeof n.props?.onPress === "function");
+    await act(async () => {
+      remove.props.onPress();
+    });
+    expect(draft?.photoUris).toEqual([]);
+  } finally {
+    await act(async () => {
+      sheet?.unmount();
+      probe?.unmount();
+    });
+  }
+});
+
+test("add tile disappears at the three-photo cap", async () => {
+  const draft: FlagDraftState = {
+    type: "FLOOD",
+    radiusMeters: 50,
+    note: "",
+    photoUris: ["a.jpg", "b.jpg", "c.jpg"],
+    photoError: null,
+    setType: () => undefined,
+    setRadiusMeters: () => undefined,
+    setNote: () => undefined,
+    addPhoto: async () => undefined,
+    removePhoto: () => undefined,
+    build: () => ({type: "FLOOD", radiusMeters: 50}),
+  };
+  let sheet: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    sheet = create(<FlagSheet t={en} draft={draft} />);
+  });
+  if (!sheet) throw new Error("render failed");
+  try {
+    expect(sheet.root.findAll((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function")).toHaveLength(0);
+    expect(sheet.root.findAll((n) => n.props?.source?.uri === "a.jpg").length).toBeGreaterThan(0);
+  } finally {
+    await act(async () => {
+      sheet?.unmount();
     });
   }
 });

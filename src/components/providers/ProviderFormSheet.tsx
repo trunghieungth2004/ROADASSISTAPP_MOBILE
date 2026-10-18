@@ -57,7 +57,15 @@ export default function ProviderFormSheet({t, draft}: Props) {
           {provider ? (
             <>
               <Text style={[styles.label, {color: theme.text}]}>{t.tow.plate}</Text>
-              <Text style={[styles.coords, {color: theme.text}]}>{typeof provider.plate === "string" ? provider.plate : ""}</Text>
+              <TextInput style={[styles.input, {borderColor: !draft.plateOk ? theme.danger : theme.border, color: theme.text}]} value={draft.plate} onChangeText={draft.setPlate} placeholder={t.tow.platePlaceholder} placeholderTextColor={theme.muted} autoCapitalize="characters" />
+              <View style={styles.row}>
+                {TOW_TYPES.map((id) => (
+                  <Pressable key={id} onPress={() => draft.setTowType(id)} style={[styles.chip, {borderColor: theme.primary}, draft.towType === id && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: draft.towType === id}}>
+                    <Text style={{color: draft.towType === id ? "#fff" : theme.text}}>{t.vehicle.types[id]}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.towWidth} onChangeText={draft.setTowWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
               <Text style={[styles.label, {color: theme.text}]}>{t.provider.towPosition}</Text>
               <Text style={[styles.coords, {color: theme.muted}]}>{formatPoint(draft.towPoint?.lat ?? provider.lat, draft.towPoint?.lng ?? provider.lng)}</Text>
               <Pressable onPress={() => draft.setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>

@@ -66,6 +66,14 @@ export function canEditDestination(direction: FeedDirection, status: string, tic
   return status === DISPATCH_STATUS.PENDING || status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED;
 }
 
+export function canSeeRequestPhotos(ticket: Pick<FeedTicket, "direction" | "assignedShopId" | "providerId" | "destinationShopId" | "assignedUid">, ownShopIds: Set<string>, uid: string | null, hasVolunteer: boolean): boolean {
+  if (ticket.direction === "out") return true;
+  if (typeof ticket.assignedShopId === "string" && ownShopIds.has(ticket.assignedShopId)) return true;
+  if (typeof ticket.providerId === "string" && ownShopIds.has(ticket.providerId)) return true;
+  if (typeof ticket.destinationShopId === "string" && ownShopIds.has(ticket.destinationShopId)) return true;
+  return hasVolunteer && uid !== null && ticket.assignedUid === uid;
+}
+
 export function retargetableLiveTicket(feed: FeedTicket[], ticketId: string): FeedTicket | null {
   const row = feed.find((t) => t.id === ticketId) ?? null;
   if (!row) return null;
@@ -79,4 +87,41 @@ export function announcesShopPush(feed: FeedTicket[], ownShopIds: Set<string>, t
   if (!row || row.direction !== "in" || row.status !== DISPATCH_STATUS.PENDING) return false;
   return (typeof row.destinationShopId === "string" && ownShopIds.has(row.destinationShopId)) ||
     (typeof row.providerId === "string" && ownShopIds.has(row.providerId));
+}
+
+export const DISPUTE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function canDispute(status: string): boolean {
+  return !isTerminal(status) && status !== DISPATCH_STATUS.PENDING;
+}
+
+export function canDisputeResolved(ticket: Pick<FeedTicket, "status" | "towFare" | "shopQuotedAmount" | "finalAmount" | "statusHistory">, now: number = Date.now()): boolean {
+  if (ticket.status !== DISPATCH_STATUS.RESOLVED) return false;
+  const fared = typeof ticket.towFare?.estimate === "number" || typeof ticket.shopQuotedAmount === "number" || typeof ticket.finalAmount === "number";
+  if (!fared) return false;
+  const history = Array.isArray(ticket.statusHistory) ? ticket.statusHistory : [];
+  const resolved = history.filter((entry) => entry.status === DISPATCH_STATUS.RESOLVED).pop();
+  if (!resolved || typeof resolved.at !== "string" || resolved.at === "") return true;
+  const at = Date.parse(resolved.at);
+  if (Number.isNaN(at)) return true;
+  return now - at <= DISPUTE_WINDOW_MS;
+}
+
+export type EstimateState = "none" | "pending" | "approved" | "expired";
+
+export function estimateStateOf(ticket: Pick<FeedTicket, "estimateAmount" | "estimateApprovedAt" | "estimateExpiresAt">, now: number = Date.now()): EstimateState {
+  if (typeof ticket.estimateAmount !== "number") return "none";
+  if (typeof ticket.estimateApprovedAt === "string" && ticket.estimateApprovedAt !== "") return "approved";
+  if (typeof ticket.estimateExpiresAt === "string" && ticket.estimateExpiresAt !== "") {
+    const at = Date.parse(ticket.estimateExpiresAt);
+    if (!Number.isNaN(at) && at <= now) return "expired";
+  }
+  return "pending";
+}
+
+export function canSendEstimate(direction: FeedDirection, ticketType: string, status: string, isDestinationShop: boolean, state: EstimateState): boolean {
+  if (direction !== "in" || !isDestinationShop) return false;
+  if (ticketType !== "TOW") return false;
+  if (status !== DISPATCH_STATUS.PENDING && status !== DISPATCH_STATUS.MATCHED && status !== DISPATCH_STATUS.ARRIVED) return false;
+  return state === "none" || state === "expired";
 }

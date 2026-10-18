@@ -67,6 +67,10 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
     setProviderBusy(true);
     try {
       const targets = providers.filter((p) => p.kind === kind && switchEnabled(p, false));
+      if (targets.length === 0) {
+        onNotice(kind === "TOW" ? t.more.dutyTowOff : t.more.dutyShopOff);
+        return;
+      }
       for (const target of targets) {
         await updateProvider({providerId: target.id, accepting: next}, token);
       }

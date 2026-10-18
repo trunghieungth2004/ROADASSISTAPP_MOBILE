@@ -24,7 +24,7 @@ jest.mock("expo-file-system", () => ({
     (url: string, target: string, options: unknown, onProgress?: (p: {totalBytesWritten: number; totalBytesExpectedToWrite: number}) => void) => ({
       downloadAsync: jest.fn(async () => {
         onProgress?.({totalBytesWritten: 50, totalBytesExpectedToWrite: 100});
-        return {uri: target};
+        return {uri: target, exists: true, size: 1024};
       }),
     }),
   ),

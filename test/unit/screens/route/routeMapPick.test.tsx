@@ -62,7 +62,7 @@ async function flush(times = 8): Promise<void> {
   }
 }
 
-async function pickFieldPoint(renderer: ReturnType<typeof create>, fieldText: string): Promise<void> {
+async function pickFieldPoint(renderer: ReturnType<typeof create>, fieldText: string, center?: [number, number]): Promise<void> {
   const field = renderer.root
     .findAll((n) => typeof n.props?.onPress === "function")
     .find((n) => textsUnder(n).includes(fieldText));
@@ -79,6 +79,14 @@ async function pickFieldPoint(renderer: ReturnType<typeof create>, fieldText: st
     await mapButton[0].props.onPress();
     await flush();
   });
+  if (center) {
+    const mapNode = renderer.root.findAll((n) => typeof n.props?.onRegionDidChange === "function" && typeof n.props?.onPress !== "function")[0];
+    expect(mapNode).toBeDefined();
+    await act(async () => {
+      mapNode?.props.onRegionDidChange({nativeEvent: {center}});
+      await flush();
+    });
+  }
   const confirm = renderer.root.findAll(
     (n) => n.props?.accessibilityLabel === en.provider.useThisLocation && typeof n.props?.onPress === "function",
   );
@@ -111,10 +119,10 @@ test("route start seeds a session without any shop check-in", async () => {
   });
   if (!renderer) throw new Error("mount failed");
   try {
-    await pickFieldPoint(renderer, en.route.selectOrigin);
-    await pickFieldPoint(renderer, en.route.selectDestination);
-    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+    await pickFieldPoint(renderer, en.route.selectOrigin, [106.6, 10.7]);
+    await pickFieldPoint(renderer, en.route.selectDestination, [106.61, 10.71]);
     await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 800));
       await flush(12);
     });
     const start = renderer.root
@@ -174,6 +182,42 @@ test("route destination search offers map pick and confirms into the field", asy
       await flush(12);
     });
     expect(renderer.root.findAll((n) => flatText(n.props?.children) === "Mock Route Point").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("picking the same origin and destination skips the route request", async () => {
+  await clearGeocodeCache();
+  const fetchMock = jest.fn(async (url: string) => {
+    if (String(url).includes("maptiler")) return {ok: true, json: async () => ({features: [{place_name: "Mock Route Point"}]})} as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({statusCode: 200, status: "SUCCESS", data: {routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]}}),
+    } as Response;
+  });
+  globalThis.fetch = (fetchMock as unknown) as typeof fetch;
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <RouteScreen />
+      </SafeAreaProvider>,
+    );
+    await flush();
+  });
+  if (!renderer) throw new Error("mount failed");
+  try {
+    await pickFieldPoint(renderer, en.route.selectOrigin, [106.6, 10.7]);
+    await pickFieldPoint(renderer, en.route.selectDestination, [106.6, 10.7]);
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 800));
+      await flush(12);
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/routes"))).toHaveLength(0);
+    expect(renderer.root.findAll((n) => flatText(n.props?.children).includes(en.route.samePlace)).length).toBeGreaterThan(0);
   } finally {
     renderer.unmount();
     globalThis.fetch = realFetch;

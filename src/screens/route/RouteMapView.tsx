@@ -6,7 +6,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/ui/AppText";
 import {Camera, Images, Map, Marker, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/map/StyledLayer";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
@@ -51,7 +51,7 @@ type Props = {
 
 export default function RouteMapView(props: Props) {
   const scheme = useColorScheme();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const {t, theme} = props;
   const insets = useSafeAreaInsets();
@@ -83,11 +83,11 @@ export default function RouteMapView(props: Props) {
           "pin-preview": require("../../../assets/map/hazards/pin-preview.png"),
         }} />
         <FlagPinImages />
-        {props.routes.map((r, i) => i === props.selectedIndex ? null : (
+        {props.routes.map((r, i) => i === props.selectedIndex || r.geometry.coordinates.length < 2 ? null : (
           <GeoJSONSource key={`route-${i}`} id={`route-${i}`} data={{type: "Feature", geometry: r.geometry, properties: {}}}><StyledLayer type="line" id={`routeLine-${i}`} beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource>
         ))}
-        {props.result ? <GeoJSONSource key={`route-main-casing-${props.selectedIndex}`} id={`route-main-casing-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-casing-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
-        {props.result ? <GeoJSONSource key={`route-main-${props.selectedIndex}`} id={`route-main-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result && props.result.geometry.coordinates.length > 1 ? <GeoJSONSource key={`route-main-casing-${props.selectedIndex}`} id={`route-main-casing-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-casing-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 9, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
+        {props.result && props.result.geometry.coordinates.length > 1 ? <GeoJSONSource key={`route-main-${props.selectedIndex}`} id={`route-main-${props.selectedIndex}`} data={{type: "Feature", geometry: props.result.geometry, properties: {}}}><StyledLayer type="line" id={`routeMainLine-${props.selectedIndex}`} beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 4, lineOpacity: 0.8, lineCap: "round", lineJoin: "round"}} /></GeoJSONSource> : null}
         {props.hazardHighlight && props.hazardHighlight.length > 1 ? (
           <GeoJSONSource id="route-hazard-highlight-casing" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.hazardHighlight}, properties: {}}}>
             <StyledLayer type="line" id="route-hazard-highlight-casing-line" beforeId="Ferry labels" style={{lineColor: "#ffffff", lineWidth: 9, lineOpacity: 1, lineCap: "round", lineJoin: "round"}} />

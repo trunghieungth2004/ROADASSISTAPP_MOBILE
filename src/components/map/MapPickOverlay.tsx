@@ -8,7 +8,7 @@ import {formatPoint, reverseLabel} from "../../api/places";
 import {toMessage} from "../../api/client";
 import {getFix} from "../../services/geo";
 import {darkTheme, lightTheme} from "../../theme";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import MapStyleVeil from "./MapStyleVeil";
 import {useStyleVeil} from "./useStyleVeil";
 import {HCMC_CENTER} from "../../screens/route/types";
@@ -35,7 +35,7 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const [center, setCenter] = useState<[number, number]>(initial ? [initial.lng, initial.lat] : HCMC_CENTER);

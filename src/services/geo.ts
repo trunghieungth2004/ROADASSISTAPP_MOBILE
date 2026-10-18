@@ -20,6 +20,16 @@ function pointOf(pos: {coords: {latitude: number; longitude: number}}): {lat: nu
   return {lat: pos.coords.latitude, lng: pos.coords.longitude};
 }
 
+export function metersBetween(a: {lat: number; lng: number}, b: {lat: number; lng: number}): number {
+  const r = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const aa = s1 * s1 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * s2 * s2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(aa)));
+}
+
 export async function getFix(options?: FixOptions): Promise<{lat: number; lng: number}> {
   const {accuracy, maxAgeMs, requiredAccuracyMeters, timeoutMs, staleFallback} = {...DEFAULTS, ...options};
   const servicesOn = await Location.hasServicesEnabledAsync().catch(() => true);

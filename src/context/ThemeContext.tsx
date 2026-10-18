@@ -16,15 +16,16 @@ export function ThemeProvider({children}: {children: ReactNode}) {
       if (!mounted) return;
       const next = saved === "dark" || saved === "light" ? saved : systemMode;
       setMode(next);
-      Appearance.setColorScheme(next);
     }).catch(() => undefined);
     return () => { mounted = false; };
-  }, [systemMode]);
+  }, []);
+  useEffect(() => {
+    Appearance.setColorScheme(mode);
+  }, [mode]);
   const toggle = () => {
     setMode((current) => {
       const next = current === "dark" ? "light" : "dark";
-      Appearance.setColorScheme(next);
-      void AsyncStorage.setItem(THEME_KEY, next);
+      void AsyncStorage.setItem(THEME_KEY, next).catch(() => undefined);
       return next;
     });
   };

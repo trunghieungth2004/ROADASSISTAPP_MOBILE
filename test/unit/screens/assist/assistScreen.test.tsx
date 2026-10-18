@@ -1433,7 +1433,7 @@ test("operator marks in-progress jobs ready from the sheet", async () => {
   }
 });
 
-test("shop sends a quote from the work form", async () => {
+test("shop sends an estimate from the work form", async () => {
   const renderer = await mount();
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
@@ -1456,9 +1456,42 @@ test("shop sends a quote from the work form", async () => {
       await sheetAction(renderer, en.assist.sendQuote)?.props.onPress();
       await flush();
     });
-    const posted = seen.find((call) => call.path === "/dispatch/quote");
+    const posted = seen.find((call) => call.path === "/dispatch/estimate");
     expect(posted).toBeDefined();
-    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", quotedAmount: 150000});
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", estimateAmount: 150000});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("destination shop sends an estimate from the modal", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
+    mockFeed = [{id: "t4", userId: "rider4", ticketType: "TOW", lat: 10.7, lng: 106.6, status: "2", destinationShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Matched");
+    const open = sheetAction(renderer, en.assist.sendEstimate);
+    expect(open).toBeDefined();
+    await act(async () => {
+      await open?.props.onPress();
+      await flush();
+    });
+    const amount = renderer.root.findAll((n) => typeof n.props?.onChangeText === "function" && n.props?.placeholder === "0")[0];
+    expect(amount).toBeDefined();
+    await act(async () => {
+      await amount?.props.onChangeText("150000");
+      await flush();
+    });
+    expect(renderer.root.findAll((n) => n.props?.value === "150,000").length).toBeGreaterThan(0);
+    seen.length = 0;
+    const submits = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.sendEstimate && typeof n.props?.onPress === "function");
+    await act(async () => {
+      await submits.pop()?.props.onPress();
+      await flush();
+    });
+    const posted = seen.find((call) => call.path === "/dispatch/estimate");
+    expect(posted).toBeDefined();
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t4", estimateAmount: 150000});
   } finally {
     teardown(renderer);
   }

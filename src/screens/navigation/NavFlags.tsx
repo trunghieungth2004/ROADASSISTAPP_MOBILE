@@ -70,7 +70,10 @@ export default function NavFlags({pos, token, refreshKey, forceKey, seedFlags, u
   const merged = useMemo(() => {
     if (seedFlags.length === 0) return flags;
     const byId = new Map(flags.map((f) => [f.id, f]));
-    for (const s of seedFlags) byId.set(s.id, s);
+    for (const s of seedFlags) {
+      const fetched = byId.get(s.id);
+      byId.set(s.id, fetched ? {...fetched, ...s, type: s.type || fetched.type} : s);
+    }
     return [...byId.values()];
   }, [flags, seedFlags]);
   useEffect(() => {

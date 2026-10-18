@@ -58,6 +58,13 @@ async function mountTow() {
   await act(async () => {
     await towToggle?.props.onPress();
   });
+  const cont = renderer.root
+    .findAll((n) => typeof n.props?.onPress === "function")
+    .find((n) => textsUnder(n).some((text) => text.includes(en.roles.done)));
+  expect(cont).toBeDefined();
+  await act(async () => {
+    await cont?.props.onPress();
+  });
   return renderer;
 }
 

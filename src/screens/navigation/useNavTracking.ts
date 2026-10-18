@@ -98,6 +98,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   const arrivedRef = useRef(false);
   const offRef = useRef(0);
   const lastRerouteRef = useRef(0);
+  const suppressedRef = useRef(0);
   const seqRef = useRef(0);
   const announcedRef = useRef({idx: -1, tier: 0});
   const alertedRef = useRef(new Set<string>());
@@ -147,7 +148,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
   const ANNOUNCE_NEAR_SEC = 12;
   const ANNOUNCE_CLOSE_SEC = 5;
   const BEARING_DIRECT_GAP_MS = 250;
-  const REROUTE_COOLDOWN_MS = 30000;
+  const REROUTE_COOLDOWN_MS = 15000;
   const wrapDeg = (d: number): number => ((d + 540) % 360) - 180;
   const pickBearing = (): number => {
     const h = headingRef.current;
@@ -164,7 +165,13 @@ export function useNavTracking(opts: NavTrackingOpts): {
 
   async function reroute(lat: number, lng: number, manual = false): Promise<boolean> {
     const now = Date.now();
-    if (!manual && now - lastRerouteRef.current < REROUTE_COOLDOWN_MS) return false;
+    if (!manual && now - lastRerouteRef.current < REROUTE_COOLDOWN_MS) {
+      suppressedRef.current += 1;
+      if (suppressedRef.current < 2) return false;
+      suppressedRef.current = 0;
+    } else if (!manual) {
+      suppressedRef.current = 0;
+    }
     lastRerouteRef.current = now;
     const id = (seqRef.current += 1);
     reroutingRef.current = true;
@@ -393,6 +400,7 @@ export function useNavTracking(opts: NavTrackingOpts): {
               }
             } else {
               offRef.current = 0;
+              suppressedRef.current = 0;
             }
           }
           let ni = -1;

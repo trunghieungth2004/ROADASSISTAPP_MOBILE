@@ -156,3 +156,26 @@ test("mid-route pill hides while dragging", async () => {
     renderer.unmount();
   }
 });
+
+test("single-point alternative geometry draws no line", async () => {
+  const good = option(2400, 2280);
+  const point: RouteOption = {...option(0, 0), geometry: {type: "LineString", coordinates: [[106.6, 10.7]]}};
+  const renderer = await render([good, point], () => undefined, {result: good, selectedIndex: 0});
+  try {
+    expect(renderer.root.findAll((n) => n.props?.id === "route-1").length).toBe(0);
+    expect(renderer.root.findAll((n) => n.props?.id === "route-main-0").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("single-point selected geometry draws no main line", async () => {
+  const point: RouteOption = {...option(0, 0), geometry: {type: "LineString", coordinates: [[106.6, 10.7]]}};
+  const renderer = await render([point], () => undefined, {result: point, selectedMid: null});
+  try {
+    expect(renderer.root.findAll((n) => n.props?.id === "route-main-0").length).toBe(0);
+    expect(renderer.root.findAll((n) => n.props?.id === "route-main-casing-0").length).toBe(0);
+  } finally {
+    renderer.unmount();
+  }
+});

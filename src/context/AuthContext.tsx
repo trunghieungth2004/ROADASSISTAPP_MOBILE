@@ -2,7 +2,7 @@ import {createContext, useCallback, useContext, useEffect, useMemo, useState, ty
 import {onIdTokenChanged, signOut as firebaseSignOut} from "firebase/auth";
 import * as SecureStore from "expo-secure-store";
 import {auth} from "../auth/firebase";
-import {setTokenRefresher, setUnauthorizedHandler} from "../api/client";
+import {clearInflight, setTokenRefresher, setUnauthorizedHandler} from "../api/client";
 import {clearApiCache} from "../services/cache";
 import {unsyncPushToken} from "../services/push";
 
@@ -47,6 +47,8 @@ export function AuthProvider({children}: {children: ReactNode}) {
     const user = auth.currentUser;
     if (!user) return null;
     const token = await user.getIdToken(true);
+    clearApiCache();
+    clearInflight();
     await signIn(user.uid, token);
     return token;
   }, [signIn]);

@@ -28,11 +28,17 @@ export default function VehicleCreateDialog({t, theme, token, onClose, onCreated
   }
   async function onSave(): Promise<void> {
     if (!token || busy) return;
+    const w = Number(width);
+    const h = Number(height);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 0.3 || w > 3 || h < 0.5 || h > 3) {
+      setError(t.vehicle.invalidDims);
+      return;
+    }
     Keyboard.dismiss();
     setBusy(true);
     setError(null);
     try {
-      const created = await createProfile({type, baseWidth: Number(width), baseHeight: Number(height)}, token);
+      const created = await createProfile({type, baseWidth: w, baseHeight: h}, token);
       await addRideConfig({profileId: created.id, configType: "SOLO"}, token);
       onCreated();
     } catch (err) {

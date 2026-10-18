@@ -64,14 +64,11 @@ export type RouteResult = {
 function hasUsableGeometry(value: unknown): value is RouteGeometry {
   if (!value || typeof value !== "object") return false;
   const coords = (value as {coordinates?: unknown}).coordinates;
-  return Array.isArray(coords) && coords.length > 0;
+  return Array.isArray(coords) && coords.length > 1;
 }
 
-function normalizeRouteOption(route: RouteOption): RouteOption {
-  if (!hasUsableGeometry(route.geometry)) {
-    throw new Error("Route has no usable geometry");
-  }
-  return route;
+function normalizeRouteOption(route: RouteOption): RouteOption | null {
+  return hasUsableGeometry(route.geometry) ? route : null;
 }
 
 const VEHICLE_TYPES = ["SCOOTER", "CUB", "MANUAL", "CAR", "VAN", "TRUCK"] as const;
@@ -83,7 +80,7 @@ export async function findRoute(payload: RouteRequest, token: string): Promise<R
     ...(typeof vehicleType === "string" && (VEHICLE_TYPES as readonly string[]).includes(vehicleType) ? {vehicleType} : {}),
     ...(typeof width === "number" && Number.isFinite(width) ? {width} : {}),
   }, token);
-  return {...result, routes: (result.routes ?? []).map(normalizeRouteOption)};
+  return {...result, routes: (result.routes ?? []).map(normalizeRouteOption).filter((r): r is RouteOption => r !== null)};
 }
 
 export type SavedRouteSummary = {

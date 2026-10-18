@@ -26,3 +26,9 @@ export function bundledMapStyle(scheme: "light" | "dark" = "light"): StyleSpecif
   styleCache.set(scheme, {key: config.maptilerKey, style});
   return style;
 }
+
+export function requireMapStyle(scheme: "light" | "dark" = "light"): StyleSpecification {
+  const style = bundledMapStyle(scheme);
+  if (!style) throw new Error("Missing EXPO_PUBLIC_MAPTILER_KEY");
+  return style;
+}

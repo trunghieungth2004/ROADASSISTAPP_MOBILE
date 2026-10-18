@@ -27,12 +27,13 @@ import {useStrings} from "./src/context/LanguageContext";
 const Stack = createNativeStackNavigator();
 
 function PushSync() {
-  const {token, uid} = useAuth();
+  const {token, uid, loaded} = useAuth();
   useEffect(() => {
+    if (!loaded) return;
     ensurePushConfigured();
     void warmAudio();
     void syncPushToken(token, uid);
-  }, [token, uid]);
+  }, [token, uid, loaded]);
   return null;
 }
 function UpdateCheck() {

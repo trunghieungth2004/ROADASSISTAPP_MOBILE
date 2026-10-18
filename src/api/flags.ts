@@ -18,6 +18,7 @@ export type Flag = {
   reporterHandle?: string;
   createdAt?: string;
   ttlExpiresAtMs?: number | null;
+  photoUrls?: string[];
 };
 
 export const FLAG_CONSENSUS_THRESHOLD = 3;
@@ -38,6 +39,7 @@ type FlagWire = {
   reporterHandle?: string;
   createdAt?: string;
   ttlExpiresAt?: {_seconds?: number; _nanoseconds?: number} | string | number | null;
+  photoUrls?: string[];
 };
 
 function ttlMsOf(value: FlagWire["ttlExpiresAt"]): number | null {
@@ -71,6 +73,7 @@ export function toFlag(raw: FlagWire): Flag {  return {
     reporterHandle: raw.reporterHandle,
     createdAt: raw.createdAt,
     ttlExpiresAtMs: ttlMsOf(raw.ttlExpiresAt),
+    photoUrls: Array.isArray(raw.photoUrls) ? raw.photoUrls.filter((url): url is string => typeof url === "string" && url !== "") : [],
   };
 }
 
@@ -84,6 +87,7 @@ export type SubmitFlagPayload = {
   lng: number;
   note?: string;
   radiusMeters?: number;
+  photoUrls?: string[];
 };
 
 export async function submitFlag(payload: SubmitFlagPayload, token: string): Promise<{id: string; status: string}> {
@@ -117,20 +121,34 @@ export function bustFlagCaches(token: string): void {
   cacheDel(`flagsMine:${token}`);
 }
 
+function prefetchFlagPhotos(flags: Flag[]): void {
+  const groups = flags.map((flag) => flag.photoUrls ?? []).filter((group) => group.length > 0);
+  if (groups.length === 0) return;
+  void import("../services/photos")
+    .then((mod) => mod.prefetchFlagPhotos(groups))
+    .catch(() => undefined);
+}
+
 export async function flagsNear(lat: number, lng: number, radiusMeters: number, token: string): Promise<Flag[]> {
   const key = `flagsNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${radiusMeters}`;
   const list = await withCache(key, CACHE_TTL_MS.flagsNear, () => api.post<FlagWire[]>("/flags/near", {lat, lng, radiusMeters}, token));
   const now = Date.now();
-  return list.map(toFlag).filter((flag) => !isExpired(flag, now));
+  const flags = list.map(toFlag).filter((flag) => !isExpired(flag, now));
+  prefetchFlagPhotos(flags);
+  return flags;
 }
 
 export async function getFlag(flagId: string, token: string): Promise<Flag | null> {
   const flag = toFlag(await api.post<FlagWire>("/flags/get", {flagId}, token));
-  return isExpired(flag, Date.now()) ? null : flag;
+  if (isExpired(flag, Date.now())) return null;
+  prefetchFlagPhotos([flag]);
+  return flag;
 }
 
 export async function myFlags(token: string): Promise<Flag[]> {
   const list = await withCache(`flagsMine:${token}`, CACHE_TTL_MS.flagsMine, () => api.post<FlagWire[]>("/flags/mine", {}, token));
   const now = Date.now();
-  return list.map(toFlag).filter((flag) => !isExpired(flag, now));
+  const flags = list.map(toFlag).filter((flag) => !isExpired(flag, now));
+  prefetchFlagPhotos(flags);
+  return flags;
 }

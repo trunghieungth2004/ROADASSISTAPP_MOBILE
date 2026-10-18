@@ -16,6 +16,8 @@ export type DispatchPushData = {
   status?: string;
   declineReason?: string;
   urgent?: boolean;
+  kind?: string;
+  paymentStatus?: string;
 };
 
 function num(v: unknown): number | undefined {
@@ -41,6 +43,8 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
   if (!data || typeof data !== "object") return null;
   const d = data as Record<string, unknown>;
   if (typeof d.ticketId !== "string" || d.ticketId === "") return null;
+  const kindRaw = typeof d.kind === "string" ? d.kind : typeof d.type === "string" ? d.type : undefined;
+  const payRaw = typeof d.paymentStatus === "string" ? d.paymentStatus : typeof d.payment_status === "string" ? d.payment_status : undefined;
   return {
     ticketId: d.ticketId,
     ticketType: typeof d.ticketType === "string" ? d.ticketType : undefined,
@@ -49,5 +53,7 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
     status: typeof d.status === "string" ? d.status : undefined,
     declineReason: typeof d.declineReason === "string" ? d.declineReason : undefined,
     urgent: d.urgent === true || d.urgent === "true" || undefined,
+    kind: kindRaw,
+    paymentStatus: payRaw,
   };
 }

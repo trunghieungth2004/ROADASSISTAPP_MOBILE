@@ -118,6 +118,8 @@ export async function downloadAndInstall(
   apkUrl: string,
   onProgress: (fraction: number) => void,
 ): Promise<void> {
+  const cleanUrl = apkUrl.split("?")[0] ?? apkUrl;
+  if (!cleanUrl.toLowerCase().endsWith(".apk")) throw new Error("Update file is not an APK");
   const target = new File(Paths.cache, "roadassist-update.apk").uri;
   const task = FileSystem.createDownloadResumable(apkUrl, target, {}, (p) => {
     if (p.totalBytesExpectedToWrite > 0) {
@@ -125,10 +127,17 @@ export async function downloadAndInstall(
     }
   });
   const result = await task.downloadAsync();
+  if (!result || result.exists !== true || result.size <= 0) throw new Error("Downloaded update is empty");
   const contentUri = await FileSystem.getContentUriAsync(result.uri);
-  await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-    data: contentUri,
-    type: "application/vnd.android.package-archive",
-    flags: 1,
-  });
+  try {
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: contentUri,
+      type: "application/vnd.android.package-archive",
+      flags: 1,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("ActivityNotFound") || msg.includes("No Activity")) throw new Error("No installer found to open the update");
+    throw new Error("Could not open the update installer");
+  }
 }

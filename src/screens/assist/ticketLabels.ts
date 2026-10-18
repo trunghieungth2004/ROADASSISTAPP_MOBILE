@@ -1,5 +1,5 @@
 import type {Strings} from "../../i18n/en";
-import {DISPATCH_STATUS} from "../../api/dispatch";
+import {DISPATCH_STATUS, isUnfixableStatus} from "../../api/dispatch";
 
 export type StatusTone = "active" | "done" | "failed";
 
@@ -12,12 +12,18 @@ export function ticketStatusLabel(status: string, t: Strings): string {
   if (status === DISPATCH_STATUS.READY) return t.assist.statusReady;
   if (status === DISPATCH_STATUS.DECLINED) return t.assist.statusDeclined;
   if (status === DISPATCH_STATUS.QUOTED) return t.assist.statusQuoted;
+  if (status === DISPATCH_STATUS.ESTIMATED) return t.assist.statusEstimated;
+  if (status === DISPATCH_STATUS.EST_APPROVED) return t.assist.statusEstApproved;
+  if (status === DISPATCH_STATUS.IN_SHOP) return t.assist.statusInShop;
+  if (status === DISPATCH_STATUS.FINAL_QUOTED) return t.assist.statusFinalQuoted;
+  if (status === DISPATCH_STATUS.UNFIXABLE) return t.assist.statusUnfixable;
+  if (status === DISPATCH_STATUS.RESOLVED_UNFIXABLE) return t.assist.statusResolvedUnfixable;
   return t.assist.statusPending;
 }
 
 export function statusTone(status: string): StatusTone {
   if (status === DISPATCH_STATUS.RESOLVED || status === DISPATCH_STATUS.READY) return "done";
-  if (status === DISPATCH_STATUS.CANCELLED || status === DISPATCH_STATUS.DECLINED) return "failed";
+  if (status === DISPATCH_STATUS.CANCELLED || status === DISPATCH_STATUS.DECLINED || isUnfixableStatus(status)) return "failed";
   return "active";
 }
 
@@ -30,6 +36,10 @@ export function statusPillColor(status: string, theme: {primary: string; success
   if (status === DISPATCH_STATUS.PENDING) return "#f59e0b";
   if (status === DISPATCH_STATUS.DECLINED) return theme.danger;
   if (status === DISPATCH_STATUS.QUOTED) return "#8b5cf6";
+  if (status === DISPATCH_STATUS.ESTIMATED || status === DISPATCH_STATUS.EST_APPROVED) return "#8b5cf6";
+  if (status === DISPATCH_STATUS.IN_SHOP) return "#0d9488";
+  if (status === DISPATCH_STATUS.FINAL_QUOTED) return "#8b5cf6";
+  if (isUnfixableStatus(status)) return theme.danger;
   return theme.muted;
 }
 

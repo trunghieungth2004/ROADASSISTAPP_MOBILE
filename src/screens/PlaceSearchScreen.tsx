@@ -9,6 +9,7 @@ import SavedPlacesSheet from "../components/place-search/SavedPlacesSheet";
 import MapPickOverlay from "../components/map/MapPickOverlay";
 import Overlay from "../components/overlay/Overlay";
 import type {PlaceSource} from "../components/place-search/PlaceSearch.types";
+import type {ShopSearchFilters} from "../components/place-search/PlaceSearch.types";
 import {listSavedPlaces, removeSavedPlace, savePlace, type SavedPlace} from "../api/places";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
@@ -36,12 +37,15 @@ function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
   if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
   return "place";
 }
-type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string};
-export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote}: Props) {
+type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string; filters?: ShopSearchFilters};
+export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote, filters}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const internal = usePlaceSearch({token, lang, shops, sources, mapFilter, query, onQuery});
+  const [sortBy, setSortBy] = useState<"distance" | "rating">(filters?.sortBy ?? "distance");
+  const [minRating, setMinRating] = useState<number | undefined>(filters?.minRating);
+  const showFilters = shops !== undefined && filters !== undefined;
+  const internal = usePlaceSearch({token, lang, shops, sources, mapFilter, query, onQuery, filters: filters === undefined ? undefined : {...filters, sortBy, minRating}});
   const search = provided ?? internal;
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,18 +162,51 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
         </Pressable>
         ) : null}
       </View>
+      {showFilters ? (
+        <View style={styles.filterRow}>
+          <View style={styles.filterGroup}>
+            {([
+              {value: "distance" as const, label: t.shop.sortDistance},
+              {value: "rating" as const, label: t.shop.sortRating},
+            ]).map(({value, label}) => (
+              <Pressable key={value} style={[styles.filterChip, {borderColor: sortBy === value ? theme.primary : theme.border}, sortBy === value && {backgroundColor: theme.primary}]} onPress={() => setSortBy(value)} accessibilityRole="button" accessibilityState={{selected: sortBy === value}} accessibilityLabel={label}>
+                <Text style={[styles.filterChipText, {color: sortBy === value ? "#fff" : theme.text}]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.filterGroup}>
+            {([
+              {value: undefined, label: t.shop.ratingAny},
+              {value: 4, label: t.shop.ratingMin.replace("{n}", "4.0")},
+              {value: 4.5, label: t.shop.ratingMin.replace("{n}", "4.5")},
+            ]).map(({value, label}) => (
+              <Pressable key={label} style={[styles.filterChip, {borderColor: minRating === value ? theme.primary : theme.border}, minRating === value && {backgroundColor: theme.primary}]} onPress={() => setMinRating(value)} accessibilityRole="button" accessibilityState={{selected: minRating === value}} accessibilityLabel={label}>
+                <Text style={[styles.filterChipText, {color: minRating === value ? "#fff" : theme.text}]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {search.searching ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.searching}</Text> : null}
       {!search.searching && search.input.trim().length >= 3 && search.options.length === 0 ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.noResults}</Text> : null}
       <FlatList style={styles.results} data={grouped} keyExtractor={(row) => `${row.item.source}:${row.item.label}:${row.item.lat},${row.item.lng}`} keyboardShouldPersistTaps="handled" renderItem={({item: row}) => {
-        const disabled = row.item.id !== undefined && (disabledIds?.has(row.item.id) ?? false);
+        const declined = row.item.id !== undefined && (disabledIds?.has(row.item.id) ?? false) || row.item.declined === true;
+        const disabled = declined;
+        const meta: string[] = [];
+        if (typeof row.item.ratingAvg === "number" && typeof row.item.ratingCount === "number") meta.push(`★ ${row.item.ratingAvg.toFixed(1)} (${row.item.ratingCount})`);
+        const meters = typeof row.item.distanceMeters === "number" ? row.item.distanceMeters : typeof row.item.distance === "number" ? row.item.distance : null;
+        if (meters !== null) meta.push(meters < 1000 ? t.shop.radiusM.replace("{n}", String(Math.round(meters))) : t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1)));
+        if (row.item.openNow === true) meta.push(t.shop.open);
+        if (row.item.openNow === false) meta.push(t.shop.closed);
         return (
         <View>
           {row.header ? <Text style={[styles.header, {color: theme.muted}]}>{row.header}</Text> : null}
-          <Pressable style={[styles.row, disabled && styles.disabledRow]} disabled={disabled} onPress={() => { search.select(row.item); onPick(row.item); }} accessibilityRole="button" accessibilityState={{disabled}} accessibilityLabel={row.item.label}>
-            <MaterialIcons name={resultIcon(row.item)} size={20} color={disabled ? theme.muted : theme.primary} />
+          <Pressable style={[styles.row, declined && styles.disabledRow]} disabled={disabled} onPress={() => { search.select(row.item); onPick(row.item); }} accessibilityRole="button" accessibilityState={{disabled}} accessibilityLabel={row.item.label}>
+            <MaterialIcons name={resultIcon(row.item)} size={20} color={declined ? theme.muted : theme.primary} />
             <View style={styles.rowCol}>
-              <Text style={[styles.rowText, {color: disabled ? theme.muted : theme.text}]}>{row.item.label}</Text>
-              {disabled && disabledNote ? <Text style={[styles.rowNote, {color: theme.muted}]}>{disabledNote}</Text> : null}
+              <Text style={[styles.rowText, {color: declined ? theme.muted : theme.text}]}>{row.item.label}</Text>
+              {meta.length > 0 ? <Text style={[styles.rowNote, {color: theme.muted}]}>{meta.join(" · ")}</Text> : null}
+              {declined && disabledNote ? <Text style={[styles.rowNote, {color: theme.muted}]}>{disabledNote}</Text> : null}
             </View>
           </Pressable>
         </View>
@@ -219,6 +256,10 @@ const styles = StyleSheet.create({
   actionBtns: {flexDirection: "row", gap: 8},
   actionBtn: {flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 8, minWidth: 0},
   actionBtnText: {fontSize: 13, fontWeight: "600", flexShrink: 1},
+  filterRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap"},
+  filterGroup: {flexDirection: "row", alignItems: "center", gap: 6},
+  filterChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10},
+  filterChipText: {fontSize: 13, fontWeight: "600"},
   hint: {fontSize: 13},
   results: {flex: 1},
   header: {fontSize: 12, fontWeight: "700", marginTop: 8},

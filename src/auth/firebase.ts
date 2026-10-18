@@ -3,7 +3,7 @@ import {getAuth, getReactNativePersistence, initializeAuth, type Auth} from "fir
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {config} from "../config";
 
-const app = getApps().length > 0 ? getApps()[0] : initializeApp({apiKey: config.firebase.apiKey, authDomain: config.firebase.authDomain, projectId: config.firebase.projectId});
+const app = getApps().length > 0 ? getApps()[0] : initializeApp({apiKey: config.firebase.apiKey, authDomain: config.firebase.authDomain, projectId: config.firebase.projectId, storageBucket: config.firebase.storageBucket});
 
 let auth: Auth;
 try {

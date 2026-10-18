@@ -13,7 +13,7 @@ import {darkTheme, lightTheme} from "../theme";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen, {type ShopDraft, type TowDraft} from "../screens/OnboardingScreen";
 import PermissionGateScreen from "../screens/PermissionGateScreen";
-import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
+import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestCameraPermission, requestMediaLibraryPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
 import {createProvider} from "../api/providers";
@@ -60,7 +60,7 @@ function UnsupportedRole() {
   return (
     <View style={[styles.center, {backgroundColor: theme.background}]}>
       <Text style={{color: theme.text}}>{t.roles.unsupported}</Text>
-      <Pressable style={[styles.primary, {backgroundColor: theme.primary}, loading && styles.disabled]} disabled={loading} onPress={() => void refresh()}>
+      <Pressable style={[styles.primary, {backgroundColor: theme.primary}, loading && styles.disabled]} disabled={loading} onPress={() => void refresh().catch(() => undefined)}>
         <Text style={styles.primaryText}>{t.common.retry}</Text>
       </Pressable>
       <Pressable style={styles.primary} onPress={() => void signOut()}><Text style={styles.primaryText}>{t.more.signOut}</Text></Pressable>
@@ -116,6 +116,8 @@ function PermissionGate({onDone}: {onDone: () => void}) {
       grantError={grantError}
       onHideGrantError={() => setGrantError(null)}
       onGrantNotifications={() => grant(requestNotificationPermission, true)}
+      onGrantCamera={() => grant(requestCameraPermission, false)}
+      onGrantPhotos={() => grant(requestMediaLibraryPermission, false)}
       onGrantBackground={() => grant(requestBackgroundLocationPermission, false)}
       onOpenBattery={() => openBatterySettings()}
       onSkip={finish}

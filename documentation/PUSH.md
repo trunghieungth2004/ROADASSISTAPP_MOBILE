@@ -108,6 +108,43 @@ Tap-from-killed-state is drained explicitly: `drainDispatchLaunch` /
 live subscriptions. Assist, Route, Hazards, and Navigation all drain on
 mount.
 
+### Re-match, destination-change, and payment pushes
+
+Beyond the per-status catalog above, three multi-step flows ride the
+same `ticketId`-keyed drain (dedup per ticket + status, cache-bust before
+reload, tap opens the record sheet):
+
+**Tow re-match (finding another tower).** A destination decline starts the
+sequence, not a re-broadcast: the rider hears "pick another drop-off" and
+the engaged tower hears "await the rider's new drop-off" (amber
+`needsNewDestination` card on both live cards). Retargeting pushes the tower
+"Drop-off updated" with ETAs restamped from the live fix, and the rider's
+navigator quietly re-routes (`retargetTo`) when a tow session is attached. If
+the tower abandons mid-tow, the server requeues the ticket (`towerSearch:
+"ACTIVE"`) and re-fans-out: the rider gets the urgent "Finding another
+tower" (with the frozen deadhead km when a leg was already driven) and nearby
+towers get "Tow request available" — the board reloads like any other
+receipt, and a status-less TOW offer still flips tower viewers to the tow
+tab with a notice.
+
+**Destination-change set.** Creation and shop retargets notify the new shop
+("Incoming tow", `destination-shop` audience, informational — the shop still
+cannot accept a tow, but gains Decline drop-off at any non-terminal status);
+moving away notifies the previous shop ("Drop-off changed"); rider cancel
+notifies the drop-off shop ("Tow cancelled"); resolve spawns the linked
+walk-in ("Walk-in request", accept/decline the walk-in). All four flow
+through the unchanged payload shape, so the operator's Records reload needs
+no client change — only the server copy varies.
+
+**Payment state has no push.** The server sends no payment push events
+today — the IPN handler writes the charge and nothing else. The record money
+block (cash confirm and the SePay checkout return) re-reads the stored
+charge (`PaymentInfo` status) on the next record reload; the pay flow itself
+is a link-out to the hosted VietQR page, so the app sees `HELD` only when
+the record is re-fetched. If payment pushes land later, they follow the
+dispatch receipt pattern: bust ticket caches, reload, render from the stored
+charge, never from the payload.
+
 ## Hazard pin refresh model
 
 Three independent mechanisms drive one `NavFlags` component

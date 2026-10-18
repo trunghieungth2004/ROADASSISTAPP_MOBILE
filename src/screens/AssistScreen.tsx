@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, approveQuote, bustTicketCaches, cancelTicket, createTicket, declineDestination, declineTicket, estimateTowFare, feedTickets, getTicket, myTickets, nearTickets, refreshTowEta, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketType} from "../api/dispatch";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendFinalQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
@@ -28,7 +28,7 @@ import {ensurePushConfigured, drainDispatchLaunch, subscribeDispatchPush} from "
 import {capturePosition, markBeat, useLocationBeat} from "../services/locationBeats";
 import {getFix} from "../services/geo";
 import {statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./assist/ticketLabels";
-import {announcesShopPush, retargetableLiveTicket} from "./assist/recordActions";
+import {announcesShopPush, canSeeRequestPhotos, retargetableLiveTicket} from "./assist/recordActions";
 import {vehicleClassOf} from "./assist/vehicleClass";
 import AssistSectionTabs, {type AssistSection} from "./assist/AssistSectionTabs";
 import RequestSection from "./assist/RequestSection";
@@ -40,8 +40,14 @@ import ShopsSection from "./assist/ShopsSection";
 import RecordsSection from "./assist/RecordsSection";
 import RecordDetailSheet, {type WorkPatch} from "./assist/RecordDetailSheet";
 import TicketSheet from "./assist/TicketSheet";
+import DisputeSheet from "./assist/DisputeSheet";
+import EstimateSheet from "./assist/EstimateSheet";
+import UnfixableSheet from "./assist/UnfixableSheet";
+import {parseAmountInput} from "./assist/money";
+import {isPhotoPermissionError, takePhoto, uploadPhotoPaths} from "../services/photos";
 import RatingSheet from "./assist/RatingSheet";
 import {boundsOf} from "./route/routeGeo";
+import {HCMC_CENTER} from "./route/types";
 import {shouldRetryCenter} from "./route/cameraIntent";
 import {distBetween} from "./navigation/navUtils";
 import AssistMapView from "./assist/AssistMapView";
@@ -70,6 +76,21 @@ export default function AssistScreen() {
   const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
   const [ticketType, setTicketType] = useState<TicketType | null>(null);
   const [note, setNote] = useState("");
+  const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photosBusy, setPhotosBusy] = useState(false);
+  const [towDestError, setTowDestError] = useState<string | null>(null);
+  const [disputeFor, setDisputeFor] = useState<FeedTicket | null>(null);
+  const [disputeBusy, setDisputeBusy] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+  const [estimateFor, setEstimateFor] = useState<FeedTicket | null>(null);
+  const [estimateBusy, setEstimateBusy] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [unfixableFor, setUnfixableFor] = useState<FeedTicket | null>(null);
+  const [unfixableBusy, setUnfixableBusy] = useState(false);
+  const [unfixableError, setUnfixableError] = useState<string | null>(null);
+  const [payments, setPayments] = useState<Record<string, TicketPayment>>({});
+  const [waiting, setWaiting] = useState<Record<string, {waitingMinutes: number; waitingFee: number}>>({});
   const [dest, setDest] = useState<Place | null>(null);
   const [destShopId, setDestShopId] = useState<string | null>(null);
   const [mapSel, setMapSel] = useState<{label: string; lat: number; lng: number} | null>(null);
@@ -281,7 +302,11 @@ export default function AssistScreen() {
       if (attempt > 0) await new Promise<void>((resolve) => setTimeout(resolve, 4000));
       try {
         const {status} = await Location.getForegroundPermissionsAsync();
-        if (status !== "granted") return;
+        if (status !== "granted") {
+          pendingCenterRef.current = {lat: HCMC_CENTER[1] ?? 10.7626, lng: HCMC_CENTER[0] ?? 106.6602};
+          applyCenter();
+          return;
+        }
         if (!pendingCenterRef.current) {
           try {
             pendingCenterRef.current = await getFix();
@@ -290,7 +315,10 @@ export default function AssistScreen() {
         if (applyCenter()) return;
       } catch {}
     }
-    if (!centeredRef.current && !pendingCenterRef.current) setError(t.route.locationUnavailable);
+    if (!centeredRef.current && !pendingCenterRef.current) {
+      pendingCenterRef.current = {lat: HCMC_CENTER[1] ?? 10.7626, lng: HCMC_CENTER[0] ?? 106.6602};
+      if (!applyCenter()) setError(t.route.locationUnavailable);
+    }
   }
   useEffect(() => {
     if (centeredRef.current) return;
@@ -393,16 +421,22 @@ export default function AssistScreen() {
     const b = boundsOf(pts.map((p) => [p.lng, p.lat] as [number, number]));
     if (b) void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
   }, [liveTow, activeFeed, jobLayers, gps]);
+  const activeId = activeFeed?.id ?? null;
+  const activeIsOut = activeFeed?.direction === "out";
   useEffect(() => {
     if (!liveTow || !assistFocused || !token) return;
     const timer = setInterval(() => {
       bustTicketCaches(token);
+      if (activeId) {
+        void refreshWaiting(activeId, token).then(
+          (summary) => setWaiting((prev) => ({...prev, [activeId]: summary})),
+          () => undefined,
+        );
+      }
       void feedTickets(undefined, token).then((rows) => setFeed(rows), () => undefined);
     }, 15000);
     return () => clearInterval(timer);
-  }, [liveTow, assistFocused, token]);
-  const activeId = activeFeed?.id ?? null;
-  const activeIsOut = activeFeed?.direction === "out";
+  }, [liveTow, assistFocused, token, activeId]);
   useEffect(() => {
     if (!liveTow || !activeIsOut || !activeId || !token) return;
     const timer = setInterval(() => {
@@ -477,11 +511,16 @@ export default function AssistScreen() {
     });
     return () => sub.remove();
   }, [shopSheet, shopSel, mapSel, section]);
-  const fetchAssistShops = useCallback(async (q: string) => {
+  const fetchAssistShops = useCallback(async (q: string, filters?: {minRating?: number; sortBy?: "distance" | "rating"; ticketId?: string}) => {
     if (!token || !gps) return [];
     const towMode = shopSearchMode === "tow";
-    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, towMode ? 20000 : undefined, towMode);
-  }, [token, gps, vehicleClass, shopSearchMode]);
+    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, towMode ? 20000 : undefined, towMode, {
+      sortBy: "distance",
+      ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
+      ...(filters?.sortBy ? {sortBy: filters.sortBy} : {}),
+      ticketId: filters?.ticketId ?? editDestFor?.id ?? detailFor?.id ?? undefined,
+    });
+  }, [token, gps, vehicleClass, shopSearchMode, editDestFor?.id, detailFor?.id]);
   async function currentPoint(): Promise<{lat: number; lng: number}> {
     const {status} = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") throw new Error(t.nav.locationDenied);
@@ -508,6 +547,7 @@ export default function AssistScreen() {
       }
       setDestShopId(shop.id);
       setDest({label: shop.name, lat: shop.lat, lng: shop.lng, source: "map"});
+      setTowDestError(null);
       setShopSearchMode(null);
       setRadiusSearchFrom(null);
       closeShopSheet();
@@ -753,6 +793,8 @@ export default function AssistScreen() {
     decline: ((ticket: FeedTicket, reason: DeclineReason, note: string | undefined) => void) | null,
   ) {
     const hasVolunteer = (bundle?.user.services ?? []).includes("VOLUNTEER");
+    const ownShopIds = new Set(ownProviders.filter((item) => item.kind === "SHOP").map((item) => item.id));
+    const showRequestPhotos = canSeeRequestPhotos(ticket, ownShopIds, uid, hasVolunteer);
     const ownTowAccepting = ownProviders.some((item) => item.kind === "TOW" && item.status === "ACTIVE" && item.accepting !== false);
     const acceptOffDuty = ticket.ticketType === "TOW" &&
       ticket.status === "1" &&
@@ -780,6 +822,10 @@ export default function AssistScreen() {
         onDecline={decline === null ? null : (item, reason, note) => void onDeclineTicket(item, reason, note)}
         onSaveWork={(item, patch) => void onSaveWork(item, patch)}
         onSendQuote={(item, patch) => void onSendQuote(item, patch)}
+        onOpenEstimate={(item) => {
+          setEstimateFor(item);
+          setEstimateError(null);
+        }}
         onApproveQuote={(item) => void onApproveQuote(item)}
         onOpenShop={(item) => onOpenShopCard(item)}
         onOpenDestination={(item) => onOpenDestinationCard(item)}
@@ -820,10 +866,21 @@ export default function AssistScreen() {
         onAdvance={(item, status) => void onAdvanceStatus(item, status)}
         onReply={(ratingId, text) => void onReplyRating(ratingId, text)}
         onRateRider={(item) => onRateRider(item)}
-        ownShopIds={new Set(ownProviders.filter((p) => p.kind === "SHOP").map((p) => p.id))}
+        ownShopIds={ownShopIds}
+        showRequestPhotos={showRequestPhotos}
         onDeclineDestination={(item) => void onDeclineDestinationTicket(item)}
         onEditDestination={(item) => { setEditDestFor(item); setShopSearchMode("tow"); }}
         allowTowerCancel={ticket.direction === "in" && ticket.ticketType === "TOW" && (ticket.status === "2" || ticket.status === "3") && ownTowId !== null && ticket.assignedShopId === ownTowId}
+        onApproveEstimate={(item) => void onApproveEstimate(item)}
+        onDeclineEstimate={(item) => void onDeclineEstimate(item)}
+        onApproveFinal={(item) => void onApproveFinal(item)}
+        onConfirmCash={(item) => void onConfirmCash(item)}
+        onPayNow={(item) => void onPayNow(item)}
+        onOpenDispute={(item) => { setDisputeFor(item); setDisputeError(null); }}
+        onRequeue={(item) => void onRequeueTicket(item)}
+        payment={payments[ticket.id] ?? null}
+        waiting={waiting[ticket.id] ?? null}
+        onMarkUnfixable={(item) => { setUnfixableFor(item); setUnfixableError(null); }}
       />
     );
   }
@@ -858,11 +915,13 @@ export default function AssistScreen() {
     if (typeof place.id !== "string") return;
     setDestShopId(place.id);
     setDest({label: place.label, lat: place.lat, lng: place.lng, source: "map"});
+    setTowDestError(null);
     setShopSearchMode(null);
   }
   function onPickTowPlace(place: Place): void {
     setDestShopId(null);
     setDest({label: place.label, lat: place.lat, lng: place.lng, source: "map"});
+    setTowDestError(null);
     setShopSearchMode(null);
   }
   function onNavigateMap(place: {lat: number; lng: number}): void {
@@ -940,6 +999,7 @@ export default function AssistScreen() {
     if (!token || !pendingTicket) return;
     const kind = pendingTicket;
     if (kind === "TOW" && !dest) {
+      setTowDestError(t.assist.towNeedsDest);
       setError(t.assist.towNeedsDest);
       return;
     }
@@ -949,11 +1009,24 @@ export default function AssistScreen() {
     try {
       Keyboard.dismiss();
       const point = await currentPoint();
-      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, destinationShopId: kind === "TOW" ? destShopId ?? undefined : undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth, ...(force ? {force: true} : {})}, token);
+      let photoUrls: string[] | undefined;
+      let photoUploadFailed = false;
+      if (photos.length > 0) {
+        try {
+          photoUrls = await uploadPhotoPaths(`dispatch/pending-${Date.now()}`, photos);
+        } catch {
+          photoUrls = undefined;
+          photoUploadFailed = true;
+        }
+      }
+      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, ...(description.trim() ? {description: description.trim().slice(0, 1000)} : {}), ...(photoUrls && photoUrls.length > 0 ? {photoUrls} : {}), destinationShopId: kind === "TOW" ? destShopId ?? undefined : undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleType: activeVehicle?.type, vehicleWidth: activeVehicle?.baseWidth, ...(force ? {force: true} : {})}, token);
       setPendingTicket(null);
       setDuplicateFor(null);
-      setNotice(t.assist.requested);
+      setNotice(photoUploadFailed ? t.photos.uploadFailed : t.assist.requested);
       setNote("");
+      setDescription("");
+      setPhotos([]);
+      setTowDestError(null);
       setDest(null);
       setDestShopId(null);
       await reloadAll();
@@ -966,6 +1039,151 @@ export default function AssistScreen() {
       setError(toMessage(err));
     } finally {
       setReqBusy(false);
+    }
+  }
+  async function onAddTicketPhotos(): Promise<void> {
+    if (photosBusy) return;
+    setPhotosBusy(true);
+    setError(null);
+    try {
+      const picked = await takePhoto();
+      if (picked.length > 0) setPhotos((prev) => [...prev, ...picked].slice(0, 5));
+    } catch (err) {
+      setError(isPhotoPermissionError(err) ? t.photos.cameraDenied : toMessage(err));
+    } finally {
+      setPhotosBusy(false);
+    }
+  }
+  async function onRequeueTicket(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      const point = await getFix();
+      await createTicket({ticketType: ticket.ticketType as TicketType, lat: point.lat, lng: point.lng, ...(Array.isArray(ticket.photoUrls) && ticket.photoUrls.length > 0 ? {photoUrls: ticket.photoUrls} : {}), ...(typeof ticket.note === "string" && ticket.note ? {note: ticket.note} : {}), ...(typeof ticket.description === "string" && ticket.description ? {description: ticket.description} : {}), ...(ticket.destinationShopId ? {destinationShopId: ticket.destinationShopId} : {}), ...(ticket.destinationPoint ? {destinationPoint: ticket.destinationPoint} : {}), ...(typeof ticket.vehicleType === "string" ? {vehicleType: ticket.vehicleType} : {}), ...(typeof ticket.vehicleWidth === "number" ? {vehicleWidth: ticket.vehicleWidth} : {})}, token);
+      setDetailFor(null);
+      setBoardDetail(null);
+      setNotice(t.assist.requeued);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onApproveEstimate(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await approveEstimate(ticket.id, token);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onDeclineEstimate(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await declineEstimate(ticket.id, token);
+      setEditDestFor(ticket);
+      setShopSearchMode("tow");
+      setNotice(t.assist.declineEstimate);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onApproveFinal(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await approveFinalQuote(ticket.id, token);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onConfirmCash(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      const confirmed = await confirmCashReceipt(ticket.id, token);
+      setPayments((prev) => ({...prev, [ticket.id]: confirmed}));
+      setNotice(t.assist.cashReceiptDone);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onPayNow(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      const created = await createPayment(ticket.id, "SEPAY", token);
+      setPayments((prev) => ({...prev, [ticket.id]: created}));
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onFileDispute(reason: string, noteText: string, photoUri: string | null): Promise<void> {
+    if (!token || !disputeFor || disputeBusy) return;
+    setDisputeBusy(true);
+    setDisputeError(null);
+    try {
+      let photoUrl: string | undefined;
+      if (photoUri) {
+        const uploaded = await uploadPhotoPaths(`dispatch/dispute-${disputeFor.id}`, [photoUri]);
+        if (uploaded.length > 0 && typeof uploaded[0] === "string") photoUrl = uploaded[0] as string;
+      }
+      await fileDispute({ticketId: disputeFor.id, reason, ...(noteText ? {note: noteText} : {}), ...(photoUrl ? {photoUrl} : {})}, token);
+      setDisputeFor(null);
+      setNotice(t.dispute.sent);
+      await reloadAll();
+    } catch (err) {
+      setDisputeError(toMessage(err));
+    } finally {
+      setDisputeBusy(false);
+    }
+  }
+  async function onMarkUnfixable(reason: string, photos: string[]): Promise<void> {
+    if (!token || !unfixableFor || unfixableBusy) return;
+    if (photos.length === 0) {
+      setUnfixableError(t.assist.unfixableNeedPhoto);
+      return;
+    }
+    setUnfixableBusy(true);
+    setUnfixableError(null);
+    try {
+      const uploaded = await uploadPhotoPaths(`dispatch/unfixable-${unfixableFor.id}`, photos);
+      if (uploaded.length === 0) {
+        setUnfixableError(t.assist.unfixableNeedPhoto);
+        return;
+      }
+      await reportUnfixable(unfixableFor.id, reason, uploaded, token);
+      setUnfixableFor(null);
+      setNotice(t.assist.unfixableSent);
+      await reloadAll();
+    } catch (err) {
+      setUnfixableError(toMessage(err));
+    } finally {
+      setUnfixableBusy(false);
     }
   }
   function liveTicketConflict(err: unknown): string | null {
@@ -1055,21 +1273,36 @@ export default function AssistScreen() {
   }
   async function onSendQuote(ticket: FeedTicket, patch: WorkPatch): Promise<void> {
     if (!token || recBusy) return;
-    const q = Number(patch.quoted.trim());
-    if (patch.quoted.trim() === "" || !Number.isInteger(q) || q < 0) {
+    const q = parseAmountInput(patch.quoted);
+    if (q === null) {
       setError(t.provider.invalidAmount);
       return;
     }
     setRecBusy(true);
     setError(null);
     try {
-      await sendQuote(ticket.id, q, patch.workType.trim() || undefined, token);
+      await sendEstimate(ticket.id, q, patch.workType.trim() || undefined, token);
       setNotice(t.provider.workSaved);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
     } finally {
       setRecBusy(false);
+    }
+  }
+  async function onSendEstimate(amount: number, note: string): Promise<void> {
+    if (!token || !estimateFor || estimateBusy) return;
+    setEstimateBusy(true);
+    setEstimateError(null);
+    try {
+      await sendEstimate(estimateFor.id, amount, note.trim() || undefined, token);
+      setEstimateFor(null);
+      setNotice(t.assist.estimateSent);
+      await reloadAll();
+    } catch (err) {
+      setEstimateError(toMessage(err));
+    } finally {
+      setEstimateBusy(false);
     }
   }
   async function onApproveQuote(ticket: FeedTicket): Promise<void> {
@@ -1158,16 +1391,20 @@ export default function AssistScreen() {
   }
   async function onSaveWork(ticket: FeedTicket, patch: WorkPatch): Promise<void> {
     if (!token || recBusy) return;
-    const q = patch.quoted.trim() === "" ? undefined : Number(patch.quoted.trim());
-    const f = patch.final.trim() === "" ? undefined : Number(patch.final.trim());
-    if ((q !== undefined && (!Number.isInteger(q) || q < 0)) || (f !== undefined && (!Number.isInteger(f) || f < 0))) {
+    const q = patch.quoted.trim() === "" ? undefined : parseAmountInput(patch.quoted);
+    const f = patch.final.trim() === "" || typeof ticket.finalAmount === "number" ? undefined : parseAmountInput(patch.final);
+    if (q === null || f === null) {
       setError(t.provider.invalidAmount);
       return;
     }
     setRecBusy(true);
     setError(null);
     try {
-      await updateWorkOrder({ticketId: ticket.id, ...(patch.workType.trim() ? {workType: patch.workType.trim()} : {}), ...(q !== undefined ? {quotedAmount: q} : {}), ...(f !== undefined ? {finalAmount: f} : {})}, token);
+      if (f !== undefined) {
+        await sendFinalQuote(ticket.id, f, patch.workType.trim() || undefined, undefined, token);
+      } else {
+        await updateWorkOrder({ticketId: ticket.id, ...(patch.workType.trim() ? {workType: patch.workType.trim()} : {}), ...(q !== undefined ? {quotedAmount: q} : {})}, token);
+      }
       setNotice(t.provider.workSaved);
       await reloadAll();
     } catch (err) {
@@ -1318,7 +1555,7 @@ export default function AssistScreen() {
                 ticketType={ticketType}
                 onTicketType={setTicketType}
                 showMechanic={showShops}
-                onOpenTicket={(kind) => { prevTicketType.current = ticketType; setDest(null); setDestShopId(null); setPendingTicket(kind); }}
+                onOpenTicket={(kind) => { prevTicketType.current = ticketType; setDest(null); setDestShopId(null); setTowDestError(null); setDescription(""); setPhotos([]); setPendingTicket(kind); }}
                 vehicleType={activeVehicle?.type ?? null}
                 hasVehicles={hasVehicle}
                 onOpenVehicle={() => setVehicleOpen(true)}
@@ -1469,6 +1706,13 @@ export default function AssistScreen() {
           busy={reqBusy}
           onSubmit={() => void onRequest()}
           onClose={() => { setPendingTicket(null); setTicketType(prevTicketType.current); }}
+          description={description}
+          onDescription={setDescription}
+          photos={photos}
+          photosBusy={photosBusy}
+          onAddPhotos={() => void onAddTicketPhotos()}
+          onRemovePhoto={(index) => setPhotos((prev) => prev.filter((_, i) => i !== index))}
+          destError={towDestError}
         />
       ) : null}
       {duplicateFor ? (
@@ -1507,6 +1751,7 @@ export default function AssistScreen() {
             title={shopSearchMode === "tow" ? t.assist.dropOffPoint : t.shop.searchPlaceholder}
             placeholder={shopSearchMode === "tow" ? t.route.searchDestination : t.shop.searchPlaceholder}
             shops={fetchAssistShops}
+            filters={{sortBy: "distance", ...(editDestFor ? {ticketId: editDestFor.id} : {})}}
             sources={shopSearchMode === "tow" ? ["saved", "shop", "directory", "map"] : ["shop", "map"]}
             mapFilter={isRepairPlace}
             query={query}
@@ -1639,6 +1884,42 @@ export default function AssistScreen() {
         </View>
         <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} placeholder={t.report.notePlaceholder} placeholderTextColor={theme.muted} value={reportNote} onChangeText={setReportNote} maxLength={280} />
       </Overlay>
+      {estimateFor ? (
+        <EstimateSheet
+          t={t}
+          ticketLabel={ticketTypeLabel(estimateFor.ticketType, t)}
+          status={estimateFor.status}
+          busy={estimateBusy}
+          error={estimateError}
+          initialAmount={typeof estimateFor.estimateAmount === "number" ? estimateFor.estimateAmount : null}
+          initialNote={typeof estimateFor.estimateNote === "string" ? estimateFor.estimateNote : null}
+          onSubmit={(amount, note) => void onSendEstimate(amount, note)}
+          onClose={() => {
+            setEstimateFor(null);
+            setEstimateError(null);
+          }}
+        />
+      ) : null}
+      {disputeFor ? (
+        <DisputeSheet
+          t={t}
+          ticketLabel={ticketTitle(disputeFor, t)}
+          busy={disputeBusy}
+          error={disputeError}
+          onSubmit={(reason, noteText, photoUri) => void onFileDispute(reason, noteText, photoUri)}
+          onClose={() => { setDisputeFor(null); setDisputeError(null); }}
+        />
+      ) : null}
+      {unfixableFor ? (
+        <UnfixableSheet
+          t={t}
+          ticketLabel={ticketTitle(unfixableFor, t)}
+          busy={unfixableBusy}
+          error={unfixableError}
+          onSubmit={(reason, photos) => void onMarkUnfixable(reason, photos)}
+          onClose={() => { setUnfixableFor(null); setUnfixableError(null); }}
+        />
+      ) : null}
       {error ? (
         <Snack message={error} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (

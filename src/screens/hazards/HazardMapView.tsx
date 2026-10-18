@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import {StyleSheet, View, useColorScheme} from "react-native";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
 import FlagMapLayers from "../../components/flags/FlagMapLayers";
 import FlagPinImages from "../../components/flags/MapPinImages";
@@ -19,7 +19,7 @@ type Props = {
 
 export default function HazardMapView(props: Props) {
   const scheme = useColorScheme();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const veilBackground = scheme === "dark" ? darkTheme.background : lightTheme.background;
   const cameraRef = useRef<CameraRef | null>(null);

@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 import {useWindowDimensions} from "react-native";
 import {listSavedPlaces, placeKey, reverseLabel, searchDirectory, searchMapPlaces} from "../../api/places";
-import type {Place, PlaceSource} from "./PlaceSearch.types";
+import type {Place, PlaceSource, ShopSearchFilters} from "./PlaceSearch.types";
 import {dropShopDuplicates, toShopPlace, type ShopEntry} from "./shopMerge";
 export type PlaceSearch = {input: string; options: Place[]; searching: boolean; selected: Place | null; handleInput: (value: string) => void; pin: (value: string) => void; select: (place: Place) => void; clear: () => void; refreshSaved: () => void; resolvePoint: (lat: number, lng: number) => Promise<string>};
 const MIN_QUERY_LEN = 3;
@@ -11,9 +11,9 @@ const limitForWidth = (width: number): {total: number; directory: number} => {
   if (width < 600) return {total: 14, directory: 6};
   return {total: 20, directory: 8};
 };
-export type ShopFetcher = (query: string) => Promise<ShopEntry[]>;
+export type ShopFetcher = (query: string, filters?: ShopSearchFilters) => Promise<ShopEntry[]>;
 
-export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, onQuery}: {
+export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, onQuery, filters}: {
   token?: string;
   lang: string;
   sources?: PlaceSource[];
@@ -21,6 +21,7 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
   mapFilter?: (place: Place) => boolean;
   query?: string;
   onQuery?: (q: string) => void;
+  filters?: ShopSearchFilters;
 }) {
   const [innerInput, setInnerInput] = useState(query ?? "");
   const input = query !== undefined ? query : innerInput;
@@ -55,9 +56,9 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
       const want = (source: PlaceSource): boolean => sources === undefined || sources.includes(source);
       const [base, directory, mapHits, shopEntries] = await Promise.all([
         want("saved") ? savedNow() : Promise.resolve([]),
-        want("directory") ? searchDirectory(value, token ?? "", limits.directory) : Promise.resolve([]),
+        want("directory") ? searchDirectory(value, token ?? "", limits.directory, filters) : Promise.resolve([]),
         want("map") ? searchMapPlaces(value, lang, limits.total) : Promise.resolve([]),
-        want("shop") && shops ? shops(value).catch((): ShopEntry[] => []) : Promise.resolve([]),
+        want("shop") && shops ? shops(value, filters).catch((): ShopEntry[] => []) : Promise.resolve([]),
       ]);
       if (seqRef.current !== id) return;
       const shopPlaces = shopEntries
@@ -69,13 +70,21 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
       setOptions(merge([base, shopPlaces, directory, mapCapped]).slice(0, limits.total));
       setSearching(false);
     })(); }, DEBOUNCE_MS);
-  }, [lang, token, merge, savedNow, width, sources, shops]);
+  }, [lang, token, merge, savedNow, width, sources, shops, filters]);
   const handleInput = useCallback((value: string) => { setInput(value); lastRef.current = value; if (value === "") { if (timerRef.current) clearTimeout(timerRef.current); seqRef.current += 1; setSearching(false); void savedNow().then(setOptions); return; } run(value); }, [run, savedNow, setInput]);
   const pin = useCallback((value: string) => { if (timerRef.current) clearTimeout(timerRef.current); seqRef.current += 1; setInput(value); setSearching(false); void savedNow().then(setOptions); }, [savedNow, setInput]);
   const select = useCallback((place: Place) => { if (timerRef.current) clearTimeout(timerRef.current); seqRef.current += 1; setSelected(place); setInput(place.label); setOptions([]); setSearching(false); }, [setInput]);
   const clear = useCallback(() => { setSelected(null); setInput(""); setOptions([]); setSearching(false); }, [setInput]);
   const refreshSaved = useCallback(() => { if (lastRef.current.trim().length >= MIN_QUERY_LEN) { run(lastRef.current); return; } void savedNow().then(setOptions); }, [run, savedNow, setInput]);
   const resolvePoint = useCallback((lat: number, lng: number) => reverseLabel(lat, lng, lang), [lang]);
+  const filtersReady = useRef(false);
+  useEffect(() => {
+    if (!filtersReady.current) {
+      filtersReady.current = true;
+      return;
+    }
+    if (lastRef.current.trim().length >= MIN_QUERY_LEN) run(lastRef.current);
+  }, [filters?.sortBy, filters?.minRating]);
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     seqRef.current += 1;

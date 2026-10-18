@@ -48,9 +48,20 @@ export default function LoginScreen() {
       setError(t.auth.passwordShort);
       return;
     }
+    if (mode === "register" && phone.trim() === "") {
+      setError(t.auth.phoneRequired);
+      return;
+    }
     setError(null); setBusy(true);
     try {
-      if (mode === "register") { await register({email: email.trim(), password, displayName: displayName.trim() || undefined, phone: phone.trim()}); }
+      if (mode === "register") {
+        try {
+          await register({email: email.trim(), password, displayName: displayName.trim() || undefined, phone: phone.trim()});
+        } catch (err) {
+          setError(toMessage(err));
+          return;
+        }
+      }
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       const token = await cred.user.getIdToken();
       await signIn(cred.user.uid, token);

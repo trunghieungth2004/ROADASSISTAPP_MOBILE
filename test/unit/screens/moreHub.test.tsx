@@ -70,12 +70,12 @@ function rowFor(renderer: ReturnType<typeof create>, label: string) {
     .at(0);
 }
 
-test("duplicated licenses render a single badge each", async () => {
+test("duplicated licenses render a single chip beside the role badge", async () => {
   const renderer = await mount();
   try {
     const all = textsUnder(renderer.root);
     expect(all.filter((text) => text === en.roles.volunteer).length).toBe(1);
-    expect(all.filter((text) => text === en.roles.rider).length).toBe(1);
+    expect(all.filter((text) => text === en.roles.rider).length).toBe(2);
   } finally {
     renderer.unmount();
   }

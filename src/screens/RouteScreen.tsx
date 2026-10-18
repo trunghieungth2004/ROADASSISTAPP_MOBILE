@@ -9,8 +9,9 @@ import {type CameraRef} from "@maplibre/maplibre-react-native";
 import {findRoute, getSavedRoute, saveRoute, isFlagWarning, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
 import {windowAround} from "../services/navigation";
 import {drainHazardLaunch, ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
+import {uploadFlagPhotos} from "../services/photos";
 import {formatPoint} from "../api/places";
-import {getFix} from "../services/geo";
+import {getFix, metersBetween} from "../services/geo";
 import {toMessage} from "../api/client";
 import type {Place} from "../components/place-search";
 import {fetchShopPlaces} from "../components/place-search/shopMerge";
@@ -32,7 +33,7 @@ import {bustFlagCaches, confirmFlag, denyFlag, submitFlag, unflag, type Flag} fr
 import {flagTypeLabel} from "../i18n/labels";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
-import {markDenied, markVoted} from "../storage/votedFlags";
+import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./route/types";
 import {boundsOf, midOf} from "./route/routeGeo";
 import {useRouteDrag} from "./route/useRouteDrag";
@@ -81,6 +82,17 @@ export default function RouteScreen() {
   const [flagBusy, setFlagBusy] = useState(false);
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [v, d] = await Promise.all([loadVotedIds(), loadDeniedIds()]);
+        setVotedIds(v);
+        setDeniedIds(d);
+      } catch {
+        return;
+      }
+    })();
+  }, []);
   const [flagsKey, setFlagsKey] = useState(0);
   const [gpsPos, setGpsPos] = useState<Point | null>(null);
   const [gpsBusy, setGpsBusy] = useState(false);
@@ -114,11 +126,17 @@ export default function RouteScreen() {
   const HAZARD_HIGHLIGHT_HALF = 80;
   const canClear = !!origin || !!dest || stops.length > 0 || routes.length > 0;
   function fitRouteGeometry(coords: [number, number][]) {
+    if (coords.length < 2) return;
     const b = boundsOf(coords);
     if (b) cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
   }
+  const SAME_PLACE_METERS = 15;
   async function requestRoute(o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean): Promise<RouteOption[] | null> {
     if (!token || !o || !d) return null;
+    if (s.length === 0 && metersBetween(o, d) <= SAME_PLACE_METERS) {
+      setError(t.route.samePlace);
+      return null;
+    }
     const id = (seqRef.current += 1);
     setBusy(true);
     setError(null);
@@ -288,7 +306,11 @@ export default function RouteScreen() {
       if (attempt > 0) await new Promise<void>((resolve) => setTimeout(resolve, CENTER_RETRY_MS));
       try {
         const {status} = await Location.getForegroundPermissionsAsync();
-        if (status !== "granted") return;
+        if (status !== "granted") {
+          pendingCenterRef.current = {lat: HCMC_CENTER[1] ?? 10.7626, lng: HCMC_CENTER[0] ?? 106.6602};
+          applyCenter();
+          return;
+        }
         if (!pendingCenterRef.current) {
           try {
             pendingCenterRef.current = await getFix();
@@ -297,7 +319,10 @@ export default function RouteScreen() {
         if (applyCenter()) return;
       } catch {}
     }
-    if (!centeredRef.current && !pendingCenterRef.current) setError(t.route.locationUnavailable);
+    if (!centeredRef.current && !pendingCenterRef.current) {
+      pendingCenterRef.current = {lat: HCMC_CENTER[1] ?? 10.7626, lng: HCMC_CENTER[0] ?? 106.6602};
+      if (!applyCenter()) setError(t.route.locationUnavailable);
+    }
   }
   useEffect(() => {
     if (centeredRef.current) return;
@@ -360,7 +385,8 @@ export default function RouteScreen() {
     if (!token || !flagPoint) return;
     setFlagBusy(true);
     try {
-      await submitFlag({type: report.type, lat: flagPoint.lat, lng: flagPoint.lng, radiusMeters: report.radiusMeters, note: report.note}, token);
+      const photoUrls = report.photoUrls && report.photoUrls.length > 0 && uid ? await uploadFlagPhotos(uid, report.photoUrls) : [];
+      await submitFlag({type: report.type, lat: flagPoint.lat, lng: flagPoint.lng, radiusMeters: report.radiusMeters, note: report.note, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
       setFlagPoint(null);
       setFlagMode(false);
       setFlagsKey((k) => k + 1);
@@ -737,12 +763,13 @@ export default function RouteScreen() {
         />
       )}
       {flagPoint ? (
-        <FlagReportDialog t={t} lat={flagPoint.lat} lng={flagPoint.lng} onClose={cancelFlagReport} onSubmit={(r) => void onSubmitFlag(r)} />
+        <FlagReportDialog t={t} onClose={cancelFlagReport} onSubmit={onSubmitFlag} />
       ) : null}
       {selectedFlag ? (
         <Overlay
           visible
           variant="dialog"
+          scrollable={false}
           title={flagTypeLabel(selectedFlag.type, t)}
           leading={<MaterialIcons name={hazardKind(selectedFlag.type).icon} size={22} color={hazardKind(selectedFlag.type).color} />}
           right={

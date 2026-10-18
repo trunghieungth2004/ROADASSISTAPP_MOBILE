@@ -10,6 +10,12 @@ export type ShopEntry = {
   name: string;
   lat?: number | null;
   lng?: number | null;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
+  distanceMeters?: number | null;
+  distance?: number | null;
+  declined?: boolean | null;
+  openNow?: boolean | null;
 };
 
 export function normalizeShopName(name: string): string {
@@ -57,8 +63,27 @@ export function dropShopDuplicates(
 }
 
 export function toShopPlace(shop: ShopEntry & {lat: number; lng: number}): Place {
-  return {label: shop.name, lat: shop.lat, lng: shop.lng, source: "shop", id: shop.id, category: "repair"};
+  return {
+    label: shop.name,
+    lat: shop.lat,
+    lng: shop.lng,
+    source: "shop",
+    id: shop.id,
+    category: "repair",
+    ...(typeof shop.ratingAvg === "number" ? {ratingAvg: shop.ratingAvg} : {}),
+    ...(typeof shop.ratingCount === "number" ? {ratingCount: shop.ratingCount} : {}),
+    ...(typeof shop.distanceMeters === "number" ? {distanceMeters: shop.distanceMeters} : typeof shop.distance === "number" ? {distanceMeters: shop.distance} : {}),
+    ...(typeof shop.distance === "number" ? {distance: shop.distance} : {}),
+    ...(shop.declined === true ? {declined: true} : {}),
+    ...(typeof shop.openNow === "boolean" ? {openNow: shop.openNow} : {}),
+  };
 }
+
+export type ShopSearchFilters = {
+  minRating?: number;
+  sortBy?: "distance" | "rating";
+  ticketId?: string;
+};
 
 export async function fetchShopPlaces(
   query: string,
@@ -67,15 +92,30 @@ export async function fetchShopPlaces(
   vehicleClass?: string,
   radiusMeters?: number,
   shopOnly = false,
+  filters?: ShopSearchFilters,
 ): Promise<ShopEntry[]> {
   const shops = await searchProviders(gps.lat, gps.lng, query, token, {
     ...(shopOnly ? {kind: "SHOP"} : {}),
     ...(vehicleClass ? {vehicleClass} : {}),
     ...(radiusMeters ? {radiusMeters} : {}),
+    ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
+    ...(filters?.sortBy ? {sortBy: filters.sortBy} : {}),
+    ...(filters?.ticketId ? {ticketId: filters.ticketId} : {}),
   });
   return shops
     .filter((s) => !shopOnly || s.kind === "SHOP")
-    .map((s) => ({id: s.id, name: s.name, lat: s.lat, lng: s.lng}));
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      ...(typeof s.ratingAvg === "number" ? {ratingAvg: s.ratingAvg} : {}),
+      ...(typeof s.ratingCount === "number" ? {ratingCount: s.ratingCount} : {}),
+      ...(typeof s.distanceMeters === "number" ? {distanceMeters: s.distanceMeters} : typeof s.distance === "number" ? {distanceMeters: s.distance} : {}),
+      ...(typeof s.distance === "number" ? {distance: s.distance} : {}),
+      ...(s.declined === true ? {declined: true} : {}),
+      ...(typeof s.openNow === "boolean" ? {openNow: s.openNow} : {}),
+    }));
 }
 
 export function mergeShopResults(

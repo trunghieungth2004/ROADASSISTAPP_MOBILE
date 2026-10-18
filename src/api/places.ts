@@ -20,6 +20,11 @@ type DirectoryHit = {
   label: string;
   lat: number;
   lng: number;
+  ratingAvg?: number;
+  ratingCount?: number;
+  distanceMeters?: number;
+  declined?: boolean;
+  openNow?: boolean;
 };
 
 type MaptilerFeature = {
@@ -234,10 +239,16 @@ async function geoPut(lat: number, lng: number, lang: string, label: string): Pr
   }
 }
 
-export async function searchDirectory(query: string, token: string, limit = 5): Promise<Place[]> {
+export type DirectorySearchOptions = {
+  minRating?: number;
+  sortBy?: "distance" | "rating";
+  ticketId?: string;
+};
+
+export async function searchDirectory(query: string, token: string, limit = 5, options?: DirectorySearchOptions): Promise<Place[]> {
   if (query.trim().length < MIN_QUERY || !token) return [];
   try {
-    const hits = await api.post<DirectoryHit[]>("/places/search", {q: query.trim(), limit}, token);
+    const hits = await api.post<DirectoryHit[]>("/places/search", {q: query.trim(), limit, ...options}, token);
     return (hits ?? []).map((h) => ({
       label: h.label,
       lat: h.lat,
@@ -245,6 +256,11 @@ export async function searchDirectory(query: string, token: string, limit = 5): 
       source: "directory" as const,
       id: h.id,
       category: h.kind === "shop" ? "store" : "landmark",
+      ...(typeof h.ratingAvg === "number" ? {ratingAvg: h.ratingAvg} : {}),
+      ...(typeof h.ratingCount === "number" ? {ratingCount: h.ratingCount} : {}),
+      ...(typeof h.distanceMeters === "number" ? {distanceMeters: h.distanceMeters} : {}),
+      ...(h.declined === true ? {declined: true} : {}),
+      ...(typeof h.openNow === "boolean" ? {openNow: h.openNow} : {}),
     }));
   } catch {
     return [];

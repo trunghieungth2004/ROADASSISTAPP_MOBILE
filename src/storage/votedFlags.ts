@@ -36,3 +36,33 @@ export async function markDenied(id: string): Promise<void> {
   await writeSet(DENIED_KEY, s);
 }
 
+export async function hasVoted(id: string): Promise<boolean> {
+  const s = await readSet(VOTED_KEY);
+  return s.has(id);
+}
+
+export async function isDenied(id: string): Promise<boolean> {
+  const s = await readSet(DENIED_KEY);
+  return s.has(id);
+}
+
+export async function loadVotedIds(): Promise<Set<string>> {
+  return readSet(VOTED_KEY);
+}
+
+export async function loadDeniedIds(): Promise<Set<string>> {
+  return readSet(DENIED_KEY);
+}
+
+export async function loadVoted(): Promise<Set<string>> {
+  return readSet(VOTED_KEY);
+}
+
+export async function loadDenied(): Promise<Set<string>> {
+  return readSet(DENIED_KEY);
+}
+
+export async function load(key: string): Promise<Set<string>> {
+  return readSet(key);
+}
+

@@ -26,6 +26,8 @@ export type Provider = {
   suspended?: boolean;
   suspendedReason?: string | null;
   distance?: number;
+  distanceMeters?: number;
+  declined?: boolean;
   openNow?: boolean | null;
   closesInMinutes?: number | null;
   live?: boolean;
@@ -35,6 +37,8 @@ export type Provider = {
   reviewNote?: string | null;
 };
 
+export type ProviderSort = "distance" | "rating";
+
 export type NearProvidersOptions = {
   kind?: string;
   radiusMeters?: number;
@@ -42,11 +46,26 @@ export type NearProvidersOptions = {
   openOnly?: boolean;
   vehicleClass?: string;
   limit?: number;
+  minRating?: number;
+  sortBy?: ProviderSort;
+  ticketId?: string;
 };
 
-export function nearProviders(lat: number, lng: number, token: string, options?: NearProvidersOptions): Promise<Provider[]> {
-  const key = `providersNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${options?.kind ?? "-"},${options?.radiusMeters ?? "-"},${options?.acceptingOnly === true ? "1" : "0"},${options?.openOnly === true ? "1" : "0"},${options?.vehicleClass ?? "-"},${options?.limit ?? "-"}`;
-  return withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/near", {lat, lng, ...options}, token));
+function normalizeProvider(raw: Provider): Provider {
+  const distanceMeters = typeof raw.distanceMeters === "number" ?
+    raw.distanceMeters :
+    typeof raw.distance === "number" ? raw.distance : undefined;
+  return {
+    ...raw,
+    ...(distanceMeters !== undefined ? {distanceMeters, distance: raw.distance ?? distanceMeters} : {}),
+    ...(raw.declined === true ? {declined: true} : {}),
+  };
+}
+
+export async function nearProviders(lat: number, lng: number, token: string, options?: NearProvidersOptions): Promise<Provider[]> {
+  const key = `providersNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${options?.kind ?? "-"},${options?.radiusMeters ?? "-"},${options?.acceptingOnly === true ? "1" : "0"},${options?.openOnly === true ? "1" : "0"},${options?.vehicleClass ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
+  const rows = await withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/near", {lat, lng, ...options}, token));
+  return (rows ?? []).map(normalizeProvider);
 }
 
 export type SearchProvidersOptions = {
@@ -54,11 +73,15 @@ export type SearchProvidersOptions = {
   vehicleClass?: string;
   radiusMeters?: number;
   limit?: number;
+  minRating?: number;
+  sortBy?: ProviderSort;
+  ticketId?: string;
 };
 
-export function searchProviders(lat: number, lng: number, query: string, token: string, options?: SearchProvidersOptions): Promise<Provider[]> {
-  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.kind ?? "-"},${options?.vehicleClass ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"}`;
-  return withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/search", {lat, lng, query, ...options}, token));
+export async function searchProviders(lat: number, lng: number, query: string, token: string, options?: SearchProvidersOptions): Promise<Provider[]> {
+  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.kind ?? "-"},${options?.vehicleClass ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
+  const rows = await withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/search", {lat, lng, query, ...options}, token));
+  return (rows ?? []).map(normalizeProvider);
 }
 
 export type ProviderRating = {
@@ -125,6 +148,9 @@ export type UpdateProviderPayload = {
   lng?: number;
   openHours?: string | null;
   vehicleClasses?: string[];
+  plate?: string;
+  vehicleType?: string;
+  vehicleWidth?: number;
   serviceFee?: number;
   towBaseFee?: number;
   towPerKmFee?: number;

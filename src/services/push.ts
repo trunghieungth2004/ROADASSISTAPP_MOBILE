@@ -23,13 +23,15 @@ export function setNavForeground(open: boolean): void {
   navForeground = open;
 }
 
-export function claimPush(flagId: string): boolean {
+export function claimPush(id: string, status?: string, owner?: string): boolean {
+  void owner;
+  const key = `${id}:${status ?? "-"}`;
   const now = Date.now();
-  const at = claimed.get(flagId);
+  const at = claimed.get(key);
   if (at !== undefined && now - at < CLAIM_TTL_MS) return false;
-  claimed.set(flagId, now);
-  for (const [id, ts] of claimed) {
-    if (now - ts >= CLAIM_TTL_MS) claimed.delete(id);
+  claimed.set(key, now);
+  for (const [k, ts] of claimed) {
+    if (now - ts >= CLAIM_TTL_MS) claimed.delete(k);
   }
   return true;
 }
@@ -103,7 +105,7 @@ export function subscribeHazardPush(onPush: (data: HazardPushData) => void, owne
   const fromNotification = (n: Notifications.Notification | null | undefined): void => {
     if (!n) return;
     const parsed = parseHazardPush(n.request.content.data);
-    if (parsed && claimPush(`${owner}:${parsed.flagId}:${parsed.status ?? "-"}`)) {
+    if (parsed && claimPush(parsed.flagId, parsed.status, owner)) {
       void AsyncStorage.setItem(LAST_PUSH_KEY, JSON.stringify({flagId: parsed.flagId, at: Date.now()})).catch(() => undefined);
       onPush(parsed);
     }
@@ -122,7 +124,7 @@ export function subscribeDispatchPush(onPush: (data: DispatchPushData) => void, 
     const parsed = parseDispatchPush(n.request.content.data);
     if (!parsed) return;
     void AsyncStorage.setItem(LAST_DISPATCH_PUSH_KEY, JSON.stringify({ticketId: parsed.ticketId, status: parsed.status ?? "", at: Date.now()})).catch(() => undefined);
-    if (claimPush(`${owner}:${parsed.ticketId}:${parsed.status ?? "-"}`)) {
+    if (claimPush(parsed.ticketId, parsed.status, owner)) {
       onPush(parsed);
     }
   };
@@ -157,7 +159,8 @@ export async function getLastDispatchPush(): Promise<{ticketId: string; status: 
   }
 }
 
-let drainedLaunch: string | null = null;
+let drainedDispatchLaunch: string | null = null;
+let drainedHazardLaunch: string | null = null;
 
 function launchKey(data: {ticketId?: string; flagId?: string}, at: number | undefined): string | null {
   const id = data.ticketId ?? data.flagId;
@@ -172,8 +175,8 @@ export async function drainDispatchLaunch(): Promise<DispatchPushData | null> {
     const parsed = parseDispatchPush(res?.notification.request.content.data);
     if (!parsed) return null;
     const key = launchKey(parsed, at);
-    if (key === null || drainedLaunch === key) return null;
-    drainedLaunch = key;
+    if (key === null || drainedDispatchLaunch === key) return null;
+    drainedDispatchLaunch = key;
     return parsed;
   } catch {
     return null;
@@ -187,8 +190,8 @@ export async function drainHazardLaunch(): Promise<HazardPushData | null> {
     const parsed = parseHazardPush(res?.notification.request.content.data);
     if (!parsed) return null;
     const key = launchKey(parsed, at);
-    if (key === null || drainedLaunch === key) return null;
-    drainedLaunch = key;
+    if (key === null || drainedHazardLaunch === key) return null;
+    drainedHazardLaunch = key;
     return parsed;
   } catch {
     return null;

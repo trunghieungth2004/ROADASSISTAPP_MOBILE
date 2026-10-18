@@ -3,7 +3,7 @@ import {useMemo} from "react";
 import {StyleSheet, useColorScheme} from "react-native";
 import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
 import StyledLayer from "../../components/map/StyledLayer";
-import {bundledMapStyle} from "../../map/style";
+import {requireMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
@@ -39,7 +39,7 @@ type Props = {
 
 export default function NavMapView(props: Props) {
   const scheme = useColorScheme();
-  const mapStyle = useMemo(() => bundledMapStyle(scheme === "dark" ? "dark" : "light") ?? "https://demotiles.maplibre.org/style.json", [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {theme} = props;
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const coords = props.route.geometry.coordinates;
@@ -67,9 +67,11 @@ export default function NavMapView(props: Props) {
           />
         </GeoJSONSource>
       ) : null}
+        {coords.length > 1 ? (
         <GeoJSONSource id="nav-route-casing" data={{type: "Feature", geometry: props.route.geometry, properties: {}}}>
           <StyledLayer type="line" id="nav-route-line-casing" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 11, lineOpacity: 0.3, lineCap: "round", lineJoin: "round"}} />
         </GeoJSONSource>
+        ) : null}
         {props.traveled.length > 1 ? (
           <GeoJSONSource id="nav-traveled" data={{type: "Feature", geometry: {type: "LineString", coordinates: props.traveled}, properties: {}}}>
             <StyledLayer type="line" id="nav-traveled-line" beforeId="Ferry labels" style={{lineColor: "#94a3b8", lineWidth: 5, lineOpacity: 0.7, lineCap: "round", lineJoin: "round"}} />

@@ -2,7 +2,6 @@ import {useState} from "react";
 import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {toMessage} from "../api/client";
 import {formatPoint} from "../api/places";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import type {Strings} from "../i18n/en";
@@ -19,6 +18,8 @@ export type ShopDraft = {name: string; lat: number; lng: number; label?: string;
 export type TowDraft = {name: string; plate: string; vehicleType: string; width: string; lat: number; lng: number};
 
 export type OnboardingProps = {t: Strings; lang: string; token: string | null; busy?: boolean; error?: string | null; selectedServices?: string[]; registered?: {shop: boolean; tow: boolean}; onFinish: (services: string[], shop: ShopDraft | null, tow: TowDraft | null) => void; onSkip: () => void};
+
+type Step = "roles" | "shop" | "tow";
 
 const ROLE_ICONS = {
   rider: "two-wheeler",
@@ -40,10 +41,11 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const shopChosen = (selectedServices ?? []).includes("SHOP");
   const towChosen = (selectedServices ?? []).includes("TOW");
-  const hasShop = shopChosen || registered?.shop === true;
   const shopRegistered = registered?.shop === true;
-  const hasTow = towChosen || registered?.tow === true;
   const towRegistered = registered?.tow === true;
+  const hasShop = shopChosen || shopRegistered;
+  const hasTow = towChosen || towRegistered;
+  const [step, setStep] = useState<Step>("roles");
   const [volunteer, setVolunteer] = useState((selectedServices ?? []).includes("VOLUNTEER"));
   const [shopOpen, setShopOpen] = useState(false);
   const [shopName, setShopName] = useState("");
@@ -74,7 +76,18 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [towPoint, setTowPoint] = useState<{lat: number; lng: number} | null>(null);
   const [towSearch, setTowSearch] = useState(false);
   const [towMap, setTowMap] = useState(false);
+  const [shopDraft, setShopDraft] = useState<ShopDraft | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const showShopStep = (shopOpen || shopChosen) && !shopRegistered;
+  const showTowStep = (towOpen || towChosen) && !towRegistered;
+  const setupSteps: Step[] = ["roles"];
+  if (showShopStep) setupSteps.push("shop");
+  if (showTowStep) setupSteps.push("tow");
+  function nextStep(from: "roles" | "shop"): Step | null {
+    if (from === "roles" && showShopStep) return "shop";
+    if (showTowStep) return "tow";
+    return null;
+  }
   function onPickShopPlace(place: Place): void {
     setShopPoint({lat: place.lat, lng: place.lng, label: place.label});
     setShopSearch(false);
@@ -91,140 +104,198 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
     setTowPoint({lat, lng});
     setTowMap(false);
   }
-  function onContinue(): void {
-    if (busy) return;
-    setFieldError(null);
-    let shop: ShopDraft | null = null;
-    if (shopOpen) {
-      if (shopName.trim() === "") {
-        setFieldError(t.provider.invalidName);
-        return;
-      }
-      if (!shopPoint) {
-        setFieldError(t.provider.invalidLocation);
-        return;
-      }
-      const hours = buildOpenHours(week);
-      if (DOW.some((day) => week[day].enabled) && !hours) {
-        setFieldError(t.provider.invalidHours);
-        return;
-      }
-      shop = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {}), ...(hours ? {openHours: hours} : {}), vehicleClasses: shopClasses};
-    }
-    let tow: TowDraft | null = null;
-    if (towOpen) {
-      if (towName.trim() === "") {
-        setFieldError(t.provider.invalidName);
-        return;
-      }
-      const bad = validateTowDraft({plate, vehicleType: towType, width});
-      if (bad === "plate") {
-        setFieldError(t.provider.invalidPlate);
-        return;
-      }
-      if (bad === "type") {
-        setFieldError(t.provider.invalidType);
-        return;
-      }
-      if (bad === "width") {
-        setFieldError(t.provider.invalidWidth);
-        return;
-      }
-      if (!towPoint) {
-        setFieldError(t.provider.invalidLocation);
-        return;
-      }
-      tow = {name: towName.trim(), plate, vehicleType: towType, width, lat: towPoint.lat, lng: towPoint.lng};
-    }
+  function finish(shop: ShopDraft | null, tow: TowDraft | null): void {
     onFinish(["RIDER", ...(volunteer ? ["VOLUNTEER"] : [])], shop, tow);
   }
+  function onContinueRoles(): void {
+    if (busy) return;
+    setFieldError(null);
+    const next = nextStep("roles");
+    if (next) {
+      setStep(next);
+      return;
+    }
+    finish(null, null);
+  }
+  function onContinueShop(): void {
+    if (busy) return;
+    setFieldError(null);
+    if (shopName.trim() === "") {
+      setFieldError(t.provider.invalidName);
+      return;
+    }
+    if (!shopPoint) {
+      setFieldError(t.provider.invalidLocation);
+      return;
+    }
+    const hours = buildOpenHours(week);
+    if (DOW.some((day) => week[day].enabled) && !hours) {
+      setFieldError(t.provider.invalidHours);
+      return;
+    }
+    const draft: ShopDraft = {name: shopName.trim(), lat: shopPoint.lat, lng: shopPoint.lng, ...(shopPoint.label ? {label: shopPoint.label} : {}), ...(hours ? {openHours: hours} : {}), vehicleClasses: shopClasses};
+    const next = nextStep("shop");
+    if (next) {
+      setShopDraft(draft);
+      setStep(next);
+      return;
+    }
+    finish(draft, null);
+  }
+  function onContinueTow(): void {
+    if (busy) return;
+    setFieldError(null);
+    if (towName.trim() === "") {
+      setFieldError(t.provider.invalidName);
+      return;
+    }
+    const bad = validateTowDraft({plate, vehicleType: towType, width});
+    if (bad === "plate") {
+      setFieldError(t.provider.invalidPlate);
+      return;
+    }
+    if (bad === "type") {
+      setFieldError(t.provider.invalidType);
+      return;
+    }
+    if (bad === "width") {
+      setFieldError(t.provider.invalidWidth);
+      return;
+    }
+    if (!towPoint) {
+      setFieldError(t.provider.invalidLocation);
+      return;
+    }
+    finish(shopDraft, {name: towName.trim(), plate, vehicleType: towType, width, lat: towPoint.lat, lng: towPoint.lng});
+  }
+  function onBack(): void {
+    if (busy) return;
+    setFieldError(null);
+    setStep(step === "tow" && showShopStep ? "shop" : "roles");
+  }
+  const errorLines = (
+    <>
+      {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
+      {fieldError ? <Text style={[styles.error, {color: theme.danger}]}>{fieldError}</Text> : null}
+    </>
+  );
+  const stepHeader = (
+    <View style={styles.header}>
+      <Pressable disabled={busy} onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.common.back}>
+        <MaterialIcons name="arrow-back" size={22} color={theme.text} />
+      </Pressable>
+      <View style={styles.dots}>
+        {setupSteps.map((item) => (
+          <View key={item} style={[styles.dot, {backgroundColor: item === step ? theme.primary : theme.divider}, item === step && styles.dotActive]} />
+        ))}
+      </View>
+    </View>
+  );
   return (
     <View style={[styles.root, {backgroundColor: theme.background}]}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-      <Text style={[styles.title, {color: theme.text}]}>{t.roles.title}</Text>
-      <Text style={[styles.subtitle, {color: theme.muted}]}>{t.roles.subtitle}</Text>
-      {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
-      {fieldError ? <Text style={[styles.error, {color: theme.danger}]}>{fieldError}</Text> : null}
-      <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-        <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true}}>
-          <RoleIcon name={ROLE_ICONS.rider} active theme={theme} />
-          <Text style={{color: "#fff"}}>{t.roles.rider} — {t.roles.riderHint}</Text>
-        </View>
-        <Pressable disabled={busy} onPress={() => setVolunteer((v) => !v)} style={[styles.option, {borderColor: theme.primary}, volunteer && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: volunteer}}>
-          <RoleIcon name={ROLE_ICONS.volunteer} active={volunteer} theme={theme} />
-          <Text style={{color: volunteer ? "#fff" : theme.text}}>{t.roles.volunteer} — {t.roles.volunteerHint}</Text>
-        </Pressable>
-        {hasShop ? (
-          <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true, disabled: true}}>
-            <RoleIcon name={ROLE_ICONS.shop} active theme={theme} />
-            <Text style={{color: "#fff"}}>{t.roles.shop} — {shopRegistered ? t.provider.registered : t.provider.chosenNeedsDetails}</Text>
-          </View>
-        ) : (
-          <Pressable disabled={busy} onPress={() => setShopOpen((v) => !v)} style={[styles.option, {borderColor: theme.primary}, shopOpen && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: shopOpen}}>
-            <RoleIcon name={ROLE_ICONS.shop} active={shopOpen} theme={theme} />
-            <Text style={{color: shopOpen ? "#fff" : theme.text}}>{t.roles.shop} — {t.roles.shopHint}</Text>
-          </Pressable>
-        )}
-        {shopOpen ? (
-          <View style={styles.subForm}>
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={shopName} onChangeText={setShopName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
-            <Pressable disabled={busy} onPress={() => setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
-              <Text style={{color: shopPoint ? theme.text : theme.muted}} numberOfLines={1}>{shopPoint ? (shopPoint.label ?? formatPoint(shopPoint.lat, shopPoint.lng)) : t.provider.addressUnset}</Text>
-            </Pressable>
-            <View style={styles.row}>
-              {[{id: "SOLO_BIKE", label: t.shop.vehicleBike}, {id: "CAR", label: t.shop.vehicleCar}].map((c) => {
-                const selected = shopClasses.includes(c.id);
-                return (
-                  <Pressable key={c.id} disabled={busy} onPress={() => toggleShopClass(c.id)} style={[styles.chip, {borderColor: theme.primary}, selected && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: selected}} accessibilityLabel={c.label}>
-                    <Text style={{color: selected ? "#fff" : theme.text}}>{c.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable disabled={busy} onPress={() => setHoursOpen(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.hours}>
-              <Text style={{color: hoursSummary ? theme.text : theme.muted}} numberOfLines={1}>{hoursSummary ? `${t.provider.hours} — ${hoursSummary}` : `${t.provider.hours} — ${t.provider.hoursNotSet}`}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {hasTow ? (
-          <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true, disabled: true}}>
-            <RoleIcon name={ROLE_ICONS.tow} active theme={theme} />
-            <Text style={{color: "#fff"}}>{t.roles.tow} — {towRegistered ? t.provider.registered : t.provider.chosenNeedsDetails}</Text>
-          </View>
-        ) : (
-          <Pressable disabled={busy} onPress={() => setTowOpen((v) => !v)} style={[styles.option, {borderColor: theme.primary}, towOpen && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: towOpen}}>
-            <RoleIcon name={ROLE_ICONS.tow} active={towOpen} theme={theme} />
-            <Text style={{color: towOpen ? "#fff" : theme.text}}>{t.roles.tow} — {t.roles.towHint}</Text>
-          </Pressable>
-        )}
-        {towOpen ? (
-          <View style={styles.subForm}>
-            <Text style={[styles.subLabel, {color: theme.text}]}>{t.tow.register}</Text>
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={towName} onChangeText={setTowName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={plate} onChangeText={setPlate} placeholder={t.tow.platePlaceholder} placeholderTextColor={theme.muted} autoCapitalize="characters" />
-            <View style={styles.row}>
-              {TOW_TYPES.map((id) => (
-                <Pressable key={id} disabled={busy} onPress={() => setTowType(id)} style={[styles.chip, {borderColor: theme.primary}, towType === id && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: towType === id}}>
-                  <Text style={{color: towType === id ? "#fff" : theme.text}}>{t.vehicle.types[id]}</Text>
+        {step === "roles" ? (
+          <>
+            <Text style={[styles.title, {color: theme.text}]}>{t.roles.title}</Text>
+            <Text style={[styles.subtitle, {color: theme.muted}]}>{t.roles.subtitle}</Text>
+            {errorLines}
+            <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true}}>
+                <RoleIcon name={ROLE_ICONS.rider} active theme={theme} />
+                <Text style={{color: "#fff"}}>{t.roles.rider} — {t.roles.riderHint}</Text>
+              </View>
+              <Pressable disabled={busy} onPress={() => setVolunteer((v) => !v)} style={[styles.option, {borderColor: theme.primary}, volunteer && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: volunteer}}>
+                <RoleIcon name={ROLE_ICONS.volunteer} active={volunteer} theme={theme} />
+                <Text style={{color: volunteer ? "#fff" : theme.text}}>{t.roles.volunteer} — {t.roles.volunteerHint}</Text>
+              </Pressable>
+              {hasShop ? (
+                <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true, disabled: true}}>
+                  <RoleIcon name={ROLE_ICONS.shop} active theme={theme} />
+                  <Text style={{color: "#fff"}}>{t.roles.shop} — {shopRegistered ? t.provider.registered : t.provider.chosenNeedsDetails}</Text>
+                </View>
+              ) : (
+                <Pressable disabled={busy} onPress={() => setShopOpen((v) => !v)} style={[styles.option, {borderColor: theme.primary}, shopOpen && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: shopOpen}}>
+                  <RoleIcon name={ROLE_ICONS.shop} active={shopOpen} theme={theme} />
+                  <Text style={{color: shopOpen ? "#fff" : theme.text}}>{t.roles.shop} — {t.roles.shopHint}</Text>
                 </Pressable>
-              ))}
+              )}
+              {hasTow ? (
+                <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true, disabled: true}}>
+                  <RoleIcon name={ROLE_ICONS.tow} active theme={theme} />
+                  <Text style={{color: "#fff"}}>{t.roles.tow} — {towRegistered ? t.provider.registered : t.provider.chosenNeedsDetails}</Text>
+                </View>
+              ) : (
+                <Pressable disabled={busy} onPress={() => setTowOpen((v) => !v)} style={[styles.option, {borderColor: theme.primary}, towOpen && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: towOpen}}>
+                  <RoleIcon name={ROLE_ICONS.tow} active={towOpen} theme={theme} />
+                  <Text style={{color: towOpen ? "#fff" : theme.text}}>{t.roles.tow} — {t.roles.towHint}</Text>
+                </Pressable>
+              )}
             </View>
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={width} onChangeText={setWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
-            <Pressable disabled={busy} onPress={() => setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
-              <Text style={{color: towPoint ? theme.text : theme.muted}} numberOfLines={1}>{towPoint ? formatPoint(towPoint.lat, towPoint.lng) : t.provider.towAddressUnset}</Text>
+            <Pressable disabled={busy} onPress={onContinueRoles} style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]}>
+              <Text style={styles.primaryText}>{t.roles.done}</Text>
             </Pressable>
-            {towPoint ? <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionSet}</Text> : <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionUnset}</Text>}
-          </View>
+            <Pressable disabled={busy} onPress={onSkip}><Text style={[styles.skip, {color: theme.primary}]}>{t.roles.skip}</Text></Pressable>
+          </>
         ) : null}
-      </View>
-      <Pressable
-        disabled={busy}
-        onPress={onContinue}
-        style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]}
-      >
-        <Text style={styles.primaryText}>{t.roles.done}</Text>
-      </Pressable>
-      <Pressable disabled={busy} onPress={onSkip}><Text style={[styles.skip, {color: theme.primary}]}>{t.roles.skip}</Text></Pressable>
+        {step === "shop" ? (
+          <>
+            {stepHeader}
+            <Text style={[styles.title, {color: theme.text}]}>{t.provider.addShop}</Text>
+            {errorLines}
+            <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <View style={styles.subForm}>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={shopName} onChangeText={setShopName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
+                <Pressable disabled={busy} onPress={() => setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
+                  <Text style={{color: shopPoint ? theme.text : theme.muted}} numberOfLines={1}>{shopPoint ? (shopPoint.label ?? formatPoint(shopPoint.lat, shopPoint.lng)) : t.provider.addressUnset}</Text>
+                </Pressable>
+                <View style={styles.row}>
+                  {[{id: "SOLO_BIKE", label: t.shop.vehicleBike}, {id: "CAR", label: t.shop.vehicleCar}].map((c) => {
+                    const selected = shopClasses.includes(c.id);
+                    return (
+                      <Pressable key={c.id} disabled={busy} onPress={() => toggleShopClass(c.id)} style={[styles.chip, {borderColor: theme.primary}, selected && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: selected}} accessibilityLabel={c.label}>
+                        <Text style={{color: selected ? "#fff" : theme.text}}>{c.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Pressable disabled={busy} onPress={() => setHoursOpen(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.hours}>
+                  <Text style={{color: hoursSummary ? theme.text : theme.muted}} numberOfLines={1}>{hoursSummary ? `${t.provider.hours} — ${hoursSummary}` : `${t.provider.hours} — ${t.provider.hoursNotSet}`}</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Pressable disabled={busy} onPress={onContinueShop} style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]}>
+              <Text style={styles.primaryText}>{t.roles.done}</Text>
+            </Pressable>
+          </>
+        ) : null}
+        {step === "tow" ? (
+          <>
+            {stepHeader}
+            <Text style={[styles.title, {color: theme.text}]}>{t.tow.register}</Text>
+            {errorLines}
+            <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <View style={styles.subForm}>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={towName} onChangeText={setTowName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={plate} onChangeText={setPlate} placeholder={t.tow.platePlaceholder} placeholderTextColor={theme.muted} autoCapitalize="characters" />
+                <View style={styles.row}>
+                  {TOW_TYPES.map((id) => (
+                    <Pressable key={id} disabled={busy} onPress={() => setTowType(id)} style={[styles.chip, {borderColor: theme.primary}, towType === id && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: towType === id}}>
+                      <Text style={{color: towType === id ? "#fff" : theme.text}}>{t.vehicle.types[id]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={width} onChangeText={setWidth} placeholder={t.vehicle.widthMeters} placeholderTextColor={theme.muted} keyboardType="decimal-pad" />
+                <Pressable disabled={busy} onPress={() => setTowSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.towAddress}>
+                  <Text style={{color: towPoint ? theme.text : theme.muted}} numberOfLines={1}>{towPoint ? formatPoint(towPoint.lat, towPoint.lng) : t.provider.towAddressUnset}</Text>
+                </Pressable>
+                {towPoint ? <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionSet}</Text> : <Text style={[styles.coords, {color: theme.muted}]}>{t.provider.towPositionUnset}</Text>}
+              </View>
+            </View>
+            <Pressable disabled={busy} onPress={onContinueTow} style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]}>
+              <Text style={styles.primaryText}>{t.roles.finish}</Text>
+            </Pressable>
+          </>
+        ) : null}
       </ScrollView>
       <Overlay visible={shopSearch} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setShopSearch(false)}>
         <PlaceSearchScreen
@@ -288,12 +359,15 @@ const styles = StyleSheet.create({
   container: {padding: 20, gap: 12},
   title: {fontSize: 22, fontWeight: "700"},
   subtitle: {fontSize: 13, marginTop: 4, marginBottom: 8},
+  header: {flexDirection: "row", alignItems: "center", minHeight: 32},
+  dots: {flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingRight: 22},
+  dot: {width: 8, height: 8, borderRadius: 4},
+  dotActive: {width: 20},
   error: {fontSize: 13, marginBottom: 4},
   card: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 8},
   option: {borderWidth: 1, borderRadius: 8, padding: 10, flexDirection: "row", alignItems: "center", gap: 8},
   iconSlot: {width: 24, alignItems: "center"},
   subForm: {gap: 8, paddingTop: 4},
-  subLabel: {fontSize: 13, fontWeight: "700"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   row: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 6},

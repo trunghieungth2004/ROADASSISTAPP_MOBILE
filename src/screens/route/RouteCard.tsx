@@ -81,6 +81,12 @@ export default function RouteCard(props: Props) {
           </View>
         </Pressable>
       </View>
+      {vehicleState !== "ready" ? (
+        <Pressable style={styles.vehicleHint} onPress={props.onOpenVehicle} accessibilityRole="button" accessibilityLabel={t.route.vehicleHint}>
+          <MaterialIcons name="info-outline" size={14} color={theme.muted} />
+          <Text style={[styles.vehicleHintText, {color: theme.muted}]}>{t.route.vehicleHint}</Text>
+        </Pressable>
+      ) : null}
       {props.result ? (
         <View style={styles.actionRow}>
           <Pressable style={[styles.primary, {backgroundColor: theme.primary}, (props.busy || props.starting) && styles.disabled]} disabled={props.busy || props.starting} onPress={props.onStart}>{props.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.nav.start}</Text>}</Pressable>
@@ -118,6 +124,8 @@ const styles = StyleSheet.create({
   swapBtn: {width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center"},
   vehicleBtnRow: {flexDirection: "row", alignItems: "center", gap: 8},
   vehicleBtnText: {flex: 1, fontSize: 14, textAlign: "center"},
+  vehicleHint: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6},
+  vehicleHintText: {fontSize: 12, textAlign: "center", flexShrink: 1},
   chip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6},
   stopBadge: {width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center"},
   stopBadgeText: {color: "#fff", fontSize: 11, fontWeight: "700"},

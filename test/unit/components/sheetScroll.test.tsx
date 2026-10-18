@@ -169,7 +169,7 @@ test("saved routes list renders inside a dialog overlay", () => {
 
 test("flag report dialog exposes its submit as a footer action", () => {
   const rendered = mount(
-    <FlagReportDialog t={en} lat={1} lng={2} onClose={() => undefined} onSubmit={() => undefined} />,
+    <FlagReportDialog t={en} onClose={() => undefined} onSubmit={() => undefined} />,
   );
   const modal = rendered.root.findByType(Modal);
   expect(modal.props.visible).toBe(true);
@@ -180,7 +180,7 @@ test("flag report dialog exposes its submit as a footer action", () => {
 
 test("flag report dialog shows fully with no scroller", () => {
   const rendered = mount(
-    <FlagReportDialog t={en} lat={1} lng={2} onClose={() => undefined} onSubmit={() => undefined} />,
+    <FlagReportDialog t={en} onClose={() => undefined} onSubmit={() => undefined} />,
   );
   const actions = rendered.root.findAll((n) => n.props?.accessibilityLabel === en.flag.submit);
   expect(actions.length).toBeGreaterThan(0);
@@ -237,6 +237,11 @@ test("onboarding shop form toggles vehicle classes keeping one", () => {
   expect(shopOption).toBeDefined();
   act(() => {
     shopOption?.props.onPress();
+  });
+  const continueButton = rendered.root.findAll((n) => typeof n.props?.onPress === "function").find((n) => subtreeText(n as never).includes(en.roles.done));
+  expect(continueButton).toBeDefined();
+  act(() => {
+    continueButton?.props.onPress();
   });
   const chip = (label: string) => rendered.root.findAll((n) => n.props?.accessibilityLabel === label).find((n) => typeof n.props?.onPress === "function");
   expect(chip(en.shop.vehicleBike)?.props.accessibilityState?.checked).toBe(true);

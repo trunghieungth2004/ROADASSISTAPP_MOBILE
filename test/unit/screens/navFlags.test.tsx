@@ -145,3 +145,37 @@ test("seeded flags merge with push entries winning on id collision", async () =>
     clearApiCache();
   }
 });
+
+test("id collision keeps fetched photos while the push status wins", async () => {
+  clearApiCache();
+  const fetched = [
+    wireFlag({id: "f1", status: "1", lat: 10.7, lng: 106.6, photoUrls: ["flags/u1/a.jpg"], note: "deep water"}),
+  ];
+  const spy = jest.fn(async () => envelope(fetched));
+  globalThis.fetch = (spy as unknown) as typeof fetch;
+  const onPick = jest.fn();
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => {
+      renderer = create(
+        <NavFlags {...baseProps({seedFlags: [wireFlag({id: "f1", status: "2"})], onPick})} />,
+      );
+    });
+    const r = renderer as ReturnType<typeof create>;
+    const source = r.root.findAll(
+      (n: ReactTestInstance) => String(n.type) === "GeoJSONSource" && (n.props as {id?: string}).id === "flag-dot-pin-flood-2",
+    )[0];
+    const onPress = (source?.props as {onPress?: (e: unknown) => void} | undefined)?.onPress;
+    expect(onPress).toBeDefined();
+    await act(async () => {
+      onPress?.({nativeEvent: {features: [{properties: {id: "f1"}}]}});
+    });
+    expect(onPick).toHaveBeenCalledWith(
+      expect.objectContaining({id: "f1", status: "2", photoUrls: ["flags/u1/a.jpg"], note: "deep water"}),
+    );
+  } finally {
+    renderer?.unmount();
+    globalThis.fetch = realFetch;
+    clearApiCache();
+  }
+});

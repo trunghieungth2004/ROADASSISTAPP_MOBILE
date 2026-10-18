@@ -1,6 +1,7 @@
 import {Platform} from "react-native";
 import * as Linking from "expo-linking";
 import * as IntentLauncher from "expo-intent-launcher";
+import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 
@@ -11,18 +12,28 @@ export type PermissionState = {
 
 export type AppPermissionStates = {
   notifications: PermissionState;
+  camera: PermissionState;
+  mediaLibrary: PermissionState;
   backgroundLocation: PermissionState;
 };
 
 export async function getPermissionStates(): Promise<AppPermissionStates> {
   let notifications: PermissionState = {granted: false, canAskAgain: true};
+  let camera: PermissionState = {granted: false, canAskAgain: true};
+  let mediaLibrary: PermissionState = {granted: false, canAskAgain: true};
   let backgroundLocation: PermissionState = {granted: false, canAskAgain: true};
   try {
     const n = await Notifications.getPermissionsAsync();
     notifications = {granted: n.granted, canAskAgain: n.canAskAgain ?? !n.granted};
-  } catch {
-    return {notifications, backgroundLocation};
-  }
+  } catch {}
+  try {
+    const c = await ImagePicker.getCameraPermissionsAsync();
+    camera = {granted: c.granted, canAskAgain: c.canAskAgain ?? !c.granted};
+  } catch {}
+  try {
+    const p = await ImagePicker.getMediaLibraryPermissionsAsync();
+    mediaLibrary = {granted: p.granted, canAskAgain: p.canAskAgain ?? !p.granted};
+  } catch {}
   try {
     if (Platform.OS === "android") {
       const b = await Location.getBackgroundPermissionsAsync();
@@ -32,12 +43,30 @@ export async function getPermissionStates(): Promise<AppPermissionStates> {
       backgroundLocation = {granted: f.granted, canAskAgain: f.canAskAgain ?? !f.granted};
     }
   } catch {}
-  return {notifications, backgroundLocation};
+  return {notifications, camera, mediaLibrary, backgroundLocation};
 }
 
 export async function requestNotificationPermission(): Promise<PermissionState> {
   try {
     const r = await Notifications.requestPermissionsAsync();
+    return {granted: r.granted, canAskAgain: r.canAskAgain ?? !r.granted};
+  } catch {
+    return {granted: false, canAskAgain: false};
+  }
+}
+
+export async function requestCameraPermission(): Promise<PermissionState> {
+  try {
+    const r = await ImagePicker.requestCameraPermissionsAsync();
+    return {granted: r.granted, canAskAgain: r.canAskAgain ?? !r.granted};
+  } catch {
+    return {granted: false, canAskAgain: false};
+  }
+}
+
+export async function requestMediaLibraryPermission(): Promise<PermissionState> {
+  try {
+    const r = await ImagePicker.requestMediaLibraryPermissionsAsync();
     return {granted: r.granted, canAskAgain: r.canAskAgain ?? !r.granted};
   } catch {
     return {granted: false, canAskAgain: false};

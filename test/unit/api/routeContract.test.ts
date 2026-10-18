@@ -27,11 +27,21 @@ test("findRoute passes through routes with usable geometry", async () => {
   }
 });
 
-test("findRoute rejects routes without usable geometry", async () => {
+test("findRoute drops routes without usable geometry", async () => {
   const bad = {source: "test", distanceMeters: 100};
-  globalThis.fetch = (jest.fn(async () => okEnvelope({cached: false, routes: [bad]})) as unknown) as typeof fetch;
+  globalThis.fetch = (jest.fn(async () => okEnvelope({cached: false, routes: [bad, route]})) as unknown) as typeof fetch;
   try {
-    await expect(findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7}, "tok")).rejects.toThrow("Route has no usable geometry");
+    await expect(findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7}, "tok")).resolves.toMatchObject({cached: false, routes: [route]});
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("findRoute drops single-point line geometry", async () => {
+  const point = {source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7]]}, distanceMeters: 0, durationSeconds: 0};
+  globalThis.fetch = (jest.fn(async () => okEnvelope({cached: false, routes: [point]})) as unknown) as typeof fetch;
+  try {
+    await expect(findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7}, "tok")).resolves.toMatchObject({cached: false, routes: []});
   } finally {
     restoreFetch();
   }

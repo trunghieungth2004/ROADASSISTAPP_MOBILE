@@ -15,7 +15,7 @@ import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
 import type {RouteOption} from "../api/routes";
 import {bustFlagCaches, confirmFlag, denyFlag, flagsNear, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {toMessage} from "../api/client";
-import {markDenied, markVoted} from "../storage/votedFlags";
+import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../storage/votedFlags";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
 import {useNavVoice} from "./navigation/useNavVoice";
@@ -32,6 +32,7 @@ import FlagDetailSheet from "../components/flags/FlagDetailSheet";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
 import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeDispatchPush, subscribeHazardPush, type DispatchPushData, type HazardPushData} from "../services/push";
+import {uploadFlagPhotos} from "../services/photos";
 import {DISPATCH_STATUS, getTicket} from "../api/dispatch";
 import {towDestOf} from "./assist/towDest";
 import {playEventSound, warmAudio} from "../services/sound";
@@ -162,6 +163,17 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   const [flagBusy, setFlagBusy] = useState(false);
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [v, d] = await Promise.all([loadVotedIds(), loadDeniedIds()]);
+        setVotedIds(v);
+        setDeniedIds(d);
+      } catch {
+        return;
+      }
+    })();
+  }, []);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const uidRef = useRef(uid);
@@ -282,7 +294,8 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   async function onSubmitReport(report: FlagReport) {
     if (!reportAt) return;
     try {
-      await submitFlag({type: report.type, lat: reportAt.lat, lng: reportAt.lng, radiusMeters: report.radiusMeters, note: report.note}, token);
+      const photoUrls = report.photoUrls && report.photoUrls.length > 0 && uid ? await uploadFlagPhotos(uid, report.photoUrls) : [];
+      await submitFlag({type: report.type, lat: reportAt.lat, lng: reportAt.lng, radiusMeters: report.radiusMeters, note: report.note, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
       setReportAt(null);
       setFlagsKey((k) => k + 1);
       voice.speak(t.flag.reported);
@@ -655,12 +668,13 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
         </Overlay>
       ) : null}
       {reportAt ? (
-        <FlagReportDialog t={t} lat={reportAt.lat} lng={reportAt.lng} onClose={() => setReportAt(null)} onSubmit={(r) => void onSubmitReport(r)} />
+        <FlagReportDialog t={t} onClose={() => setReportAt(null)} onSubmit={onSubmitReport} />
       ) : null}
       {selectedFlag ? (
         <Overlay
           visible
           variant="dialog"
+          scrollable={false}
           title={flagTypeLabel(selectedFlag.type, t)}
           leading={<MaterialIcons name={hazardKind(selectedFlag.type).icon} size={22} color={hazardKind(selectedFlag.type).color} />}
           right={
