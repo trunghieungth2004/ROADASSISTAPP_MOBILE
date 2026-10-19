@@ -64,7 +64,7 @@ type Props = {
   onDeclineEstimate?: ((ticket: FeedTicket) => void) | null;
   onApproveFinal?: ((ticket: FeedTicket) => void) | null;
   onConfirmCash?: ((ticket: FeedTicket) => void) | null;
-  onPayNow?: ((ticket: FeedTicket) => void) | null;
+  onOpenBill?: ((ticket: FeedTicket) => void) | null;
   onOpenDispute?: ((ticket: FeedTicket) => void) | null;
   onRequeue?: ((ticket: FeedTicket) => void) | null;
   payment?: TicketPaymentView | null;
@@ -247,7 +247,7 @@ function Timeline({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: Feed
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onPayNow, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onOpenBill, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -312,7 +312,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   const showWaiting = (waitingMinutes !== null && waitingMinutes > 0) || (waitingFee !== null && waitingFee > 0);
   const payMethod = typeof payment?.method === "string" ? payment.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : null;
   const payStatus = typeof payment?.status === "string" ? payment.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : null;
-  const qrUri = typeof ticket.qrUrl === "string" && ticket.qrUrl !== "" ? ticket.qrUrl : typeof payment?.checkoutUrl === "string" && payment.checkoutUrl !== "" ? payment.checkoutUrl : typeof ticket.checkoutUrl === "string" && ticket.checkoutUrl !== "" ? ticket.checkoutUrl : null;
   const towerCancelled = ticket.direction === "out" && typeof ticket.cancelledBy === "string" && ticket.cancelledBy !== "" && !isTerminal(ticket.status);
   const declinedLegs = Array.isArray(ticket.towLegs) ? ticket.towLegs.filter((leg) => typeof leg?.toShopId === "string" && (leg as {toShopId: string}).toShopId !== "") : [];
   const shopDeclinedMid = declinedLegs.length > 0 && !isTerminal(ticket.status);
@@ -612,11 +611,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
             <Text style={[styles.label, {color: theme.text}]}>{t.assist.quote}</Text>
             <Text style={[styles.amount, {color: theme.text}]}>{`${ticket.shopQuotedAmount.toLocaleString()} VND`}</Text>
-            {ticket.direction === "out" && payable && payMethod === null && onPayNow ? (
-              <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onPayNow(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
-                <Text style={styles.actionText}>{t.assist.payNow}</Text>
-              </Pressable>
-            ) : null}
           </View>
         ) : null}
         {showEstimateCard && estimateAmount !== null ? (
@@ -664,11 +658,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
                     <Text style={styles.actionText}>{t.assist.approve}</Text>
                   </Pressable>
                 ) : null}
-                {onPayNow ? (
-                  <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onPayNow(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
-                    <Text style={styles.actionText}>{t.assist.payNow}</Text>
-                  </Pressable>
-                ) : null}
                 {onOpenDispute ? (
                   <Pressable style={[styles.chipBtn, {borderColor: theme.danger}]} disabled={busy} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>
                     <Text style={{color: theme.danger}}>{t.assist.disputeTicket}</Text>
@@ -689,17 +678,19 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
         {payMethod !== null ? (
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
             <Text style={[styles.coords, {color: theme.muted}]}>{paymentMethodLabel(payMethod)}{payStatus !== null ? ` · ${payStatus === "HELD" && payMethod === "SEPAY" ? t.assist.sepayHeld : paymentStatusLabel(payStatus)}` : ""}</Text>
-            {payable && payMethod === "SEPAY" && qrUri !== null ? (
-              <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void Linking.openURL(qrUri)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
-                <Text style={styles.actionText}>{t.assist.payNow}</Text>
-              </Pressable>
-            ) : null}
             {payable && payMethod === "CASH" && payStatus !== "CONFIRMED" && ticket.direction === "in" && onConfirmCash ? (
               <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onConfirmCash(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.cashConfirmReceipt}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{t.assist.cashConfirmReceipt}</Text>}
               </Pressable>
             ) : null}
           </View>
+        ) : null}
+        {ticket.direction === "out" && onOpenBill !== undefined && onOpenBill !== null && (ticket.ticketType === "TOW" || ticket.ticketType === "WALK_IN" || ticket.ticketType === "MECHANIC") ? (
+          <Pressable style={[styles.linkRow, {borderColor: theme.border}]} onPress={() => onOpenBill(ticket)} accessibilityRole="button" accessibilityLabel={t.bills.openBill}>
+            <MaterialIcons name="receipt-long" size={16} color={theme.primary} />
+            <Text style={[styles.coords, {color: theme.primary, flex: 1}]}>{t.bills.openBill}</Text>
+            <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+          </Pressable>
         ) : null}
         {ticket.ticketType === "TOW" && ticket.towFare !== null && typeof ticket.towFare === "object" && typeof ticket.towFare.estimate === "number" ? (
           <Section theme={theme} icon="payments">

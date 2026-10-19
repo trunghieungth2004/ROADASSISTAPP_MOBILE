@@ -200,34 +200,36 @@ test("quote-only rows keep the card without an estimate badge", async () => {
   }
 });
 
-test("rider pays the walk-in quote before approving", async () => {
-  const onPayNow = jest.fn();
+test("the record opens the journey bill", async () => {
+  const onOpenBill = jest.fn();
   const {renderer} = await render({
     ticket: ticket({ticketType: "WALK_IN", status: "9", direction: "out", otherParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, shopQuotedAmount: 120000}),
     onApproveQuote: () => undefined,
-    onPayNow,
+    onOpenBill,
   });
   try {
     expect(texts(renderer)).toContain("120,000 VND");
-    expect(actionLabels(renderer)).toContain(en.assist.payNow);
-    const pay = tap(renderer, en.assist.payNow);
+    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+    expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
+    const open = tap(renderer, en.bills.openBill);
     await act(async () => {
-      pay?.props.onPress?.();
+      open?.props.onPress?.();
     });
-    expect(onPayNow).toHaveBeenCalledTimes(1);
+    expect(onOpenBill).toHaveBeenCalledTimes(1);
   } finally {
     renderer.unmount();
   }
 });
 
-test("a payment on file replaces the quote pay button", async () => {
+test("the bill link survives a payment on file", async () => {
   const {renderer} = await render({
     ticket: ticket({ticketType: "WALK_IN", status: "9", direction: "out", otherParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, shopQuotedAmount: 120000}),
     onApproveQuote: () => undefined,
-    onPayNow: jest.fn(),
+    onOpenBill: jest.fn(),
     payment: {method: "SEPAY", status: "HELD"},
   });
   try {
+    expect(actionLabels(renderer)).toContain(en.bills.openBill);
     expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
   } finally {
     renderer.unmount();

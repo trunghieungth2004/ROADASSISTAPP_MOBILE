@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
@@ -70,7 +70,7 @@ export default function AssistScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation() as unknown as {navigate: (name: string, params?: Record<string, unknown>) => void; setOptions: (options: {title?: string; headerShown?: boolean}) => void};
   const cameraRef = useRef<CameraRef | null>(null);
   const centeredRef = useRef(false);
   const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
@@ -878,7 +878,7 @@ export default function AssistScreen() {
         onDeclineEstimate={(item) => void onDeclineEstimate(item)}
         onApproveFinal={(item) => void onApproveFinal(item)}
         onConfirmCash={(item) => void onConfirmCash(item)}
-        onPayNow={(item) => void onPayNow(item)}
+        onOpenBill={(item) => openBill(item)}
         onOpenDispute={(item) => { setDisputeFor(item); setDisputeError(null); }}
         onRequeue={(item) => void onRequeueTicket(item)}
         payment={payments[ticket.id] ?? null}
@@ -1105,6 +1105,11 @@ export default function AssistScreen() {
   }
   async function onApproveFinal(ticket: FeedTicket): Promise<void> {
     if (!token || recBusy) return;
+    if (!fundedForApproval(ticket)) {
+      setDetailFor(null);
+      navigation.navigate("BillDetail", {ticketId: ticket.id, payFirst: true});
+      return;
+    }
     setRecBusy(true);
     setError(null);
     try {
@@ -1131,19 +1136,15 @@ export default function AssistScreen() {
       setRecBusy(false);
     }
   }
-  async function onPayNow(ticket: FeedTicket): Promise<void> {
-    if (!token || recBusy) return;
-    setRecBusy(true);
-    setError(null);
-    try {
-      const created = await createPayment(ticket.id, "SEPAY", token);
-      setPayments((prev) => ({...prev, [ticket.id]: created}));
-      await reloadAll();
-    } catch (err) {
-      setError(toMessage(err));
-    } finally {
-      setRecBusy(false);
-    }
+  function fundedForApproval(ticket: FeedTicket): boolean {
+    const live = payments[ticket.id] ?? null;
+    const method = typeof live?.method === "string" ? live.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : null;
+    const status = typeof live?.status === "string" ? live.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : null;
+    return (method === "CASH" && (status === "PENDING" || status === "CONFIRMED")) || (method === "SEPAY" && (status === "HELD" || status === "CONFIRMED"));
+  }
+  function openBill(ticket: FeedTicket): void {
+    setDetailFor(null);
+    navigation.navigate("BillDetail", {ticketId: ticket.id});
   }
   async function onFileDispute(reason: string, noteText: string, photoUri: string | null): Promise<void> {
     if (!token || !disputeFor || disputeBusy) return;
@@ -1319,6 +1320,11 @@ export default function AssistScreen() {
   }
   async function onApproveQuote(ticket: FeedTicket): Promise<void> {
     if (!token || recBusy) return;
+    if (!fundedForApproval(ticket)) {
+      setDetailFor(null);
+      navigation.navigate("BillDetail", {ticketId: ticket.id, payFirst: true});
+      return;
+    }
     setRecBusy(true);
     setError(null);
     try {

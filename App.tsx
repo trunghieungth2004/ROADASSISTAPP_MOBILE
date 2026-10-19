@@ -17,6 +17,8 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import AboutScreen from "./src/screens/AboutScreen";
 import PermissionsScreen from "./src/screens/PermissionsScreen";
 import ProvidersScreen from "./src/screens/ProvidersScreen";
+import BillsScreen from "./src/screens/BillsScreen";
+import BillDetailScreen from "./src/screens/BillDetailScreen";
 import {useEffect, useState} from "react";
 import {ensurePushConfigured, syncPushToken} from "./src/services/push";
 import {warmAudio} from "./src/services/sound";
@@ -88,6 +90,8 @@ function ThemedApp() {
                   <Stack.Screen name="About" component={AboutScreen} />
                   <Stack.Screen name="Permissions" component={PermissionsScreen} />
                   <Stack.Screen name="Providers" component={ProvidersScreen} />
+                  <Stack.Screen name="Bills" component={BillsScreen} />
+                  <Stack.Screen name="BillDetail" component={BillDetailScreen} />
                 </Stack.Navigator>
               </NavigationContainer>
               <StatusBar style={scheme === "dark" ? "light" : "dark"} />

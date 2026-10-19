@@ -30,6 +30,7 @@ import {
   updateTicketStatus,
 } from "../../../src/api/dispatch";
 import {checkInAtShop} from "../../../src/screens/assist/checkIn";
+import {fetchBill, myBills} from "../../../src/api/bills";
 import {ratingsByTicket, submitRating} from "../../../src/api/ratings";
 import {
   confirmFlag,
@@ -149,6 +150,8 @@ const calls: Call[] = [
   {fn: () => refreshWaiting("t1", T), method: "POST", path: "/dispatch/waiting"},
   {fn: () => createPayment("t1", "CASH", T), method: "POST", path: "/payments/create"},
   {fn: () => confirmCashReceipt("t1", T), method: "POST", path: "/payments/confirm-cash"},
+  {fn: () => myBills(T, 20), method: "POST", path: "/bills/all"},
+  {fn: () => fetchBill(T, {ticketId: "t1"}), method: "POST", path: "/bills/one"},
   {fn: () => fileDispute({ticketId: "t1", reason: "LATE"}, T), method: "POST", path: "/disputes"},
 ];
 

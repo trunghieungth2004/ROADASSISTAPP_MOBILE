@@ -135,6 +135,12 @@ export default function MoreScreen() {
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} />
         </Overlay>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Bills" as never)} accessibilityRole="button" accessibilityLabel={t.bills.title}>
+            <MaterialIcons name="receipt-long" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.bills.title}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Settings" as never)} accessibilityRole="button" accessibilityLabel={t.more.settings}>
             <MaterialIcons name="settings" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.settings}</Text>

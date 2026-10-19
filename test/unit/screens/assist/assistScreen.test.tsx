@@ -1523,7 +1523,7 @@ test("destination shop sends an estimate from the modal", async () => {
 test("rider approves a pending quote", async () => {
   const renderer = await mount();
   try {
-    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, paymentMethod: "CASH", paymentStatus: "PENDING", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Walk-in · Quoted");
     expect(sheetAction(renderer, en.assist.approveQuote)).toBeDefined();
     seen.length = 0;
@@ -1534,6 +1534,24 @@ test("rider approves a pending quote", async () => {
     const posted = seen.find((call) => call.path === "/dispatch/quote/approve");
     expect(posted).toBeDefined();
     expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t9"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("an unfunded quote approval opens the bill", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Quoted");
+    seen.length = 0;
+    mockNavigate.mockClear();
+    await act(async () => {
+      await sheetAction(renderer, en.assist.approveQuote)?.props.onPress();
+      await flush();
+    });
+    expect(seen.find((call) => call.path === "/dispatch/quote/approve")).toBeUndefined();
+    expect(mockNavigate).toHaveBeenCalledWith("BillDetail", {ticketId: "t9", payFirst: true});
   } finally {
     teardown(renderer);
   }

@@ -529,10 +529,10 @@ iOS renders nothing — sideload doesn't exist there.
 Mihon-shaped: `MoreScreen` is a hub, not a settings dump. It keeps identity
 (avatar, name, licence/role/provider badges, points/reports stats), then a
 Duty card with one switch row per held role (volunteer / tow / shop) right
-under the profile header, then two rows that push `Settings` and `About`,
-then sign out. No accordions — every destination is a pushed screen (four
-stack registrations beside `Diagnostics`: Settings, About, Permissions,
-Providers).
+under the profile header, then a Bills row and the rows that push `Settings`
+and `About`, then sign out. No accordions — every destination is a pushed
+screen (six stack registrations beside `Diagnostics`: Settings, About,
+Permissions, Providers, Bills, BillDetail).
 
 `SettingsScreen` is a hub of rows: services onboarding, appearance,
 language, then pushed `Permissions` (notifications / camera / photo library /
@@ -589,21 +589,20 @@ empty state at the cost of dead space on every non-empty one.
 
 ## Quotes, payments & disputes
 
-### Two-stage estimate → final
+### One binding quote, advisory tow estimates
 
-The record sheet money block renders every stage: `estimateAmount` (stage-1
-estimate) and `shopQuotedAmount` (legacy one-shot quote) as the estimate,
-`finalAmount` (binding) with fault photos, plus the tow fare rows
+The record sheet money block renders the binding `shopQuotedAmount` with its
+quote card, legacy `finalAmount` with fault photos, and the tow fare rows
 (board-preview estimate, live "up to" ceiling, resolved final, recorded
 cancel partial — all read from the stored ticket, never recomputed). The
-workbench flow: send-quote posts the estimate (`13` Estimated, amber card
-with Approve/Decline for the rider — approve `14`, decline returns to
-pending and records the shop in `declinedShopIds`); saving a fresh final
-posts `11` Final quoted — Approve starts work `6` (server-side gated on a
-funded payment), Decline reuses the cancel pair. Sent amounts lock in the
-work form and are never resent. An on-site `UNFIXABLE` verdict (reason +
-evidence photos) closes the ticket at `15` with no `final` — the sheet shows
-the unfixable banner and the payment state (refunded/held), never a price.
+workbench sends one quote (`POST /dispatch/quote` → `9` Quoted) and the
+rider's Approve (`POST /dispatch/quote/approve`) moves `9`→`6`, gated on a
+funded payment; Work done saves details only (`POST /dispatch/work`,
+`workType` + `invoiceRef`), never a second amount. Legacy `11` Final-quoted
+tickets still render their card and approve through the same gate. An
+on-site `UNFIXABLE` verdict (reason + evidence photos) closes the ticket at
+`15` with no `final` — the sheet shows the unfixable banner and the payment
+state (refunded/held), never a price.
 
 Tow estimates run the same handshake without the status machine. The
 drop-off shop (the ticket's `destinationShopId` owned by the viewer) sees a
@@ -688,19 +687,29 @@ on the next claim, dropping the banner), the shop-decline banner, and the
 final-quote card each carry their own chip, and the footer steps aside while
 they show. Every chip files through the `DisputeSheet` above.
 
-### Cash confirm vs SePay
+### Bills & itemized payment
 
-Two settlement UIs on the same money block. The operator confirms cash
-received roadside (`POST /payments/confirm-cash`, `PENDING` → `CONFIRMED`).
-The rider's pay action creates the charge (`POST /payments/create`
-`{ticketId, method: "SEPAY"}`) and the sheet renders the hosted checkout
-link (`ticket.qrUrl` → `payment.checkoutUrl` → `ticket.checkoutUrl`), opened
-in the system browser via `Linking.openURL`; funds land `HELD` (reserved —
-the sheet shows "Held"). The payment state re-reads on the next record
-reload — no payment push events exist server-side. Labels come from
-`paymentMethodLabel`/`paymentStatusLabel` (`Pending` / `Held` / `Confirmed` /
-`Refunded` / `Partial`); copy says "on record" for cash and "Held" for SePay
-until settled.
+Paying moved off the record. Each journey is one bill under More → Bills
+(`POST /bills/all`) — the bill id is the tow, items are the tow fare (fare +
+waiting fee) and the repair quote on the linked drop-off walk-in; a
+standalone walk-in is its own bill. Rows show total/paid/due and a status
+pill. `BillDetailScreen` takes `{ticketId}` (also `{payFirst: true}` when
+the record redirected an unfunded approval), reloads on focus and on
+AppState `active` (the checkout page returns to the app), and pays per item
+through `POST /payments/create` with the item's `ticketId` — SePay arms the
+charge and opens the hosted checkout (`checkoutUrl`), cash arms `PENDING`
+for the shop to confirm. A pending SePay item reopens its page from the item
+`qrUrl` (`ticket.checkoutUrl`), so leaving the screen loses nothing. Labels
+come from `paymentMethodLabel`/`paymentStatusLabel`; there are no payment
+push events, so the bill re-reads on return.
+
+The record keeps tracking, not paying: the money block shows the charge
+method/status, the operator still confirms cash received roadside
+(`POST /payments/confirm-cash`), and an "Open bill" row (`direction: "out"`,
+TOW/WALK_IN/MECHANIC) jumps to the detail. Rider Approve on a quote or
+legacy final checks the ticket's funded state first (CASH `PENDING`/
+`CONFIRMED`, SEPAY `HELD`/`CONFIRMED`); an unfunded tap opens the bill with
+the pay-first banner instead of posting.
 
 ## Build / verify
 
