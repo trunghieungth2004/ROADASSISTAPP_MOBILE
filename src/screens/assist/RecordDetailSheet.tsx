@@ -4,23 +4,20 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme, type AppTheme} from "../../theme";
-import {DECLINE_REASONS, DISPATCH_STATUS, isTerminal, type DeclineReason, type FeedTicket} from "../../api/dispatch";
+import {DECLINE_REASONS, isTerminal, type DeclineReason, type FeedTicket} from "../../api/dispatch";
 import {paymentMethodLabel, paymentStatusLabel} from "../../api/payments";
 import type {UserRating} from "../../api/ratings";
 import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
 import {formatPoint, reverseLabel} from "../../api/places";
 import {distBetween} from "../navigation/navUtils";
 import {timeAgoLabel} from "../hazards/hazardFilter";
-import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canResolve, canSendEstimate, canSendQuote, canStartWork, estimateStateOf} from "./recordActions";
-import {formatAmountInput} from "./money";
+import {canAccept, canApproveQuote, canCancel, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canResolve, canSendEstimate, canSendQuote, canStartWork, estimateStateOf} from "./recordActions";
 import {declineReasonLabel, stageLabel, statusPillColor, statusStages, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./ticketLabels";
 import {directionOf} from "./recordFilter";
 import StatusStepper from "./StatusStepper";
 import RatingRow from "./RatingRow";
 import {usePhotoUrls} from "../../services/photos";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
-export type WorkPatch = {workType: string; quoted: string; final: string};
-
 export type TicketPaymentView = {
   method?: string | null;
   status?: string | null;
@@ -42,8 +39,8 @@ type Props = {
   onRate: (ticket: FeedTicket) => void;
   onAccept: (ticket: FeedTicket) => void;
   onDecline: ((ticket: FeedTicket, reason: DeclineReason, note: string | undefined) => void) | null;
-  onSaveWork: (ticket: FeedTicket, patch: WorkPatch) => void;
-  onSendQuote: (ticket: FeedTicket, patch: WorkPatch) => void;
+  onOpenWork: (ticket: FeedTicket) => void;
+  onOpenQuote: (ticket: FeedTicket) => void;
   onOpenEstimate?: ((ticket: FeedTicket) => void) | null;
   onApproveQuote: (ticket: FeedTicket) => void;
   onOpenShop: (ticket: FeedTicket) => void;
@@ -250,7 +247,7 @@ function Timeline({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: Feed
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onSaveWork, onSendQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onPayNow, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onPayNow, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable}: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -258,10 +255,6 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState<DeclineReason>("FULL");
   const [declineNote, setDeclineNote] = useState("");
-  const [workOpen, setWorkOpen] = useState(false);
-  const [workType, setWorkType] = useState(typeof ticket.workType === "string" ? ticket.workType : "");
-  const [quoted, setQuoted] = useState(typeof ticket.shopQuotedAmount === "number" ? formatAmountInput(String(ticket.shopQuotedAmount)) : "");
-  const [final, setFinal] = useState(typeof ticket.finalAmount === "number" ? formatAmountInput(String(ticket.finalAmount)) : "");
   const [replyRatingId, setReplyRatingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const photoViewer = usePhotoViewer(t.common.cancel);
@@ -306,8 +299,8 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   } : null;
   const placeHeader = ticket.ticketType === "WALK_IN" ? t.assist.startPoint : ticket.ticketType === "TOW" || ticket.ticketType === "SOS" || ticket.ticketType === "MECHANIC" ? t.assist.pickup : null;
   const canDeclineDest = canDeclineDestination(ticket.status, ticket.destinationShopId, ownShopIds);
-  const estimateAmount = typeof ticket.estimateAmount === "number" ? ticket.estimateAmount : typeof ticket.shopQuotedAmount === "number" ? ticket.shopQuotedAmount : null;
-  const estimateNote = typeof ticket.estimateNote === "string" && ticket.estimateNote !== "" ? ticket.estimateNote : typeof ticket.workType === "string" && ticket.workType !== "" ? ticket.workType : null;
+  const estimateAmount = typeof ticket.estimateAmount === "number" ? ticket.estimateAmount : null;
+  const estimateNote = typeof ticket.estimateNote === "string" && ticket.estimateNote !== "" ? ticket.estimateNote : null;
   const faultPhotos = usePhotoUrls(ticket.faultPhotos);
   const ticketPhotoPaths = showRequestPhotos && Array.isArray(ticket.photoUrls) ? ticket.photoUrls.filter((path): path is string => typeof path === "string" && path !== "") : [];
   const ticketPhotos = usePhotoUrls(showRequestPhotos ? ticket.photoUrls : null);
@@ -326,6 +319,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   const showEstimateCard = estimateAmount !== null;
   const showFinalCard = typeof ticket.finalAmount === "number";
   const showUnfixable = ticket.unfixable === true;
+  const payable = !showUnfixable && !isTerminal(ticket.status);
   const estimateState = estimateStateOf(ticket);
   const destinationMine = typeof ticket.destinationShopId === "string" && ticket.destinationShopId !== "" && ownShopIds.has(ticket.destinationShopId);
   const canEstimate = onOpenEstimate !== undefined && onOpenEstimate !== null && canSendEstimate(ticket.direction, ticket.ticketType, ticket.status, destinationMine, estimateState);
@@ -357,15 +351,13 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   if (declineOpen && onDecline) {
     actions.push({label: t.provider.decline, tone: "danger", busy, onPress: () => { onDecline(ticket, declineReason, declineNote.trim() || undefined); setDeclineOpen(false); }});
   }
-  const quoteReady = canSendQuote(ticket.direction, ticket.status, hasShop) && quoted.trim() !== "" && typeof ticket.shopQuotedAmount !== "number";
-  if (workOpen && !quoteReady) {
-    actions.push({label: t.provider.saveWork, tone: "primary", busy, onPress: () => { onSaveWork(ticket, {workType, quoted, final}); setWorkOpen(false); }});
+  if (canSendQuote(ticket.direction, ticket.status, ticket.ticketType, hasShop) && typeof ticket.shopQuotedAmount !== "number") {
+    actions.push({label: t.assist.sendQuote, tone: "primary", busy, onPress: () => onOpenQuote(ticket)});
   }
-  if (quoteReady) {
-    actions.push({label: t.assist.sendQuote, tone: "primary", busy, onPress: () => { onSendQuote(ticket, {workType, quoted, final}); setWorkOpen(false); }});
+  if (canEditWork(ticket.direction, ticket.status, hasShop, ticket.ticketType)) {
+    actions.push({label: t.provider.workDone, tone: "neutral", outline: true, busy, onPress: () => onOpenWork(ticket)});
   }
-  const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && ticket.direction === "in" && hasShop && !showUnfixable &&
-    (ticket.status === DISPATCH_STATUS.ARRIVED || ticket.status === DISPATCH_STATUS.QUOTED || ticket.status === DISPATCH_STATUS.IN_SHOP || ticket.status === DISPATCH_STATUS.FINAL_QUOTED);
+  const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && ticket.direction === "in" && hasShop && !showUnfixable && canMarkUnfixable(ticket.ticketType, ticket.status);
   if (unfixableReady) {
     actions.push({label: t.assist.unfixableAction, tone: "danger", outline: true, busy, onPress: () => onMarkUnfixable(ticket)});
   }
@@ -384,11 +376,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
   if (onNavigateJob) {
     actions.push({label: t.common.routeFromHere, tone: "primary", busy, onPress: () => onNavigateJob(ticket)});
   }
-  const formOpen = declineOpen || workOpen || confirmCancel;
+  const formOpen = declineOpen || confirmCancel;
   if (!formOpen && canStartWork(ticket.direction, ticket.status, ticket.ticketType, typeof ticket.shopQuotedAmount === "number", hasShop)) {
     actions.push({label: t.assist.startWork, tone: "primary", busy, onPress: () => onAdvance(ticket, "6")});
   }
-  if (!formOpen && canMarkReady(ticket.direction, ticket.status, hasShop)) {
+  if (!formOpen && canMarkReady(ticket.direction, ticket.status, ticket.ticketType, hasShop)) {
     actions.push({label: t.assist.markReady, tone: "primary", busy, onPress: () => onAdvance(ticket, "7")});
   }
   if (canRateRider(ticket.direction, ticket.status)) {
@@ -610,14 +602,22 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             <Text style={[styles.coords, {color: theme.text}]}>{t.provider.workType}: {ticket.workType}</Text>
           </Section>
         ) : null}
-        {typeof ticket.shopQuotedAmount === "number" || typeof ticket.finalAmount === "number" ? (
+        {typeof ticket.finalAmount === "number" ? (
           <Section theme={theme} icon="payments">
             <Text style={[styles.coords, {color: theme.text}]}>
-              {typeof ticket.shopQuotedAmount === "number" ? `${t.assist.quote}: ${ticket.shopQuotedAmount.toLocaleString()} VND` : ""}
-              {typeof ticket.shopQuotedAmount === "number" && typeof ticket.finalAmount === "number" ? " · " : ""}
-              {typeof ticket.finalAmount === "number" ? `${t.assist.finalPrice}: ${ticket.finalAmount.toLocaleString()} VND` : ""}
+              {`${t.assist.finalPrice}: ${ticket.finalAmount.toLocaleString()} VND`}
             </Text>
           </Section>
+        ) : typeof ticket.shopQuotedAmount === "number" ? (
+          <View style={[styles.destBlock, {borderColor: theme.border}]}>
+            <Text style={[styles.label, {color: theme.text}]}>{t.assist.quote}</Text>
+            <Text style={[styles.amount, {color: theme.text}]}>{`${ticket.shopQuotedAmount.toLocaleString()} VND`}</Text>
+            {ticket.direction === "out" && payable && payMethod === null && onPayNow ? (
+              <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onPayNow(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
+                <Text style={styles.actionText}>{t.assist.payNow}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         {showEstimateCard && estimateAmount !== null ? (
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
@@ -657,7 +657,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
                 ))}
               </View>
             ) : null}
-            {ticket.direction === "out" ? (
+            {ticket.direction === "out" && payable ? (
               <View style={styles.metaRow}>
                 {onApproveFinal ? (
                   <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onApproveFinal(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.approve}>
@@ -689,12 +689,12 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
         {payMethod !== null ? (
           <View style={[styles.destBlock, {borderColor: theme.border}]}>
             <Text style={[styles.coords, {color: theme.muted}]}>{paymentMethodLabel(payMethod)}{payStatus !== null ? ` · ${payStatus === "HELD" && payMethod === "SEPAY" ? t.assist.sepayHeld : paymentStatusLabel(payStatus)}` : ""}</Text>
-            {payMethod === "SEPAY" && qrUri !== null ? (
+            {payable && payMethod === "SEPAY" && qrUri !== null ? (
               <Pressable style={[styles.actionBtn, styles.inlineAction, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void Linking.openURL(qrUri)} accessibilityRole="button" accessibilityLabel={t.assist.payNow}>
                 <Text style={styles.actionText}>{t.assist.payNow}</Text>
               </Pressable>
             ) : null}
-            {payMethod === "CASH" && payStatus !== "CONFIRMED" && ticket.direction === "in" && onConfirmCash ? (
+            {payable && payMethod === "CASH" && payStatus !== "CONFIRMED" && ticket.direction === "in" && onConfirmCash ? (
               <Pressable style={[styles.actionBtn, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => onConfirmCash(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.cashConfirmReceipt}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionText}>{t.assist.cashConfirmReceipt}</Text>}
               </Pressable>
@@ -759,28 +759,10 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, gps, 
             <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={declineNote} onChangeText={setDeclineNote} placeholder={t.provider.declineNote} placeholderTextColor={theme.muted} maxLength={280} />
           </View>
         ) : null}
-        {canEditWork(ticket.direction, ticket.status, hasShop) && !workOpen ? (
-          <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.primary}]} onPress={() => setWorkOpen(true)} accessibilityRole="button" accessibilityLabel={t.provider.saveWork}>
-            <Text style={{color: theme.primary}}>{t.provider.saveWork}</Text>
+        {canEditWork(ticket.direction, ticket.status, hasShop, ticket.ticketType) ? (
+          <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.primary}]} onPress={() => onOpenWork(ticket)} accessibilityRole="button" accessibilityLabel={t.provider.workDone}>
+            <Text style={{color: theme.primary}}>{t.provider.workDone}</Text>
           </Pressable>
-        ) : null}
-        {workOpen ? (
-          <View style={styles.form}>
-            <Text style={[styles.label, {color: theme.text}]}>{t.provider.workType}</Text>
-            <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={workType} onChangeText={setWorkType} placeholder={t.provider.workPlaceholder} placeholderTextColor={theme.muted} />
-            <Text style={[styles.label, {color: theme.text}]}>{t.provider.quotedAmount}</Text>
-            {typeof ticket.shopQuotedAmount === "number" ? (
-              <TextInput style={[styles.input, styles.locked, {borderColor: theme.border, color: theme.muted}]} value={ticket.shopQuotedAmount.toLocaleString()} editable={false} accessibilityLabel={t.provider.quotedAmount} />
-            ) : (
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={quoted} onChangeText={(value) => setQuoted(formatAmountInput(value))} placeholder={t.provider.quotedAmount} placeholderTextColor={theme.muted} keyboardType="number-pad" />
-            )}
-            <Text style={[styles.label, {color: theme.text}]}>{t.provider.finalAmount}</Text>
-            {typeof ticket.finalAmount === "number" ? (
-              <TextInput style={[styles.input, styles.locked, {borderColor: theme.border, color: theme.muted}]} value={ticket.finalAmount.toLocaleString()} editable={false} accessibilityLabel={t.provider.finalAmount} />
-            ) : (
-              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={final} onChangeText={(value) => setFinal(formatAmountInput(value))} placeholder={t.provider.finalAmount} placeholderTextColor={theme.muted} keyboardType="number-pad" />
-            )}
-          </View>
         ) : null}
         {showDisputeFoot && onOpenDispute ? (
           <Pressable style={[styles.chipBtn, styles.selfStart, {borderColor: theme.danger}]} onPress={() => onOpenDispute(ticket)} accessibilityRole="button" accessibilityLabel={t.assist.disputeTicket}>

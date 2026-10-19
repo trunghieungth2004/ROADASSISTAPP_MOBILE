@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, canStartWork, estimateStateOf, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, canStartWork, estimateStateOf, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -35,11 +35,14 @@ test("operator takes pending inbound jobs", () => {
   }
 });
 
-test("operator edits open inbound work orders", () => {
-  for (const s of ["2", "3", "6"]) expect(canEditWork("in", s, true)).toBe(true);
-  for (const s of ["1", "4", "5", "7", "8"]) expect(canEditWork("in", s, true)).toBe(false);
-  for (const s of ["1", "2", "3", "4", "5", "6", "7", "8"]) expect(canEditWork("out", s, true)).toBe(false);
-  for (const s of ["2", "3", "6"]) expect(canEditWork("in", s, false)).toBe(false);
+test("operator records work-done details on in-progress shop jobs", () => {
+  for (const type of ["WALK_IN", "MECHANIC"]) {
+    expect(canEditWork("in", "6", true, type)).toBe(true);
+    expect(canEditWork("out", "6", true, type)).toBe(false);
+    expect(canEditWork("in", "6", false, type)).toBe(false);
+  }
+  for (const s of ["1", "2", "3", "4", "5", "7", "8"]) expect(canEditWork("in", s, true, "WALK_IN")).toBe(false);
+  for (const type of ["TOW", "SOS"]) expect(canEditWork("in", "6", true, type)).toBe(false);
 });
 
 test("operator rates the rider on resolved inbound jobs", () => {
@@ -48,18 +51,27 @@ test("operator rates the rider on resolved inbound jobs", () => {
   for (const s of ["1", "2", "3", "4", "5", "6", "7", "8"]) expect(canRateRider("out", s)).toBe(false);
 });
 
-test("operator starts arrived jobs and walk-ins from matched", () => {
+test("volunteers start arrived SOS jobs, shops quote first", () => {
   expect(canStartWork("in", "3", "SOS", false, true)).toBe(true);
-  expect(canStartWork("in", "2", "WALK_IN", false, true)).toBe(true);
   expect(canStartWork("in", "2", "SOS", false, true)).toBe(false);
-  expect(canStartWork("in", "2", "WALK_IN", true, true)).toBe(false);
+  expect(canStartWork("in", "3", "WALK_IN", false, true)).toBe(false);
+  expect(canStartWork("in", "2", "WALK_IN", false, true)).toBe(false);
   expect(canStartWork("out", "3", "SOS", false, true)).toBe(false);
   expect(canStartWork("in", "3", "SOS", false, false)).toBe(false);
-  expect(canStartWork("in", "6", "WALK_IN", false, true)).toBe(false);
-  expect(canMarkReady("in", "6", true)).toBe(true);
-  expect(canMarkReady("in", "2", true)).toBe(false);
-  expect(canMarkReady("in", "6", false)).toBe(false);
-  expect(canMarkReady("out", "6", true)).toBe(false);
+  expect(canStartWork("in", "3", "SOS", true, true)).toBe(false);
+  expect(canMarkReady("in", "6", "WALK_IN", true)).toBe(true);
+  expect(canMarkReady("in", "6", "MECHANIC", true)).toBe(true);
+  expect(canMarkReady("in", "6", "TOW", true)).toBe(false);
+  expect(canMarkReady("in", "2", "WALK_IN", true)).toBe(false);
+  expect(canMarkReady("in", "6", "WALK_IN", false)).toBe(false);
+  expect(canMarkReady("out", "6", "WALK_IN", true)).toBe(false);
+});
+
+test("unfixable runs from live shop states", () => {
+  for (const s of ["2", "3", "6", "9", "10", "11"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(true);
+  for (const s of ["1", "4", "7", "8", "12", "15"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(false);
+  expect(canMarkUnfixable("TOW", "3")).toBe(false);
+  expect(canMarkUnfixable("SOS", "6")).toBe(false);
 });
 
 test("destination decline belongs to the destination shop from pending on", () => {
@@ -121,11 +133,13 @@ test("shop-addressed pushes announce, board copies stay quiet", () => {
 });
 
 test("quote handshake gates both sides", () => {
-  expect(canSendQuote("in", "2", true)).toBe(true);
-  expect(canSendQuote("in", "3", true)).toBe(true);
-  expect(canSendQuote("in", "6", true)).toBe(false);
-  expect(canSendQuote("in", "2", false)).toBe(false);
-  expect(canSendQuote("out", "2", true)).toBe(false);
+  expect(canSendQuote("in", "2", "WALK_IN", true)).toBe(true);
+  expect(canSendQuote("in", "3", "MECHANIC", true)).toBe(true);
+  expect(canSendQuote("in", "10", "WALK_IN", true)).toBe(true);
+  expect(canSendQuote("in", "6", "WALK_IN", true)).toBe(false);
+  expect(canSendQuote("in", "2", "TOW", true)).toBe(false);
+  expect(canSendQuote("in", "2", "WALK_IN", false)).toBe(false);
+  expect(canSendQuote("out", "2", "WALK_IN", true)).toBe(false);
   expect(canApproveQuote("out", "9")).toBe(true);
   expect(canApproveQuote("out", "2")).toBe(false);
   expect(canApproveQuote("in", "9")).toBe(false);

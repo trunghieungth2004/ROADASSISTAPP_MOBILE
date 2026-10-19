@@ -12,5 +12,6 @@ export function paymentStatusLabel(status: string | null | undefined): string {
   if (status === "CONFIRMED") return "Confirmed";
   if (status === "REFUNDED") return "Refunded";
   if (status === "PARTIAL") return "Partial";
+  if (status === "CANCELLED") return "Cancelled";
   return "Pending";
 }

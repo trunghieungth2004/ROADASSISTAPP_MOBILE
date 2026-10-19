@@ -401,25 +401,30 @@ with the phone on the left and the open status on the right.
 The sheet stays open and live across accept, work-save, and status moves:
 every reload re-syncs the open ticket from the feed. Map dots are display
 only — tapping them never opens anything; the sheet is the sole ticket UI.
-Operator lifecycle runs inside the sheet: Accept (pending) → Start work
-(`6`, from arrived or matched walk-ins without a sent quote) → work editor
-→ Mark ready (`7`), with Decline + reason as the pending off-ramp. Work
-states, the work editor, and quotes are shop-ticket only — volunteer-held
-and tower-held tickets never see those controls (the server 403s them
-regardless; the client gates on the ticket touching one of your own SHOPs,
-so dual-role accounts see the workbench only on their shop jobs).
-The workbench is two-stage. The send-quote action posts a non-binding
-estimate (`POST /dispatch/estimate`, amount required, work-type text becomes
-`estimateNote`) — ticket `13` (Estimated) with an amber estimate card whose
-Approve moves `14` and whose Decline returns the ticket to pending and
-records the shop in `declinedShopIds`; the work form stays editable. Saving
-a work order with a freshly entered final posts the binding final
-(`POST /dispatch/quote` `finalAmount` → ticket `11` Final quoted) and shows
-the final card with fault photos; already stored amounts are never resent
-(`POST /dispatch/work` carries only work-type/quote edits). Rider Approve
-(quote or final, both `POST /dispatch/quote/approve`) moves `9`/`11`→`6` and
-requires a funded payment on the ticket; Decline reuses the cancel pair, and
-starting work is blocked while a quote pends, so no job starts unapproved.
+Operator lifecycle runs inside the sheet: Accept (pending) → Send quote
+(`WorkSheet`, amount required) → rider Approve (`6`) → Work done
+(`WorkSheet`, work type + invoice, no amounts) → Mark ready (`7`), with
+Decline + reason as the pending off-ramp; volunteers (SOS) keep the direct
+Start work at arrival. Work states, the work sheet, and quotes are
+shop-ticket only — volunteer-held and tower-held tickets never see those
+controls (the server 403s them regardless; the client gates on the ticket
+touching one of your own SHOPs, so dual-role accounts see the workbench only
+on their shop jobs).
+The workbench is one binding quote. The send-quote action opens its own
+sheet and posts `POST /dispatch/quote` (`quotedAmount` required, optional
+work-type) — ticket `9` (Quoted) with the amount on the record; the sheet
+also opens from `IN_SHOP` and legacy estimate states, and an existing quote
+hides the action (amounts are one-shot). Rider Approve
+(`POST /dispatch/quote/approve`) moves `9`→`6` and requires a funded payment
+on the ticket; Decline reuses the cancel pair. Work done opens the same
+sheet in details mode and posts `POST /dispatch/work` (`workType` +
+`invoiceRef` only — amounts are refused), then Mark ready (`7`) closes the
+workbench. Tows never show a shop quote: the drop-off shop's optional
+estimate is advisory (`estimateAmount`, no status move), and the repair
+price lands on the walk-in ticket spawned at drop-off. An unfixable close
+(`POST /dispatch/unfixable`, Matched/Arrived/In progress/Quoted/In shop/
+Final quoted) voids pending charges and refunds held ones; payment CTAs
+disappear once a ticket is unfixable or terminal.
 Either side's phone number rides the feed on live tickets
 (`2`/`3`/`4`/`6`/`7`/`9`, never pending or dead) and renders as a tappable
 `tel:` row in the matching block; absent when unregistered.

@@ -21,9 +21,12 @@ export function canDecline(direction: FeedDirection, status: string): boolean {
   return direction === "in" && status === DISPATCH_STATUS.PENDING;
 }
 
-export function canEditWork(direction: FeedDirection, status: string, hasShop: boolean): boolean {
+const SHOP_TYPES = new Set(["WALK_IN", "MECHANIC"]);
+
+export function canEditWork(direction: FeedDirection, status: string, hasShop: boolean, ticketType: string): boolean {
   if (direction !== "in" || !hasShop) return false;
-  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.IN_PROGRESS;
+  if (!SHOP_TYPES.has(ticketType)) return false;
+  return status === DISPATCH_STATUS.IN_PROGRESS;
 }
 
 export function canRateRider(direction: FeedDirection, status: string): boolean {
@@ -32,17 +35,25 @@ export function canRateRider(direction: FeedDirection, status: string): boolean 
 
 export function canStartWork(direction: FeedDirection, status: string, ticketType: string, hasQuote: boolean, hasShop: boolean): boolean {
   if (direction !== "in" || hasQuote || !hasShop) return false;
-  if (status === DISPATCH_STATUS.ARRIVED) return true;
-  return status === DISPATCH_STATUS.MATCHED && ticketType === "WALK_IN";
+  if (ticketType !== "SOS") return false;
+  return status === DISPATCH_STATUS.ARRIVED;
 }
 
-export function canMarkReady(direction: FeedDirection, status: string, hasShop: boolean): boolean {
-  return direction === "in" && status === DISPATCH_STATUS.IN_PROGRESS && hasShop;
-}
-
-export function canSendQuote(direction: FeedDirection, status: string, hasShop: boolean): boolean {
+export function canMarkReady(direction: FeedDirection, status: string, ticketType: string, hasShop: boolean): boolean {
   if (direction !== "in" || !hasShop) return false;
-  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED;
+  if (!SHOP_TYPES.has(ticketType)) return false;
+  return status === DISPATCH_STATUS.IN_PROGRESS;
+}
+
+export function canSendQuote(direction: FeedDirection, status: string, ticketType: string, hasShop: boolean): boolean {
+  if (direction !== "in" || !hasShop) return false;
+  if (!SHOP_TYPES.has(ticketType)) return false;
+  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.IN_SHOP || status === DISPATCH_STATUS.ESTIMATED || status === DISPATCH_STATUS.EST_APPROVED;
+}
+
+export function canMarkUnfixable(ticketType: string, status: string): boolean {
+  if (!SHOP_TYPES.has(ticketType)) return false;
+  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.IN_PROGRESS || status === DISPATCH_STATUS.QUOTED || status === DISPATCH_STATUS.IN_SHOP || status === DISPATCH_STATUS.FINAL_QUOTED;
 }
 
 export function canApproveQuote(direction: FeedDirection, status: string): boolean {

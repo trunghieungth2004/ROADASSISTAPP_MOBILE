@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendFinalQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
@@ -38,12 +38,12 @@ import MapPickOverlay from "../components/map/MapPickOverlay";
 import PlaceSearchScreen from "./PlaceSearchScreen";
 import ShopsSection from "./assist/ShopsSection";
 import RecordsSection from "./assist/RecordsSection";
-import RecordDetailSheet, {type WorkPatch} from "./assist/RecordDetailSheet";
+import RecordDetailSheet from "./assist/RecordDetailSheet";
 import TicketSheet from "./assist/TicketSheet";
 import DisputeSheet from "./assist/DisputeSheet";
 import EstimateSheet from "./assist/EstimateSheet";
+import WorkSheet, {type WorkFormMode, type WorkFormValue} from "./assist/WorkSheet";
 import UnfixableSheet from "./assist/UnfixableSheet";
-import {parseAmountInput} from "./assist/money";
 import {isPhotoPermissionError, takePhoto, uploadPhotoPaths} from "../services/photos";
 import RatingSheet from "./assist/RatingSheet";
 import {boundsOf} from "./route/routeGeo";
@@ -89,6 +89,9 @@ export default function AssistScreen() {
   const [unfixableFor, setUnfixableFor] = useState<FeedTicket | null>(null);
   const [unfixableBusy, setUnfixableBusy] = useState(false);
   const [unfixableError, setUnfixableError] = useState<string | null>(null);
+  const [workFor, setWorkFor] = useState<{ticket: FeedTicket; mode: WorkFormMode} | null>(null);
+  const [workBusy, setWorkBusy] = useState(false);
+  const [workError, setWorkError] = useState<string | null>(null);
   const [payments, setPayments] = useState<Record<string, TicketPayment>>({});
   const [waiting, setWaiting] = useState<Record<string, {waitingMinutes: number; waitingFee: number}>>({});
   const [dest, setDest] = useState<Place | null>(null);
@@ -820,8 +823,8 @@ export default function AssistScreen() {
         onRate={(item) => onRate(item)}
         onAccept={(item) => void onAcceptTicket(item)}
         onDecline={decline === null ? null : (item, reason, note) => void onDeclineTicket(item, reason, note)}
-        onSaveWork={(item, patch) => void onSaveWork(item, patch)}
-        onSendQuote={(item, patch) => void onSendQuote(item, patch)}
+        onOpenWork={(item) => { setWorkFor({ticket: item, mode: "done"}); setWorkError(null); }}
+        onOpenQuote={(item) => { setWorkFor({ticket: item, mode: "quote"}); setWorkError(null); }}
         onOpenEstimate={(item) => {
           setEstimateFor(item);
           setEstimateError(null);
@@ -1271,23 +1274,32 @@ export default function AssistScreen() {
       setRecBusy(false);
     }
   }
-  async function onSendQuote(ticket: FeedTicket, patch: WorkPatch): Promise<void> {
-    if (!token || recBusy) return;
-    const q = parseAmountInput(patch.quoted);
-    if (q === null) {
-      setError(t.provider.invalidAmount);
+  async function onSubmitWork(value: WorkFormValue): Promise<void> {
+    if (!token || !workFor || workBusy) return;
+    if (workFor.mode === "quote" && value.amount === null) {
+      setWorkError(t.provider.invalidAmount);
       return;
     }
-    setRecBusy(true);
-    setError(null);
+    setWorkBusy(true);
+    setWorkError(null);
     try {
-      await sendEstimate(ticket.id, q, patch.workType.trim() || undefined, token);
-      setNotice(t.provider.workSaved);
+      if (workFor.mode === "quote") {
+        await sendQuote(workFor.ticket.id, value.amount as number, value.workType || undefined, token);
+        setNotice(t.assist.quoteSent);
+      } else {
+        await updateWorkOrder({
+          ticketId: workFor.ticket.id,
+          ...(value.workType ? {workType: value.workType} : {}),
+          ...(value.invoiceRef ? {invoiceRef: value.invoiceRef} : {}),
+        }, token);
+        setNotice(t.provider.workSaved);
+      }
+      setWorkFor(null);
       await reloadAll();
     } catch (err) {
-      setError(toMessage(err));
+      setWorkError(toMessage(err));
     } finally {
-      setRecBusy(false);
+      setWorkBusy(false);
     }
   }
   async function onSendEstimate(amount: number, note: string): Promise<void> {
@@ -1382,30 +1394,6 @@ export default function AssistScreen() {
     setError(null);
     try {
       await updateTicketStatus(ticket.id, status, token);
-      await reloadAll();
-    } catch (err) {
-      setError(toMessage(err));
-    } finally {
-      setRecBusy(false);
-    }
-  }
-  async function onSaveWork(ticket: FeedTicket, patch: WorkPatch): Promise<void> {
-    if (!token || recBusy) return;
-    const q = patch.quoted.trim() === "" ? undefined : parseAmountInput(patch.quoted);
-    const f = patch.final.trim() === "" || typeof ticket.finalAmount === "number" ? undefined : parseAmountInput(patch.final);
-    if (q === null || f === null) {
-      setError(t.provider.invalidAmount);
-      return;
-    }
-    setRecBusy(true);
-    setError(null);
-    try {
-      if (f !== undefined) {
-        await sendFinalQuote(ticket.id, f, patch.workType.trim() || undefined, undefined, token);
-      } else {
-        await updateWorkOrder({ticketId: ticket.id, ...(patch.workType.trim() ? {workType: patch.workType.trim()} : {}), ...(q !== undefined ? {quotedAmount: q} : {})}, token);
-      }
-      setNotice(t.provider.workSaved);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
@@ -1897,6 +1885,23 @@ export default function AssistScreen() {
           onClose={() => {
             setEstimateFor(null);
             setEstimateError(null);
+          }}
+        />
+      ) : null}
+      {workFor ? (
+        <WorkSheet
+          t={t}
+          ticketLabel={ticketTitle(workFor.ticket, t)}
+          mode={workFor.mode}
+          status={workFor.ticket.status}
+          busy={workBusy}
+          error={workError}
+          initialWorkType={typeof workFor.ticket.workType === "string" ? workFor.ticket.workType : null}
+          initialInvoiceRef={typeof workFor.ticket.invoiceRef === "string" ? workFor.ticket.invoiceRef : null}
+          onSubmit={(value) => void onSubmitWork(value)}
+          onClose={() => {
+            setWorkFor(null);
+            setWorkError(null);
           }}
         />
       ) : null}

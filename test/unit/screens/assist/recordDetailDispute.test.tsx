@@ -45,8 +45,8 @@ async function render(overrides?: Partial<Props>) {
           onRate={() => undefined}
           onAccept={() => undefined}
           onDecline={() => undefined}
-          onSaveWork={() => undefined}
-          onSendQuote={() => undefined}
+          onOpenWork={() => undefined}
+          onOpenQuote={() => undefined}
           onApproveQuote={() => undefined}
           onOpenShop={() => undefined}
           onOpenDestination={() => undefined}

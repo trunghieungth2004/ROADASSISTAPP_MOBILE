@@ -335,8 +335,8 @@ export async function declineEstimate(ticketId: string, token: string): Promise<
   return res;
 }
 
-export async function sendFinalQuote(ticketId: string, finalAmount: number, workType: string | undefined, faultPhotos: string[] | undefined, token: string): Promise<{quoted: boolean}> {
-  const res = await api.post<{quoted: boolean}>("/dispatch/quote", {ticketId, finalAmount, ...(workType ? {workType} : {}), ...(faultPhotos && faultPhotos.length > 0 ? {faultPhotos} : {})}, token);
+export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string): Promise<{quoted: boolean}> {
+  const res = await api.post<{quoted: boolean}>("/dispatch/quote", {ticketId, quotedAmount, ...(workType ? {workType} : {})}, token);
   bustTicketCaches(token);
   return res;
 }

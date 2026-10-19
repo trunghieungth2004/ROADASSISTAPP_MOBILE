@@ -46,8 +46,8 @@ async function render(overrides?: Partial<Props>) {
           onRate={() => undefined}
           onAccept={() => undefined}
           onDecline={() => undefined}
-          onSaveWork={() => undefined}
-          onSendQuote={() => undefined}
+          onOpenWork={() => undefined}
+          onOpenQuote={() => undefined}
           onOpenEstimate={onOpenEstimate}
           onApproveQuote={() => undefined}
           onOpenShop={() => undefined}
@@ -195,6 +195,40 @@ test("quote-only rows keep the card without an estimate badge", async () => {
     const all = texts(renderer);
     expect(all).not.toContain(en.assist.estimateStateAwaiting);
     expect(actionLabels(renderer)).not.toContain(en.assist.declineEstimate);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("rider pays the walk-in quote before approving", async () => {
+  const onPayNow = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({ticketType: "WALK_IN", status: "9", direction: "out", otherParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, shopQuotedAmount: 120000}),
+    onApproveQuote: () => undefined,
+    onPayNow,
+  });
+  try {
+    expect(texts(renderer)).toContain("120,000 VND");
+    expect(actionLabels(renderer)).toContain(en.assist.payNow);
+    const pay = tap(renderer, en.assist.payNow);
+    await act(async () => {
+      pay?.props.onPress?.();
+    });
+    expect(onPayNow).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a payment on file replaces the quote pay button", async () => {
+  const {renderer} = await render({
+    ticket: ticket({ticketType: "WALK_IN", status: "9", direction: "out", otherParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP"}, shopQuotedAmount: 120000}),
+    onApproveQuote: () => undefined,
+    onPayNow: jest.fn(),
+    payment: {method: "SEPAY", status: "HELD"},
+  });
+  try {
+    expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
   } finally {
     renderer.unmount();
   }
