@@ -1,8 +1,8 @@
 import {Platform} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
-import * as FileSystem from "expo-file-system";
 import {File, Paths} from "expo-file-system";
+import {createDownloadResumable, getContentUriAsync} from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 
 export type AppRelease = {
@@ -121,14 +121,15 @@ export async function downloadAndInstall(
   const cleanUrl = apkUrl.split("?")[0] ?? apkUrl;
   if (!cleanUrl.toLowerCase().endsWith(".apk")) throw new Error("Update file is not an APK");
   const target = new File(Paths.cache, "roadassist-update.apk").uri;
-  const task = FileSystem.createDownloadResumable(apkUrl, target, {}, (p) => {
+  const task = createDownloadResumable(apkUrl, target, {}, (p) => {
     if (p.totalBytesExpectedToWrite > 0) {
       onProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
     }
   });
   const result = await task.downloadAsync();
-  if (!result || result.exists !== true || result.size <= 0) throw new Error("Downloaded update is empty");
-  const contentUri = await FileSystem.getContentUriAsync(result.uri);
+  const file = new File(result?.uri ?? target);
+  if (!file.exists || file.size <= 0) throw new Error("Downloaded update is empty");
+  const contentUri = await getContentUriAsync(file.uri);
   try {
     await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
       data: contentUri,

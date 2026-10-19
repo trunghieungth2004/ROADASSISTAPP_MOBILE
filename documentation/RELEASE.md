@@ -71,3 +71,13 @@ CI APKs carry an increasing `versionCode`, so `adb install` accepts them over
 older builds. If an install ever refuses with a downgrade error, uninstall
 first — that means the versionCode didn't advance, which is itself a bug
 worth reporting, not working around silently.
+
+### Debug vs release signatures
+
+Debug builds (`yarn android`) and CI release APKs are signed with different
+keys, so Android rejects installing one over the other
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). This is one-time per device: uninstall
+the debug build before installing a release APK, and uninstall the release
+build before going back to `yarn android`. The in-app updater cannot detect
+this — it hands the APK to the installer, which then refuses; no app-side
+retry can get around the signature check.

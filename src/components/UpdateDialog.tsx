@@ -54,11 +54,12 @@ export default function UpdateDialog({t, release, onSkip, onClose}: Props) {
       closeLabel={t.common.close}
       onClose={onClose}
       actions={actions}
+      scrollable={false}
     >
       <View style={styles.body}>
         <View style={styles.headRow}>
           <MaterialIcons name="system-update" size={20} color={theme.primary} />
-          {notes !== "" ? <Text style={[styles.notes, {color: theme.text}]}>{notes}</Text> : null}
+          {notes !== "" ? <Text style={[styles.notes, {color: theme.text}]} numberOfLines={8}>{notes}</Text> : null}
         </View>
         {phase === "busy" ? (
           <View style={styles.progressRow}>

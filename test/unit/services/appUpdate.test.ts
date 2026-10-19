@@ -13,18 +13,23 @@ import {
   skipRelease,
 } from "../../../src/services/appUpdate";
 
+const mockDownload = {exists: true, size: 1024};
+
 jest.mock("expo-file-system", () => ({
-  cacheDirectory: "file:///cache/",
   Paths: {cache: {uri: "file:///cache/"}},
-  File: jest.fn((dir: {uri: string} | string, name?: string) => ({
-    uri: `${typeof dir === "string" ? dir : dir.uri}${name ?? ""}`,
+  File: jest.fn((...parts: Array<{uri: string} | string>) => ({
+    uri: parts.map((part) => (typeof part === "string" ? part : part.uri)).join(""),
+    exists: mockDownload.exists,
+    size: mockDownload.size,
   })),
-  Directory: jest.fn(),
+}));
+
+jest.mock("expo-file-system/legacy", () => ({
   createDownloadResumable: jest.fn(
     (url: string, target: string, options: unknown, onProgress?: (p: {totalBytesWritten: number; totalBytesExpectedToWrite: number}) => void) => ({
       downloadAsync: jest.fn(async () => {
         onProgress?.({totalBytesWritten: 50, totalBytesExpectedToWrite: 100});
-        return {uri: target, exists: true, size: 1024};
+        return {uri: target};
       }),
     }),
   ),
@@ -63,6 +68,8 @@ function githubRelease(tag: string, apk = true) {
 
 beforeEach(async () => {
   setOS("android");
+  mockDownload.exists = true;
+  mockDownload.size = 1024;
   await AsyncStorage.clear();
   jest.clearAllMocks();
 });
@@ -115,7 +122,7 @@ test("download hands a content uri to the installer with progress", async () => 
     seen.push(f);
   });
   expect(seen).toEqual([0.5]);
-  const FileSystem = jest.requireMock("expo-file-system") as {
+  const FileSystem = jest.requireMock("expo-file-system/legacy") as {
     createDownloadResumable: jest.Mock;
   };
   const IntentLauncher = jest.requireMock("expo-intent-launcher") as {
@@ -132,4 +139,13 @@ test("download hands a content uri to the installer with progress", async () => 
     type: "application/vnd.android.package-archive",
     flags: 1,
   });
+});
+
+test("rejects an empty download", async () => {
+  mockDownload.size = 0;
+  await expect(downloadAndInstall("https://example.com/app.apk", () => {})).rejects.toThrow("Downloaded update is empty");
+});
+
+test("rejects a non-apk file", async () => {
+  await expect(downloadAndInstall("https://example.com/app.zip", () => {})).rejects.toThrow("Update file is not an APK");
 });

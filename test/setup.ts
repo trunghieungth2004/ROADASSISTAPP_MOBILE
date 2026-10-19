@@ -79,8 +79,22 @@ jest.mock("expo-intent-launcher", () => ({
   startActivityAsync: jest.fn(async () => undefined),
 }));
 
-jest.mock("expo-file-system", () => ({
-  cacheDirectory: "file:///cache/",
+jest.mock("expo-file-system", () => {
+  class File {
+    uri: string;
+    exists = true;
+    size = 1024;
+    constructor(...parts: Array<{uri: string} | string>) {
+      this.uri = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("");
+    }
+  }
+  return {
+    Paths: {cache: {uri: "file:///cache/"}},
+    File,
+  };
+});
+
+jest.mock("expo-file-system/legacy", () => ({
   createDownloadResumable: jest.fn(() => ({
     downloadAsync: jest.fn(async () => ({uri: "file:///cache/roadassist-update.apk"})),
   })),
