@@ -10,7 +10,7 @@ import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
-import {billDateLabel, billItemCount, billPayeeLabel, billStatusColor, billStatusLabel, billTitle} from "./bills/billLabels";
+import BillRow from "./bills/BillRow";
 
 export default function BillsScreen() {
   const {t} = useStrings();
@@ -64,36 +64,15 @@ export default function BillsScreen() {
             <Text style={[styles.emptyHint, {color: theme.muted}]}>{t.bills.emptyHint}</Text>
           </View>
         ) : null}
-        {bills.map((bill) => {
-          const payee = billPayeeLabel(bill);
-          const meta = [billDateLabel(bill.createdAt), billItemCount(bill, t), payee].filter((value) => typeof value === "string" && value !== "").join(" · ");
-          return (
-            <Pressable
-              key={bill.billId}
-              style={[styles.row, {backgroundColor: theme.paper, borderColor: theme.border}]}
-              onPress={() => openBill(bill)}
-              accessibilityRole="button"
-              accessibilityLabel={`${billTitle(bill, t)} ${bill.total.toLocaleString()} VND`}
-            >
-              <View style={[styles.rowIcon, {backgroundColor: `${theme.primary}22`}]}>
-                <MaterialIcons name={bill.ticketType === "TOW" ? "local-shipping" : "build"} size={22} color={theme.primary} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowTitle, {color: theme.text}]}>{billTitle(bill, t)}</Text>
-                <Text style={[styles.rowMeta, {color: theme.muted}]} numberOfLines={1}>{meta}</Text>
-                <Text style={[styles.rowAmount, {color: theme.text}]}>{`${bill.total.toLocaleString()} VND`}</Text>
-              </View>
-              <View style={styles.rowSide}>
-                <View style={[styles.pill, {backgroundColor: billStatusColor(bill.status, theme)}]}>
-                  <Text style={styles.pillText}>{billStatusLabel(bill.status, t)}</Text>
-                </View>
-                {bill.due > 0 ? (
-                  <Text style={[styles.rowDue, {color: "#d97706"}]}>{`${t.bills.due} ${bill.due.toLocaleString()}`}</Text>
-                ) : null}
-              </View>
-            </Pressable>
-          );
-        })}
+        {bills.map((bill) => (
+          <BillRow
+            key={bill.billId}
+            bill={bill}
+            t={t}
+            theme={theme}
+            onPress={() => openBill(bill)}
+          />
+        ))}
       </ScrollView>
     </ScreenContainer>
   );
@@ -108,14 +87,4 @@ const styles = StyleSheet.create({
   emptyCard: {borderWidth: 1, borderRadius: 16, padding: 24, alignItems: "center", gap: 8, marginTop: 24},
   emptyTitle: {fontWeight: "700", fontSize: 16},
   emptyHint: {fontSize: 13, textAlign: "center"},
-  row: {borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", gap: 12, alignItems: "center"},
-  rowIcon: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
-  rowBody: {flex: 1, gap: 2},
-  rowTitle: {fontWeight: "700", fontSize: 15},
-  rowMeta: {fontSize: 12},
-  rowAmount: {fontWeight: "700", fontSize: 15, marginTop: 2},
-  rowSide: {alignItems: "flex-end", gap: 6},
-  rowDue: {fontSize: 11, fontWeight: "600"},
-  pill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8},
-  pillText: {color: "#fff", fontSize: 11, fontWeight: "700"},
 });

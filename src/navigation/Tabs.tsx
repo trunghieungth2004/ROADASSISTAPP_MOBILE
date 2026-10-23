@@ -1,5 +1,6 @@
 import {useEffect, useState, type ReactNode} from "react";
-import {ActivityIndicator, AppState, Platform, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, AppState, Platform, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {AppText as Text} from "../components/ui/AppText";
 import {createBottomTabNavigator, type BottomTabBarProps} from "@react-navigation/bottom-tabs";
@@ -9,7 +10,8 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {useBills} from "../context/BillsContext";
+import {darkTheme, lightTheme, onColor} from "../theme";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen, {type ShopDraft, type TowDraft} from "../screens/OnboardingScreen";
 import PermissionGateScreen from "../screens/PermissionGateScreen";
@@ -32,7 +34,9 @@ const TAB_ICONS: Record<string, (props: IconProps) => ReactNode> = {
   More: (p) => <MaterialIcons name="more-horiz" {...p} />,
 };
 function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
-  const scheme = useColorScheme();
+  const {t} = useStrings();
+  const {dueCount} = useBills();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const focusedOptions = descriptors[state.routes[state.index].key]?.options as {tabBarStyle?: {display?: string}} | undefined;
@@ -41,12 +45,20 @@ function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
     const focused = state.index === index;
     const options = descriptors[route.key].options;
     const color = focused ? theme.primary : theme.tabInactive;
+    const due = route.name === "Assist" ? dueCount : 0;
     const onPress = () => {
       const event = navigation.emit({type: "tabPress", target: route.key, canPreventDefault: true});
       if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
     };
-    return <Pressable key={route.key} accessibilityRole="tab" accessibilityState={{selected: focused}} onPress={onPress} style={styles.tabItem}>
-      <View style={[styles.iconSlot, focused && {backgroundColor: `${theme.primary}33`}]}>{(TAB_ICONS[route.name] ?? (() => null))({color, size: 22})}</View>
+    return <Pressable key={route.key} accessibilityRole="tab" accessibilityState={{selected: focused}} accessibilityLabel={due > 0 ? `${options.title ?? route.name}, ${due === 1 ? t.bills.dueOne : t.bills.dueMany.replace("{n}", String(due))}` : undefined} onPress={onPress} style={styles.tabItem}>
+      <View style={styles.iconWrap}>
+        <View style={[styles.iconSlot, focused && {backgroundColor: `${theme.primary}33`}]}>{(TAB_ICONS[route.name] ?? (() => null))({color, size: 22})}</View>
+        {due > 0 ? (
+          <View style={[styles.badge, {backgroundColor: theme.danger}]}>
+            <Text style={[styles.badgeText, {color: onColor(theme.danger)}]}>{due > 9 ? "9+" : String(due)}</Text>
+          </View>
+        ) : null}
+      </View>
       <Text numberOfLines={1} style={[styles.tabLabel, {color}]}>{options.title ?? route.name}</Text>
     </Pressable>;
   })}</View>;
@@ -55,7 +67,7 @@ function UnsupportedRole() {
   const {t} = useStrings();
   const {signOut} = useAuth();
   const {refresh, loading} = useProfile();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <View style={[styles.center, {backgroundColor: theme.background}]}>
@@ -175,7 +187,7 @@ export default function Tabs() {
       if (v === "done") setPermsDone(true);
     }).catch(() => undefined);
   }, [token]);
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   if (!loaded || (token && loading && !bundle)) return <View style={styles.center}><ActivityIndicator /></View>;
   if (!token) return <LoginScreen />;
@@ -192,4 +204,4 @@ export default function Tabs() {
     </Tab.Navigator>
   );
 }
-const styles = StyleSheet.create({center: {flex: 1, alignItems: "center", justifyContent: "center", gap: 12}, primary: {borderRadius: 8, padding: 12}, disabled: {opacity: 0.6}, primaryText: {color: "#fff", fontWeight: "700"}, tabBar: {flexDirection: "row", borderTopWidth: 1, paddingTop: 6}, tabItem: {flex: 1, alignItems: "center", justifyContent: "center", minHeight: 58, gap: 3}, iconSlot: {width: 48, height: 32, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center"}, tabLabel: {fontSize: 11, fontWeight: "600", maxWidth: "100%"}});
+const styles = StyleSheet.create({center: {flex: 1, alignItems: "center", justifyContent: "center", gap: 12}, primary: {borderRadius: 8, padding: 12}, disabled: {opacity: 0.6}, primaryText: {color: "#fff", fontWeight: "700"}, tabBar: {flexDirection: "row", borderTopWidth: 1, paddingTop: 6}, tabItem: {flex: 1, alignItems: "center", justifyContent: "center", minHeight: 58, gap: 3}, iconWrap: {alignItems: "center", justifyContent: "center"}, iconSlot: {width: 48, height: 32, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center"}, badge: {position: "absolute", top: -4, right: 0, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center"}, badgeText: {color: "#fff", fontSize: 10, fontWeight: "700"}, tabLabel: {fontSize: 11, fontWeight: "600", maxWidth: "100%"}});

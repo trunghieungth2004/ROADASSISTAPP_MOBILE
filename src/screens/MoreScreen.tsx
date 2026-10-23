@@ -92,7 +92,7 @@ export default function MoreScreen() {
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
               <View style={styles.badgeRow}>
                 <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.roles.rider}</Text></View>
-                {[...new Set(services)].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
+                {[...new Set(services.filter((s) => s !== "RIDER" && s !== "SHOP" && s !== "TOW"))].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
                 {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
                 {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
               </View>
@@ -135,9 +135,9 @@ export default function MoreScreen() {
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} />
         </Overlay>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Bills" as never)} accessibilityRole="button" accessibilityLabel={t.bills.title}>
-            <MaterialIcons name="receipt-long" size={20} color={theme.primary} />
-            <Text style={[styles.listText, {color: theme.text}]}>{t.bills.title}</Text>
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Payments" as never)} accessibilityRole="button" accessibilityLabel={t.payments.title}>
+            <MaterialIcons name="payments" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.payments.title}</Text>
             <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />

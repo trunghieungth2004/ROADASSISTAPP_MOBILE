@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Image, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Image, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -28,7 +29,7 @@ export function disputeReasonLabel(reason: string, t: Strings): string {
 }
 
 export default function DisputeSheet({t, ticketLabel, busy, error, onSubmit, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");

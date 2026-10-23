@@ -26,6 +26,7 @@ jest.mock("../../../src/context/LanguageContext", () => {
 
 jest.mock("../../../src/context/ThemeContext", () => ({
   useThemeMode: () => ({mode: "light" as const, toggle: () => undefined}),
+  useAppMode: () => "light" as const,
 }));
 
 const mockNavigate = jest.fn();

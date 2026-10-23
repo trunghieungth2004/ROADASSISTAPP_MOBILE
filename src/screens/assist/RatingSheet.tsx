@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -21,7 +22,7 @@ type Props = {
 export default function RatingSheet({t, ticket, initialScore, initialComment, busy, onSubmit, onClose}: Props) {
   const [score, setScore] = useState(initialScore ?? 5);
   const [comment, setComment] = useState(initialComment ?? "");
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <Overlay

@@ -1,4 +1,5 @@
-import {Image, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Image, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
 import type {Flag} from "../../api/flags";
 import {flagActions, formatUntil, joinMeta} from "../../screens/hazards/flagActions";
@@ -14,7 +15,7 @@ type Props = {
 };
 
 export default function FlagDetailSheet({t, flag, isOwn}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const photos = usePhotoUrls(flag?.photoUrls);
   const photoViewer = usePhotoViewer(t.common.cancel);

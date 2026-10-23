@@ -9,6 +9,7 @@ import StatusRow from "../../components/ui/StatusRow";
 import {timeAgoLabel} from "../hazards/hazardFilter";
 import {statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./ticketLabels";
 import {RECORD_FILTERS, businessKindOf, filterByKind, filterRecords, roleIconName, type BusinessKind, type RecordFilter} from "./recordFilter";
+import TicketRow from "./TicketRow";
 
 type Props = {
   t: Strings;
@@ -38,7 +39,7 @@ export default function RecordsSection({t, theme, tickets, loading, shopKinds, o
   const [showTow, setShowTow] = useState(true);
   const [showRider, setShowRider] = useState(true);
   const operated = new Set(shopKinds.values());
-  const visible = filterByKind(filterRecords(tickets, filter), showShop, showTow, showRider, shopKinds);
+  const visible = filterByKind(filterRecords(tickets, filter), showShop, showTow, showRider, shopKinds, true);
   return (
     <View style={styles.wrap}>
       <View style={styles.filterRow}>
@@ -73,35 +74,16 @@ export default function RecordsSection({t, theme, tickets, loading, shopKinds, o
       ) : visible.length === 0 ? (
         <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.emptyRecords}</Text>
       ) : (
-        visible.map((item) => {
-          const inbound = item.direction === "in";
-          const ago = typeof item.createdAt === "string" ? timeAgoLabel(item.createdAt, Date.now(), t.hazards) : null;
-          return (
-            <Pressable key={item.id} onPress={() => onOpen(item)} accessibilityRole="button" accessibilityLabel={ticketTitle(item, t)}>
-              <View style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-                <View style={styles.titleRow}>
-                  {(() => {
-                    const icon = roleIconName(businessKindOf(item, shopKinds));
-                    return icon.set === "community" ? (
-                      <MaterialCommunityIcons name={icon.name as never} size={16} color={theme.muted} />
-                    ) : (
-                      <MaterialIcons name={icon.name as never} size={16} color={theme.muted} />
-                    );
-                  })()}
-                  <MaterialIcons name={inbound ? "arrow-downward" : "arrow-upward"} size={16} color={inbound ? theme.primary : theme.muted} />
-                  <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTypeLabel(item.ticketType, t)}</Text>
-                  <View style={[styles.pill, {backgroundColor: statusPillColor(item.status, theme)}]}>
-                    <Text style={styles.pillText}>{ticketStatusLabel(item.status, t)}</Text>
-                  </View>
-                </View>
-                <View style={styles.subRow}>
-                  <Text style={[styles.coords, {color: theme.muted}]} numberOfLines={1}>{partyName(item, t)}</Text>
-                  {ago ? <Text style={[styles.coords, {color: theme.muted}]}>{ago}</Text> : null}
-                </View>
-              </View>
-            </Pressable>
-          );
-        })
+        visible.map((item) => (
+          <TicketRow
+            key={item.id}
+            t={t}
+            theme={theme}
+            ticket={item}
+            kind={businessKindOf(item, shopKinds, item.direction === "in")}
+            onPress={() => onOpen(item)}
+          />
+        ))
       )}
     </View>
   );

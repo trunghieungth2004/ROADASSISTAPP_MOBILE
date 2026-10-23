@@ -4,6 +4,9 @@ export type TowRouteTicket = Pick<
   DispatchTicket,
   "id" | "lat" | "lng" | "ticketType" | "vehicleType" | "vehicleWidth" | "destinationSnapshot" | "destinationPoint"
 > & {
+  direction?: FeedTicket["direction"];
+  status?: string;
+  towerFix?: {lat: number; lng: number} | null;
   destinationParty?: FeedTicket["destinationParty"];
 };
 

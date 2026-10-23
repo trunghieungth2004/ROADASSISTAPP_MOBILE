@@ -1,6 +1,8 @@
 import {useEffect, useMemo, useRef, useState} from "react";
-import {StyleSheet, View, useColorScheme} from "react-native";
+import {StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "../../components/map/safeCamera";
 import {requireMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
 import FlagMapLayers from "../../components/flags/FlagMapLayers";
@@ -18,7 +20,7 @@ type Props = {
 };
 
 export default function HazardMapView(props: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const veilBackground = scheme === "dark" ? darkTheme.background : lightTheme.background;
@@ -30,7 +32,7 @@ export default function HazardMapView(props: Props) {
     const cam = cameraRef.current;
     if (!pending || !cam) return;
     pendingRef.current = null;
-    void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 600});
+    safeCameraCall(() => cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 600}));
   }
   useEffect(() => {
     if (!props.focus) return;
@@ -43,13 +45,13 @@ export default function HazardMapView(props: Props) {
     const lats = props.flags.map((f) => f.lat);
     const lngs = props.flags.map((f) => f.lng);
     if (props.flags.length === 1 || (Math.min(...lngs) === Math.max(...lngs) && Math.min(...lats) === Math.max(...lats))) {
-      void cameraRef.current?.setStop({center: [lngs[0] ?? HCMC_CENTER[0], lats[0] ?? HCMC_CENTER[1]], zoom: 14, duration: 600});
+      safeCameraCall(() => cameraRef.current?.setStop({center: [lngs[0] ?? HCMC_CENTER[0], lats[0] ?? HCMC_CENTER[1]], zoom: 14, duration: 600}));
       return;
     }
-    void cameraRef.current?.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
+    safeCameraCall(() => cameraRef.current?.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
       padding: {top: 40, right: 40, bottom: 40, left: 40},
       duration: 600,
-    });
+    }));
   }, [props.flags]);
   const initial: [number, number] = props.flags.length > 0 ? [props.flags[0]?.lng ?? HCMC_CENTER[0], props.flags[0]?.lat ?? HCMC_CENTER[1]] : HCMC_CENTER;
   return (

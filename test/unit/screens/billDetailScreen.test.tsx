@@ -19,9 +19,10 @@ jest.mock("../../../src/context/LanguageContext", () => {
 
 jest.mock("../../../src/context/ThemeContext", () => ({
   useThemeMode: () => ({mode: "light" as const, toggle: () => undefined}),
+  useAppMode: () => "light" as const,
 }));
 
-let mockParams: {ticketId?: string; billId?: string; payFirst?: boolean} = {ticketId: "tow1"};
+let mockParams: {ticketId?: string; billId?: string; payFirst?: boolean; readOnly?: boolean; scope?: "payee"} = {ticketId: "tow1"};
 
 jest.mock("@react-navigation/native", () => {
   const React = require("react");
@@ -34,6 +35,7 @@ jest.mock("@react-navigation/native", () => {
 
 const mockFetchBill = jest.fn(async () => null as unknown as Bill);
 const mockCreatePayment = jest.fn(async () => ({checkoutUrl: null}) as unknown);
+const mockConfirmCashReceipt = jest.fn(async () => ({}) as unknown);
 
 jest.mock("../../../src/api/bills", () => ({
   fetchBill: (...args: unknown[]) => (mockFetchBill as (...a: unknown[]) => Promise<Bill>)(...args),
@@ -41,6 +43,7 @@ jest.mock("../../../src/api/bills", () => ({
 
 jest.mock("../../../src/api/dispatch", () => ({
   createPayment: (...args: unknown[]) => (mockCreatePayment as (...a: unknown[]) => Promise<unknown>)(...args),
+  confirmCashReceipt: (...args: unknown[]) => (mockConfirmCashReceipt as (...a: unknown[]) => Promise<unknown>)(...args),
 }));
 
 const metrics: Metrics = {
@@ -59,6 +62,8 @@ const UNPAID_BILL: Bill = {
   paid: 0,
   due: 370000,
   status: "UNPAID",
+  viewer: "RIDER",
+  canPay: true,
   items: [
     {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "UNPAID", payeeId: "op1", payeeName: "Tow Co", qrUrl: null, payment: null},
     {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "9", amount: 150000, waitingFee: 0, status: "UNPAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: null},
@@ -71,8 +76,8 @@ const ARMED_BILL: Bill = {
   due: 220000,
   status: "PARTIAL",
   items: [
-    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "PENDING", payeeId: "op1", payeeName: "Tow Co", qrUrl: "https://pay.example/qr1", payment: {id: "p1", method: "SEPAY", status: "PENDING", amount: 220000, refundAmount: null}},
-    {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "9", amount: 150000, waitingFee: 0, status: "PAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: {id: "p2", method: "CASH", status: "CONFIRMED", amount: 150000, refundAmount: null}},
+    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "PENDING", payeeId: "op1", payeeName: "Tow Co", qrUrl: "https://pay.example/qr1", payment: {id: "p1", method: "SEPAY", status: "PENDING", amount: 220000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: false}},
+    {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "9", amount: 150000, waitingFee: 0, status: "PAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: {id: "p2", method: "CASH", status: "CONFIRMED", amount: 150000, refundAmount: null, commissionRate: 10, commissionAmount: 15000, payoutAmount: 135000, payoutRef: null, payoutAt: null, payoutStatus: "PENDING", canConfirmCash: false}},
   ],
 };
 
@@ -80,7 +85,39 @@ const CASH_PENDING_BILL: Bill = {
   ...ARMED_BILL,
   items: [
     ARMED_BILL.items[0],
-    {...ARMED_BILL.items[1], status: "PENDING", payment: {id: "p2", method: "CASH", status: "PENDING", amount: 150000, refundAmount: null}},
+    {...ARMED_BILL.items[1], status: "PENDING", payment: {id: "p2", method: "CASH", status: "PENDING", amount: 150000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: false}},
+  ],
+};
+
+const PAYEE_BILL: Bill = {
+  billId: "tow1",
+  ticketId: "tow1",
+  ticketType: "TOW",
+  ticketStatus: "4",
+  createdAt: "2026-10-03T10:00:00.000Z",
+  currency: "VND",
+  total: 150000,
+  paid: 150000,
+  due: 0,
+  status: "PAID",
+  viewer: "PAYEE",
+  canPay: false,
+  items: [
+    {...ARMED_BILL.items[1], payeeId: "u1", payeeName: "Fix Shop"},
+  ],
+};
+
+const CASH_PAYEE_BILL: Bill = {
+  ...PAYEE_BILL,
+  paid: 0,
+  due: 150000,
+  status: "UNPAID",
+  items: [
+    {
+      ...PAYEE_BILL.items[0],
+      status: "PENDING",
+      payment: {id: "p2", method: "CASH", status: "PENDING", amount: 150000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: true},
+    },
   ],
 };
 
@@ -122,6 +159,8 @@ beforeEach(() => {
   mockFetchBill.mockResolvedValue(UNPAID_BILL);
   mockCreatePayment.mockReset();
   mockCreatePayment.mockResolvedValue({checkoutUrl: null});
+  mockConfirmCashReceipt.mockReset();
+  mockConfirmCashReceipt.mockResolvedValue({});
 });
 
 test("bill detail itemizes the journey", async () => {
@@ -206,6 +245,87 @@ test("the bill explains why an approval was blocked", async () => {
   const renderer = await mount();
   try {
     expect(texts(renderer)).toContain(en.bills.payFirst);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a read-only bill hides payment actions", async () => {
+  mockParams = {ticketId: "tow1", readOnly: true};
+  const renderer = await mount();
+  try {
+    expect(texts(renderer)).toContain(en.bills.readOnly);
+    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.towFare}`)).toBeUndefined();
+    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.towFare}`)).toBeUndefined();
+    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`)).toBeUndefined();
+    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`)).toBeUndefined();
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a read-only bill hides the payment page and pay-first banner", async () => {
+  mockParams = {ticketId: "tow1", payFirst: true, readOnly: true};
+  mockFetchBill.mockResolvedValue(ARMED_BILL);
+  const renderer = await mount();
+  try {
+    expect(texts(renderer)).not.toContain(en.bills.payFirst);
+    expect(texts(renderer)).toContain(en.bills.readOnly);
+    expect(pressable(renderer, en.bills.openQr)).toBeUndefined();
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a payee bill shows only their item and payout", async () => {
+  mockParams = {ticketId: "walk1", scope: "payee"};
+  mockFetchBill.mockResolvedValue(PAYEE_BILL);
+  const renderer = await mount();
+  try {
+    expect(mockFetchBill).toHaveBeenCalledWith("tok", {ticketId: "walk1", scope: "payee"});
+    const all = texts(renderer);
+    expect(all).toContain(en.payments.payeeOnly);
+    expect(all).toContain(en.payments.commission);
+    expect(all).toContain("15,000 VND");
+    expect(all).toContain(en.payments.netPayout);
+    expect(all).toContain("135,000 VND");
+    expect(all).toContain(en.payments.payoutPending);
+    expect(all).toContain(en.bills.repair);
+    expect(all).not.toContain(en.bills.towFare);
+    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`)).toBeUndefined();
+    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`)).toBeUndefined();
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a payee confirms cash from the scoped bill", async () => {
+  mockParams = {ticketId: "walk1", scope: "payee"};
+  mockFetchBill.mockReset();
+  mockFetchBill.mockResolvedValueOnce(CASH_PAYEE_BILL).mockResolvedValue(PAYEE_BILL);
+  const renderer = await mount();
+  try {
+    const confirm = pressable(renderer, `${en.assist.cashConfirmReceipt} ${en.bills.repair}`);
+    expect(confirm).toBeDefined();
+    await act(async () => {
+      confirm?.props.onPress?.();
+      await flush();
+    });
+    expect(mockConfirmCashReceipt).toHaveBeenCalledWith("walk1", "tok");
+    expect(texts(renderer)).toContain(en.bills.itemPaid);
+    expect(texts(renderer)).toContain(en.payments.payoutPending);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a read-only payee bill hides cash confirmation", async () => {
+  mockParams = {ticketId: "walk1", scope: "payee", readOnly: true};
+  mockFetchBill.mockResolvedValue(CASH_PAYEE_BILL);
+  const renderer = await mount();
+  try {
+    expect(texts(renderer)).toContain(en.bills.readOnly);
+    expect(pressable(renderer, `${en.assist.cashConfirmReceipt} ${en.bills.repair}`)).toBeUndefined();
   } finally {
     renderer.unmount();
   }

@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {signInWithEmailAndPassword} from "firebase/auth";
@@ -18,7 +19,7 @@ export default function LoginScreen() {
   const {t} = useStrings();
   const {signIn} = useAuth();
   const {refresh} = useProfile();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const [mode, setModeState] = useState<"login" | "register">("login");

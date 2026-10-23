@@ -1,8 +1,10 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useColorScheme, useWindowDimensions} from "react-native";
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {Camera, GeoJSONSource, Images, Map, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {nearProviders, providerRatings, type Provider, type ProviderRating} from "../../api/providers";
 import {toMessage} from "../../api/client";
@@ -55,7 +57,7 @@ function pillFor(shop: Provider, t: Strings): string | null {
 }
 
 export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, radius, onRadius, mode, card, onUseShop, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
@@ -78,7 +80,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
   function select(shop: Provider): void {
     setSelectedId(shop.id);
     setReviewsOpen(false);
-    void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+    safeCameraCall(() => cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600}));
   }
   const load = useCallback(async () => {
     if (!token || !gps) return;

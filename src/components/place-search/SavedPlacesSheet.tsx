@@ -1,4 +1,5 @@
-import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -19,7 +20,7 @@ type Props = {
 };
 
 export default function SavedPlacesSheet({t, places, loading, busy, error, onAdd, onDelete, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <Overlay

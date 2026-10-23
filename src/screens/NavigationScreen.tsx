@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -124,7 +125,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   useEffect(() => {
     void warmAudio();
   }, []);
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const voice = useNavVoice(lang, () => {
@@ -164,16 +165,23 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
   useEffect(() => {
+    let alive = true;
+    setVotedIds(new Set());
+    setDeniedIds(new Set());
     void (async () => {
       try {
-        const [v, d] = await Promise.all([loadVotedIds(), loadDeniedIds()]);
+        const [v, d] = await Promise.all([loadVotedIds(uid), loadDeniedIds(uid)]);
+        if (!alive) return;
         setVotedIds(v);
         setDeniedIds(d);
       } catch {
         return;
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [uid]);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const uidRef = useRef(uid);
@@ -256,7 +264,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     if (confirmSnackTimer.current) clearTimeout(confirmSnackTimer.current);
     try {
       const res = await confirmFlag(flagId, token);
-      void markVoted(flagId);
+      void markVoted(uid, flagId);
       setVotedIds((prev) => new Set(prev).add(flagId));
       closeFlag();
       setFlagsKey((k) => k + 1);
@@ -277,7 +285,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     setFlagBusy(true);
     try {
       const res = await denyFlag(flagId, token);
-      void markDenied(flagId);
+      void markDenied(uid, flagId);
       setDeniedIds((prev) => new Set(prev).add(flagId));
       closeFlag();
       setFlagsKey((k) => k + 1);
@@ -481,7 +489,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     };
   }, []);
   useEffect(() => {
-    ensurePushConfigured();
+    void ensurePushConfigured();
     setNavForeground(true);
     void flagsNear(seed.lat, seed.lng, NAV_NEAR_RADIUS_M, token).catch(() => undefined);
     const onHazard = (data: HazardPushData): void => {
@@ -688,8 +696,8 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
             selectedFlag.id,
             selectedFlag.status,
             uid != null && selectedFlag.reporterId === uid,
-            votedIds.has(selectedFlag.id),
-            deniedIds.has(selectedFlag.id),
+            votedIds.has(selectedFlag.id) || selectedFlag.voteDirection === "up",
+            deniedIds.has(selectedFlag.id) || selectedFlag.voteDirection === "down",
             flagBusy,
             {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
             {onConfirm: (id) => void onConfirmFlag(id), onDeny: (id) => void onDenyFlag(id), onRemove: (id) => void onRemoveFlag(id)},

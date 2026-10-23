@@ -14,6 +14,7 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {createProvider, myProviders, type Provider} from "../api/providers";
+import {getNotificationPrefs, updateNotificationPrefs, type NotificationPrefs} from "../api/notifications";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
 import type {ShopDraft, TowDraft} from "./OnboardingScreen";
 import OnboardingScreen from "./OnboardingScreen";
@@ -39,6 +40,9 @@ export default function SettingsScreen() {
   const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerError, setProviderError] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [prefsBusy, setPrefsBusy] = useState(false);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
   const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
       setProviders([]);
@@ -50,9 +54,37 @@ export default function SettingsScreen() {
       setProviderError(toMessage(err));
     }
   }, [token]);
+  const loadPrefs = useCallback(async (): Promise<void> => {
+    if (!token) {
+      setPrefs(null);
+      return;
+    }
+    try {
+      setPrefs(await getNotificationPrefs(token));
+      setPrefsError(null);
+    } catch (err) {
+      setPrefsError(toMessage(err));
+    }
+  }, [token]);
   useFocusEffect(useCallback(() => {
     void loadProviders();
-  }, [loadProviders]));
+    void loadPrefs();
+  }, [loadProviders, loadPrefs]));
+  async function onPref(key: keyof NotificationPrefs, value: boolean): Promise<void> {
+    if (!token || prefsBusy) return;
+    const previous = prefs;
+    setPrefs((current) => (current === null ? current : {...current, [key]: value}));
+    setPrefsBusy(true);
+    setPrefsError(null);
+    try {
+      setPrefs(await updateNotificationPrefs(token, {[key]: value}));
+    } catch (err) {
+      setPrefs(previous);
+      setPrefsError(toMessage(err));
+    } finally {
+      setPrefsBusy(false);
+    }
+  }
   async function onVolunteerOption(patch: {volunteerRadiusKm?: number; capability?: string}): Promise<void> {
     if (!token || volBusy) return;
     setVolBusy(true);
@@ -125,6 +157,44 @@ export default function SettingsScreen() {
             <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
           </Pressable>
         </View>
+        {token ? (
+          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <View style={styles.listRow}>
+              <MaterialIcons name="notifications" size={20} color={theme.primary} />
+              <Text style={[styles.listText, {color: theme.text}]}>{t.more.notifications}</Text>
+            </View>
+            <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+            <View style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={[styles.settingTitle, {color: theme.text}]}>{t.more.paymentUpdates}</Text>
+                <Text style={[styles.settingHint, {color: theme.muted}]}>{t.more.paymentUpdatesHint}</Text>
+              </View>
+              <Switch
+                value={prefs?.paymentUpdates ?? true}
+                onValueChange={(value) => void onPref("paymentUpdates", value)}
+                disabled={prefsBusy || prefs === null}
+                trackColor={{false: theme.divider, true: theme.primary}}
+                thumbColor="#ffffff"
+                accessibilityLabel={t.more.paymentUpdates}
+              />
+            </View>
+            <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+            <View style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={[styles.settingTitle, {color: theme.text}]}>{t.more.payoutUpdates}</Text>
+                <Text style={[styles.settingHint, {color: theme.muted}]}>{t.more.payoutUpdatesHint}</Text>
+              </View>
+              <Switch
+                value={prefs?.payoutUpdates ?? true}
+                onValueChange={(value) => void onPref("payoutUpdates", value)}
+                disabled={prefsBusy || prefs === null}
+                trackColor={{false: theme.divider, true: theme.primary}}
+                thumbColor="#ffffff"
+                accessibilityLabel={t.more.payoutUpdates}
+              />
+            </View>
+          </View>
+        ) : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={toggleTheme} accessibilityRole="switch" accessibilityState={{checked: scheme === "dark"}}><MaterialIcons name={scheme === "dark" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text><View pointerEvents="none"><Switch value={scheme === "dark"} onValueChange={() => toggleTheme()} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
@@ -171,6 +241,8 @@ export default function SettingsScreen() {
         <Snack message={volError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
       ) : providerError ? (
         <Snack message={providerError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
+      ) : prefsError ? (
+        <Snack message={prefsError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setPrefsError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
@@ -185,6 +257,10 @@ const styles = StyleSheet.create({
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},
   listSecondary: {fontSize: 13},
   divider: {height: 1, marginHorizontal: 16},
+  settingRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 16},
+  settingText: {flex: 1, gap: 2},
+  settingTitle: {fontSize: 14, fontWeight: "600"},
+  settingHint: {fontSize: 12},
   optionBlock: {gap: 8, paddingVertical: 14, paddingHorizontal: 16},
   optionLabel: {fontSize: 13, fontWeight: "700"},
   optionRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},

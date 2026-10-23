@@ -1,5 +1,6 @@
 import type {ReactNode} from "react";
-import {ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../ui/AppText";
@@ -37,7 +38,7 @@ function dismissAnd(run: () => void): void {
 }
 
 function DismissButton({closeLabel, onClose}: {closeLabel: string; onClose: () => void}) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <Pressable
@@ -52,7 +53,7 @@ function DismissButton({closeLabel, onClose}: {closeLabel: string; onClose: () =
 }
 
 function Header({title, leading, right, trailing}: {title?: string; leading?: ReactNode; right?: ReactNode; trailing?: ReactNode}) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <View style={styles.headRow}>
@@ -65,7 +66,7 @@ function Header({title, leading, right, trailing}: {title?: string; leading?: Re
 }
 
 function Footer({actions}: {actions: OverlayAction[]}) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <View style={styles.actionRow}>
@@ -94,7 +95,7 @@ function Footer({actions}: {actions: OverlayAction[]}) {
 }
 
 export default function Overlay({visible, variant, title, leading, right, closeLabel, onClose, actions, scrollable, children}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   if (variant === "fullScreen") {

@@ -20,8 +20,19 @@ export type DispatchPushData = {
   paymentStatus?: string;
 };
 
+export type PaymentPushData = {
+  event: string;
+  paymentId: string;
+  ticketId: string;
+  payoutId?: string;
+};
+
 function num(v: unknown): number | undefined {
   return typeof v === "string" && v !== "" && Number.isFinite(Number(v)) ? Number(v) : undefined;
+}
+
+function text(v: unknown): string {
+  return typeof v === "string" ? v : "";
 }
 
 export function parseHazardPush(data: unknown): HazardPushData | null {
@@ -55,5 +66,23 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
     urgent: d.urgent === true || d.urgent === "true" || undefined,
     kind: kindRaw,
     paymentStatus: payRaw,
+  };
+}
+
+export function parsePaymentPush(data: unknown): PaymentPushData | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  if (typeof d.screen === "string" && d.screen !== "" && d.screen !== "payments") return null;
+  const event = text(d.event);
+  const paymentId = text(d.paymentId);
+  const ticketId = text(d.ticketId);
+  const payoutId = text(d.payoutId);
+  if (event === "") return null;
+  if (paymentId === "" && ticketId === "" && payoutId === "") return null;
+  return {
+    event,
+    paymentId,
+    ticketId,
+    ...(payoutId === "" ? {} : {payoutId}),
   };
 }

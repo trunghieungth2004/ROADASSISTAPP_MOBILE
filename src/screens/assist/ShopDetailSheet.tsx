@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme, useWindowDimensions} from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy, navBusy, imHereBusy, jobs, reviews, onReport, onWalkHere, onRouteFromHere, onImHere, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const count = typeof shop.ratingCount === "number" ? shop.ratingCount : 0;
   const avg = typeof shop.ratingAvg === "number" ? shop.ratingAvg : 0;

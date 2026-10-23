@@ -1,4 +1,5 @@
-import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function PermissionGateScreen({t, states, busy, showBackground, canDone, grantError, onHideGrantError, onGrantNotifications, onGrantCamera, onGrantPhotos, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   return (

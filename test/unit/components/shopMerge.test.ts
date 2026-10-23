@@ -1,10 +1,31 @@
-import {expect, test} from "@jest/globals";
-import {mergeShopResults, normalizeShopName} from "../../../src/components/place-search/shopMerge";
-import type {Provider} from "../../../src/api/providers";
+import {expect, jest, test} from "@jest/globals";
+import {fetchShopPlaces, mergeShopResults, normalizeShopName} from "../../../src/components/place-search/shopMerge";
+import {searchProviders, type Provider} from "../../../src/api/providers";
+
+jest.mock("../../../src/api/providers", () => ({
+  searchProviders: jest.fn(),
+}));
 
 function shop(id: string, name: string, lat: number, lng: number): Provider {
   return {id, name, lat, lng} as Provider;
 }
+
+test("tow shop search hides off-duty shops", async () => {
+  jest.mocked(searchProviders).mockResolvedValue([
+    {id: "on", name: "On", kind: "SHOP", lat: 10.7, lng: 106.6, accepting: true},
+    {id: "off", name: "Off", kind: "SHOP", lat: 10.71, lng: 106.61, accepting: false},
+  ] as never);
+  const rows = await fetchShopPlaces(
+    "",
+    "tok",
+    {lat: 10.7, lng: 106.6},
+    undefined,
+    20000,
+    true,
+    {acceptingOnly: true},
+  );
+  expect(rows.map((row) => row.id)).toEqual(["on"]);
+});
 
 test("normalizeShopName folds case and diacritics", () => {
   expect(normalizeShopName("Tiệm Sửa Xe")).toBe("tiem sua xe");

@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, canStartWork, estimateStateOf, retargetableLiveTicket, announcesShopPush, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, canStartWork, estimateStateOf, retargetableLiveTicket, announcesShopPush, viewerRoleOf, visibleActions} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -23,16 +23,18 @@ test("visible actions follow the rider matrix", () => {
 });
 
 test("operator takes pending inbound jobs", () => {
-  expect(canAccept("in", "1")).toBe(true);
-  expect(canDecline("in", "1")).toBe(true);
-  for (const s of ["2", "3", "4", "5", "6", "7", "8"]) {
-    expect(canAccept("in", s)).toBe(false);
-    expect(canDecline("in", s)).toBe(false);
-  }
-  for (const s of ["1", "2", "3", "4", "5", "6", "7", "8"]) {
-    expect(canAccept("out", s)).toBe(false);
-    expect(canDecline("out", s)).toBe(false);
-  }
+  expect(canAccept({kind: "candidate", candidateKind: "SHOP"})).toBe(true);
+  expect(canAccept({kind: "candidate", candidateKind: "TOW"})).toBe(true);
+  expect(canDecline({kind: "candidate", candidateKind: "SHOP"})).toBe(true);
+  expect(canDecline({kind: "candidate", candidateKind: "TOW"})).toBe(true);
+  expect(canAccept({kind: "rider"})).toBe(false);
+  expect(canDecline({kind: "rider"})).toBe(false);
+  expect(canAccept({kind: "assigned", assignedKind: "SHOP"})).toBe(false);
+  expect(canDecline({kind: "assigned", assignedKind: "TOW"})).toBe(false);
+  expect(canAccept({kind: "destination"})).toBe(false);
+  expect(canDecline({kind: "destination"})).toBe(false);
+  expect(canAccept({kind: "other"})).toBe(false);
+  expect(canDecline({kind: "other"})).toBe(false);
 });
 
 test("operator records work-done details on in-progress shop jobs", () => {
@@ -46,9 +48,13 @@ test("operator records work-done details on in-progress shop jobs", () => {
 });
 
 test("operator rates the rider on resolved inbound jobs", () => {
-  expect(canRateRider("in", "4")).toBe(true);
-  for (const s of ["1", "2", "3", "5", "6", "7", "8"]) expect(canRateRider("in", s)).toBe(false);
-  for (const s of ["1", "2", "3", "4", "5", "6", "7", "8"]) expect(canRateRider("out", s)).toBe(false);
+  expect(canRateRider({kind: "assigned", assignedKind: "SHOP"}, "4")).toBe(true);
+  expect(canRateRider({kind: "assigned", assignedKind: "TOW"}, "4")).toBe(true);
+  expect(canRateRider({kind: "assigned", assignedKind: null}, "4")).toBe(true);
+  for (const s of ["1", "2", "3", "5", "6", "7", "8"]) expect(canRateRider({kind: "assigned", assignedKind: "SHOP"}, s)).toBe(false);
+  for (const role of [{kind: "rider"}, {kind: "destination"}, {kind: "other"}, {kind: "candidate", candidateKind: "TOW"}] as const) {
+    expect(canRateRider(role, "4")).toBe(false);
+  }
 });
 
 test("volunteers start arrived SOS jobs, shops quote first", () => {
@@ -75,14 +81,11 @@ test("unfixable runs from live shop states", () => {
 });
 
 test("destination decline belongs to the destination shop from pending on", () => {
-  const mine = new Set(["shop-1"]);
-  expect(canDeclineDestination("1", "shop-1", mine)).toBe(true);
-  expect(canDeclineDestination("2", "shop-1", mine)).toBe(true);
-  for (const s of ["3", "6", "7"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(true);
-  for (const s of ["4", "5", "8"]) expect(canDeclineDestination(s, "shop-1", mine)).toBe(false);
-  expect(canDeclineDestination("2", "shop-2", mine)).toBe(false);
-  expect(canDeclineDestination("2", null, mine)).toBe(false);
-  expect(canDeclineDestination("2", "", mine)).toBe(false);
+  expect(canDeclineDestination("1", true)).toBe(true);
+  expect(canDeclineDestination("2", true)).toBe(true);
+  for (const s of ["3", "6", "7"]) expect(canDeclineDestination(s, true)).toBe(true);
+  for (const s of ["4", "5", "8"]) expect(canDeclineDestination(s, true)).toBe(false);
+  for (const s of ["1", "2", "3", "6", "7"]) expect(canDeclineDestination(s, false)).toBe(false);
 });
 
 test("drop-off edit belongs to the rider on editable tow tickets", () => {
@@ -220,4 +223,36 @@ test("request photos follow the viewer gate", () => {
   expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine, "u1", false)).toBe(false);
   expect(canSeeRequestPhotos(row({assignedUid: "u2"}), mine, "u1", true)).toBe(false);
   expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine, null, true)).toBe(false);
+});
+
+test("viewer role resolves one owner per ticket", () => {
+  const scope = (overrides?: object) => ({
+    ownShopIds: new Set(["shop-c"]),
+    ownTowId: null as string | null,
+    uid: "u1",
+    hasVolunteer: false,
+    ...overrides,
+  });
+  const row = (overrides?: object) => ({
+    direction: "in",
+    status: "2",
+    ticketType: "TOW",
+    assignedShopId: null,
+    providerId: null,
+    destinationShopId: "shop-c",
+    assignedUid: null,
+    ...overrides,
+  }) as Parameters<typeof viewerRoleOf>[0];
+  expect(viewerRoleOf(row({direction: "out"}), scope())).toEqual({kind: "rider"});
+  expect(viewerRoleOf(row({assignedShopId: "shop-c"}), scope())).toEqual({kind: "assigned", assignedKind: "SHOP"});
+  expect(viewerRoleOf(row({assignedShopId: "tow-b"}), scope({ownTowId: "tow-b"}))).toEqual({kind: "assigned", assignedKind: "TOW"});
+  expect(viewerRoleOf(row({assignedShopId: "tow-b"}), scope({ownShopIds: new Set(["shop-c"]), ownTowId: "tow-b"}))).toEqual({kind: "assigned", assignedKind: "TOW"});
+  expect(viewerRoleOf(row({assignedUid: "u1"}), scope({hasVolunteer: true}))).toEqual({kind: "assigned", assignedKind: null});
+  expect(viewerRoleOf(row({assignedUid: "u1"}), scope())).toEqual({kind: "destination"});
+  expect(viewerRoleOf(row({status: "1", providerId: "shop-c", destinationShopId: null}), scope())).toEqual({kind: "candidate", candidateKind: "SHOP"});
+  expect(viewerRoleOf(row({status: "1", assignedShopId: "shop-c", providerId: "shop-c", destinationShopId: null}), scope())).toEqual({kind: "assigned", assignedKind: "SHOP"});
+  expect(viewerRoleOf(row({status: "1", destinationShopId: null}), scope({ownTowId: "tow-b"}))).toEqual({kind: "candidate", candidateKind: "TOW"});
+  expect(viewerRoleOf(row({status: "1", destinationShopId: null}), scope())).toEqual({kind: "other"});
+  expect(viewerRoleOf(row({assignedShopId: "tow-b"}), scope())).toEqual({kind: "destination"});
+  expect(viewerRoleOf(row({assignedShopId: "tow-b", destinationShopId: "shop-z"}), scope())).toEqual({kind: "other"});
 });

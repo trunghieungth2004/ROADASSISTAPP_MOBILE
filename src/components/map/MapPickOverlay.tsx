@@ -1,8 +1,10 @@
 import {useEffect, useMemo, useRef, useState} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "./safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {formatPoint, reverseLabel} from "../../api/places";
 import {toMessage} from "../../api/client";
@@ -32,7 +34,7 @@ function readCenter(e: unknown): [number, number] | null {
 }
 
 export default function MapPickOverlay({t, lang, title, initial, onPick, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
@@ -48,7 +50,7 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
       .then((fix) => {
         if (!alive) return;
         setCenter([fix.lng, fix.lat]);
-        void cameraRef.current?.setStop({center: [fix.lng, fix.lat], zoom: 15, duration: 800});
+        safeCameraCall(() => cameraRef.current?.setStop({center: [fix.lng, fix.lat], zoom: 15, duration: 800}));
       })
       .catch(() => undefined);
     return () => {

@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from "react";
-import {FlatList, Pressable, RefreshControl, StyleSheet, View, useColorScheme} from "react-native";
+import {FlatList, Pressable, RefreshControl, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -22,7 +23,7 @@ export default function VehicleScreen() {
   const {t} = useStrings();
   const {token} = useAuth();
   const {activeVehicle, activateVehicle, refresh} = useProfile();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const [profiles, setProfiles] = useState<VehicleProfile[]>([]);

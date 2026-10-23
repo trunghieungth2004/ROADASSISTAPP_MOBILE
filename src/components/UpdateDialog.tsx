@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {StyleSheet, View, useColorScheme} from "react-native";
+import {StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "./ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import Overlay, {type OverlayAction} from "./overlay/Overlay";
@@ -18,7 +19,7 @@ type Props = {
 type Phase = "idle" | "busy" | "error";
 
 export default function UpdateDialog({t, release, onSkip, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);

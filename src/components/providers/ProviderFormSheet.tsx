@@ -1,4 +1,5 @@
-import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {formatPoint} from "../../api/places";
 import type {Strings} from "../../i18n/en";
@@ -13,7 +14,7 @@ type Props = {
 };
 
 export default function ProviderFormSheet({t, draft}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme: AppTheme = scheme === "dark" ? darkTheme : lightTheme;
   const {kind, provider} = draft;
   return (

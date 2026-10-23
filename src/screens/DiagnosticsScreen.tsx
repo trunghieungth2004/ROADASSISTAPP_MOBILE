@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from "react";
-import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -24,7 +25,7 @@ export default function DiagnosticsScreen() {
   const {t} = useStrings();
   const {token: authToken} = useAuth();
   const navigation = useNavigation();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [tab, setTab] = useState<DiagTab | "logs">("push");
   const [selected, setSelected] = useState<DiagTab[]>(["push", "location", "audio", "network"]);

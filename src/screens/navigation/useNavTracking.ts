@@ -3,6 +3,7 @@ import {AppState} from "react-native";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "../../components/map/safeCamera";
 import {findRoute, isFlagWarning, isHazardZone, isWidthBlock, type FlagWarning, type RouteOption} from "../../api/routes";
 import {reverseLabel} from "../../api/places";
 import {toMessage} from "../../api/client";
@@ -267,13 +268,13 @@ export function useNavTracking(opts: NavTrackingOpts): {
       lastCmdRef.current = now;
       const b = pickBearing();
       lastBearingRef.current = b;
-      void cameraRef.current.setStop({
+      safeCameraCall(() => cameraRef.current?.setStop({
         center: [seed.lng, seed.lat],
         zoom: FOLLOW_ZOOM,
         bearing: b,
         pitch: FOLLOW_PITCH,
         duration: 0,
-      });
+      }));
     };
     seedFrameRef.current = fireSeedFrame;
     const seedTimer = setTimeout(() => {
@@ -303,11 +304,11 @@ export function useNavTracking(opts: NavTrackingOpts): {
             if (now - lastBearCmdRef.current >= BEARING_DIRECT_GAP_MS && (prevB === null || Math.abs(wrapDeg(v - prevB)) >= ARROW_MIN_CHANGE_DEG)) {
               lastBearCmdRef.current = now;
               lastBearingRef.current = v;
-              void cameraRef.current?.setStop({
+              safeCameraCall(() => cameraRef.current?.setStop({
                 center: [p.lng, p.lat],
                 bearing: v,
                 duration: 150,
-              });
+              }));
             }
           }
         });
@@ -373,12 +374,12 @@ export function useNavTracking(opts: NavTrackingOpts): {
               const headingFresh = !!h && cmdNow - h.ts < 15000;
               const driveBearing = first || (!headingFresh && (prevBearing === null || Math.abs(wrapDeg(bearing - prevBearing)) >= BEARING_DEADBAND_DEG));
               if (driveBearing) lastBearingRef.current = bearing;
-              void cameraRef.current?.setStop({
+              safeCameraCall(() => cameraRef.current?.setStop({
                 center: [shown.lng, shown.lat],
                 ...(first ? {zoom: FOLLOW_ZOOM, pitch: FOLLOW_PITCH} : {}),
                 ...(driveBearing ? {bearing} : {}),
                 duration: first ? 0 : 300,
-              });
+              }));
             }
           }
           if (!arrivedRef.current && p.remainingMeters <= ARRIVAL_METERS) {
@@ -559,11 +560,11 @@ export function useNavTracking(opts: NavTrackingOpts): {
     setFollowing(false);
     followingRef.current = false;
     lastCmdRef.current = Date.now();
-    void cameraRef.current?.setStop({
+    safeCameraCall(() => cameraRef.current?.setStop({
       center: [lng, lat],
       zoom: Math.max(zoomRef.current, 16),
       duration: 500,
-    });
+    }));
   };
   const focusAt = (lat: number, lng: number): void => {
     const r = routeRef.current;
@@ -589,11 +590,11 @@ export function useNavTracking(opts: NavTrackingOpts): {
     setFollowing(false);
     followingRef.current = false;
     lastCmdRef.current = Date.now();
-    void cameraRef.current?.setStop({
+    safeCameraCall(() => cameraRef.current?.setStop({
       center: [at[0], at[1]],
       bearing,
       duration: 500,
-    });
+    }));
   };
   const onRecenter = (): void => {
     setFollowing(true);
@@ -607,13 +608,13 @@ export function useNavTracking(opts: NavTrackingOpts): {
       recenterUntilRef.current = now + RECENTER_SETTLE_MS;
       const bearing = pickBearing();
       lastBearingRef.current = bearing;
-      void cameraRef.current?.setStop({
+      safeCameraCall(() => cameraRef.current?.setStop({
         center: [lng, lat],
         zoom: Math.max(zoomRef.current, FOLLOW_MIN_ZOOM),
         bearing,
         pitch: FOLLOW_PITCH,
         duration: 500,
-      });
+      }));
     };
     const p = lastFixRef.current;
     if (p) {

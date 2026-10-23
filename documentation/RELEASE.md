@@ -38,7 +38,17 @@ accepted as upgrades). The APK is named `roadassist-<tag>.apk` — that name
 is a contract: the in-app updater locates the download by it, so renaming
 breaks updates without a compile error anywhere.
 
-### Secrets (repo Settings → Secrets → Actions)
+### Planned updater rollout
+
+The installed build is `v0.1.1`, and the in-app updater cannot replace it
+reliably, so the rollout is staged:
+
+1. Bump `expo.version` to `0.1.2`, tag `v0.1.2`, and distribute that APK as a
+   manual install (uninstall `v0.1.1` first where signatures differ).
+2. After `v0.1.2` is installed on the test devices, bump to `0.1.3`, tag it,
+   and use it to verify the in-app updater path.
+
+Until that approval, `app.json` stays at `0.1.1` and no tag is cut.
 
 | Secret | Source | Notes |
 |---|---|---|

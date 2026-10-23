@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {ActivityIndicator, BackHandler, Keyboard, Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, BackHandler, Keyboard, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -7,7 +8,9 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
+import {safeCameraCall, safeCameraReady} from "../components/map/safeCamera";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
+import {payeeBills} from "../api/bills";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
 import {findRoute, type RouteOption} from "../api/routes";
@@ -17,6 +20,8 @@ import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useNavSession} from "../context/NavSessionContext";
 import {useStrings} from "../context/LanguageContext";
+import {useBills} from "../context/BillsContext";
+import type {Bill} from "../api/bills";
 import {darkTheme, lightTheme} from "../theme";
 import Snack from "../components/ui/Snack";
 import Overlay from "../components/overlay/Overlay";
@@ -39,6 +44,7 @@ import PlaceSearchScreen from "./PlaceSearchScreen";
 import ShopsSection from "./assist/ShopsSection";
 import RecordsSection from "./assist/RecordsSection";
 import RecordDetailSheet from "./assist/RecordDetailSheet";
+import BillStrip from "./assist/BillStrip";
 import TicketSheet from "./assist/TicketSheet";
 import DisputeSheet from "./assist/DisputeSheet";
 import EstimateSheet from "./assist/EstimateSheet";
@@ -63,15 +69,21 @@ const ACTIVE_KEY = "roadassist.activeTicket";
 export default function AssistScreen() {
   const {t, lang} = useStrings();
   const {token, uid} = useAuth();
+  const {bills, dueCount, dueTotal, refresh: refreshBills} = useBills();
   const {activeVehicle, activateVehicle, bundle, hasVehicle} = useProfile();
   const [ownProviders, setOwnProviders] = useState<Provider[]>([]);
   const provider = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
     ownProviders.some((p) => p.kind === "TOW" && p.status === "ACTIVE");
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation() as unknown as {navigate: (name: string, params?: Record<string, unknown>) => void; setOptions: (options: {title?: string; headerShown?: boolean}) => void};
   const cameraRef = useRef<CameraRef | null>(null);
+  const mapReadyRef = useRef(false);
+  const mapFocusedRef = useRef(false);
+  useEffect(() => () => {
+    mapReadyRef.current = false;
+  }, []);
   const centeredRef = useRef(false);
   const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
   const [ticketType, setTicketType] = useState<TicketType | null>(null);
@@ -101,9 +113,11 @@ export default function AssistScreen() {
   const [mapSearchFrom, setMapSearchFrom] = useState<"browse" | "tow" | null>(null);
   const [mine, setMine] = useState<DispatchTicket[]>([]);
   const [feed, setFeed] = useState<FeedTicket[]>([]);
+  const [payeeBillList, setPayeeBillList] = useState<Bill[]>([]);
   const [ticketRatings, setTicketRatings] = useState<Record<string, UserRating[]>>({});
   const [recBusy, setRecBusy] = useState(false);
   const [detailFor, setDetailFor] = useState<FeedTicket | null>(null);
+  const [detailContext, setDetailContext] = useState<"shop" | "tow">("shop");
   const [boardDetail, setBoardDetail] = useState<FeedTicket | null>(null);
   const [editDestFor, setEditDestFor] = useState<FeedTicket | null>(null);
   const [duplicateFor, setDuplicateFor] = useState<{ticketId: string} | null>(null);
@@ -119,6 +133,7 @@ export default function AssistScreen() {
   const [vehicleOpen, setVehicleOpen] = useState(false);
   const [nearbyTow, setNearbyTow] = useState<DispatchTicket[]>([]);
   const [gps, setGps] = useState<{lat: number; lng: number} | null>(null);
+  const [towLocationMissing, setTowLocationMissing] = useState(false);
   const [active, setActive] = useState<DispatchTicket | null>(null);
   const [reportFor, setReportFor] = useState<{id: string; name: string} | null>(null);
   const [reportReason, setReportReason] = useState<ReportReason>("FAKE_BUSINESS");
@@ -132,6 +147,33 @@ export default function AssistScreen() {
   const activeFeed = storedFeed ?? ownLiveTow;
   const needsDropOff = activeFeed === null ? feed.find((t) => t.direction === "out" && t.ticketType === "TOW" && t.status === "1" && towDestOf(t) === null) ?? null : null;
   const pendingOwnTow = activeFeed === null && needsDropOff === null ? feed.find((t) => t.direction === "out" && t.ticketType === "TOW" && t.status === "1" && towDestOf(t) !== null) ?? null : null;
+  const ownShopIds = new Set(ownProviders.filter((item) => item.kind === "SHOP" && item.status !== "DENIED").map((item) => item.id));
+  const hasVolunteer = (bundle?.user.services ?? []).includes("VOLUNTEER");
+  const billForTicket = (ticket: FeedTicket): Bill | null => {
+    const source = ticket.direction === "out" ? bills : payeeBillList;
+    const direct = source.find((row) => row.ticketId === ticket.id);
+    if (direct) return direct;
+    return source.find((row) => row.items.some((item) => item.ticketId === ticket.id)) ?? null;
+  };
+  const hasShopRole = (ticket: FeedTicket): boolean =>
+    [ticket.assignedShopId, ticket.providerId, ticket.destinationShopId].some((id) => typeof id === "string" && id !== "" && ownShopIds.has(id));
+  const isTowRequest = (ticket: FeedTicket): boolean =>
+    ticket.ticketType === "TOW" &&
+    ticket.status === "1" &&
+    ticket.direction === "in" &&
+    ownTowId !== null &&
+    ticket.providerId === ownTowId;
+  const isOwnTowJob = (ticket: FeedTicket): boolean =>
+    ticket.ticketType === "TOW" &&
+    ((ownTowId !== null && ticket.assignedShopId === ownTowId) || (hasVolunteer && ticket.assignedUid === uid));
+  const towRequests = feed.filter(isTowRequest);
+  const towJobs = feed.filter((ticket) => isOwnTowJob(ticket) && !towRequests.some((request) => request.id === ticket.id));
+  const recordFeed = feed.filter((ticket) => {
+    if (ticket.ticketType !== "TOW") return true;
+    if (ticket.direction === "out") return true;
+    return hasShopRole(ticket);
+  });
+  const nearbyOnly = nearbyTow.filter((ticket) => !towRequests.some((request) => request.id === ticket.id) && !towJobs.some((job) => job.id === ticket.id));
   function pendingDropName(ticket: FeedTicket): string {
     const party = ticket.destinationParty as {name?: unknown} | null | undefined;
     if (party && typeof party.name === "string" && party.name !== "") return party.name;
@@ -201,7 +243,7 @@ export default function AssistScreen() {
       if (route) {
         const b = boundsOf(route.geometry.coordinates);
         if (b) {
-          void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
+          safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800}));
         }
       }
     }).catch(() => {
@@ -212,6 +254,9 @@ export default function AssistScreen() {
     };
   });
   const assistFocused = useIsFocused();
+  useEffect(() => {
+    mapFocusedRef.current = assistFocused;
+  }, [assistFocused]);
   const hasJobCard = (liveTow && activeFeed !== null) || needsDropOff !== null || pendingOwnTow !== null;
   useEffect(() => {
     setCardCollapsed(hasJobCard);
@@ -297,7 +342,7 @@ export default function AssistScreen() {
     if (!pending || !cam) return false;
     pendingCenterRef.current = null;
     centeredRef.current = true;
-    void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800});
+    safeCameraCall(() => cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800}));
     return true;
   }
   async function centerOnLocal(): Promise<void> {
@@ -329,7 +374,7 @@ export default function AssistScreen() {
   }, []);
   function fitWalk(route: RouteOption): void {
     const b = boundsOf(route.geometry.coordinates);
-    if (b) void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
+    if (b) safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800}));
   }
   const loadActive = useCallback(async (id: string | null, key: string | null): Promise<void> => {
     if (!key || !id) {
@@ -368,23 +413,32 @@ export default function AssistScreen() {
           pos = null;
         }
       }
-      const [fetched, feedList] = await Promise.all([
+      const [fetched, feedList, payeeList] = await Promise.all([
         myProviders(token).catch((): Provider[] => []),
         feedTickets(undefined, token).catch((): FeedTicket[] => []),
+        payeeBills(token).catch((): Bill[] => []),
       ]);
       setFeed(feedList);
       setOwnProviders(fetched);
+      setPayeeBillList(payeeList);
       const gate = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
         fetched.some((item) => item.kind === "TOW" && item.status === "ACTIVE");
+      const activeTow = fetched.some((item) => item.kind === "TOW" && item.status === "ACTIVE");
       if (gate) {
-        if (!granted) throw new Error(t.nav.locationDenied);
+        if (!granted) {
+          setTowLocationMissing(false);
+          throw new Error(t.nav.locationDenied);
+        }
         if (pos) {
-          setNearbyTow(await nearTickets(pos.lat, pos.lng, token, undefined, "TOW").catch((): DispatchTicket[] => []));
+          setNearbyTow(await nearTickets(pos.lat, pos.lng, token, activeTow ? 15000 : undefined, "TOW").catch((): DispatchTicket[] => []));
+          setTowLocationMissing(false);
         } else {
           setNearbyTow([]);
+          setTowLocationMissing(true);
         }
       } else {
         setNearbyTow([]);
+        setTowLocationMissing(false);
       }
       const saved = await AsyncStorage.getItem(ACTIVE_KEY).catch(() => null);
       await loadActive(saved, token);
@@ -396,7 +450,8 @@ export default function AssistScreen() {
   }, [token, bundle?.user.services, loadActive, t]);
   useFocusEffect(useCallback(() => {
     void reloadAll();
-  }, [reloadAll]));
+    void refreshBills();
+  }, [reloadAll, refreshBills]));
   useEffect(() => {
     if (assistFocused && checkedIn) {
       setCheckedIn(false);
@@ -422,7 +477,7 @@ export default function AssistScreen() {
     const pts = [...(jobLayers.tower ? [jobLayers.tower] : gps ? [gps] : []), jobLayers.pickup];
     if (jobLayers.dest) pts.push(jobLayers.dest);
     const b = boundsOf(pts.map((p) => [p.lng, p.lat] as [number, number]));
-    if (b) void cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
+    if (b) safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800}));
   }, [liveTow, activeFeed, jobLayers, gps]);
   const activeId = activeFeed?.id ?? null;
   const activeIsOut = activeFeed?.direction === "out";
@@ -455,7 +510,7 @@ export default function AssistScreen() {
     return () => clearInterval(timer);
   }, [liveTow, activeIsOut, activeId, token]);
   useEffect(() => {
-    ensurePushConfigured();
+    void ensurePushConfigured();
     const applyLaunch = (data: {ticketId: string; ticketType?: string; status?: string} | null): void => {
       if (!data) return;
       if (token) bustTicketCaches(token);
@@ -519,6 +574,7 @@ export default function AssistScreen() {
     const towMode = shopSearchMode === "tow";
     return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, towMode ? 20000 : undefined, towMode, {
       sortBy: "distance",
+      ...(towMode ? {acceptingOnly: true} : {}),
       ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
       ...(filters?.sortBy ? {sortBy: filters.sortBy} : {}),
       ticketId: filters?.ticketId ?? editDestFor?.id ?? detailFor?.id ?? undefined,
@@ -540,7 +596,7 @@ export default function AssistScreen() {
         () => undefined,
       );
     }
-    void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+    safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600}));
   }
   function onPickRadiusShop(shop: Provider, mode: "browse" | "tow"): void {
     if (mode === "tow") {
@@ -591,7 +647,7 @@ export default function AssistScreen() {
       }
       setWalkRoute(route);
       if (route) fitWalk(route);
-      else void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+      else safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600}));
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -681,7 +737,14 @@ export default function AssistScreen() {
   function onOpenDestinationCard(ticket: FeedTicket): void {
     const snap = ticket.destinationSnapshot;
     const fallback = snap && typeof snap.lat === "number" && typeof snap.lng === "number" ? {lat: snap.lat, lng: snap.lng} : null;
-    const shop = providerOf(ticket.destinationParty, fallback);
+    const party = ticket.destinationParty ?? (snap && typeof snap.name === "string" && snap.name !== "" ? {
+      id: typeof snap.id === "string" ? snap.id : (typeof ticket.destinationShopId === "string" ? ticket.destinationShopId : ""),
+      name: snap.name,
+      kind: "SHOP",
+      lat: typeof snap.lat === "number" ? snap.lat : null,
+      lng: typeof snap.lng === "number" ? snap.lng : null,
+    } : null);
+    const shop = providerOf(party, fallback);
     if (!shop) {
       setError(t.assist.alreadyGone);
       return;
@@ -706,9 +769,22 @@ export default function AssistScreen() {
     setBoardDetail(mapped);
     if (mapped.status === "1" && mapped.ticketType === "TOW") void loadTowPreview(mapped);
   }
+  function onOpenTowRequest(ticket: FeedTicket): void {
+    setBoardDetail(ticket);
+    setTowPreview(null);
+    if (ticket.status === "1" && ticket.ticketType === "TOW") void loadTowPreview(ticket);
+  }
   function towLegsFor(ticket: TowRouteTicket): {origin: {lat: number; lng: number}; pickup: {lat: number; lng: number}; dest: {lat: number; lng: number} | null} | null {
+    const pickup = {lat: ticket.lat, lng: ticket.lng};
+    const dest = towDestOf(ticket);
+    const towerFix = ticket.towerFix && typeof ticket.towerFix === "object" && typeof ticket.towerFix.lat === "number" && typeof ticket.towerFix.lng === "number" ? {lat: ticket.towerFix.lat, lng: ticket.towerFix.lng} : null;
+    if (ticket.direction === "out") {
+      if (towerFix) return {origin: towerFix, pickup, dest};
+      if (ticket.status === "3" && gps) return {origin: gps, pickup, dest};
+      return null;
+    }
     if (!gps) return null;
-    return {origin: gps, pickup: {lat: ticket.lat, lng: ticket.lng}, dest: towDestOf(ticket)};
+    return {origin: gps, pickup, dest};
   }
   function towSummary(route: RouteOption, viaPickup: boolean): string {
     const distance = `${((route.distanceMeters ?? 0) / 1000).toFixed(1)} ${t.route.km}`;
@@ -794,10 +870,11 @@ export default function AssistScreen() {
     ticket: FeedTicket,
     onCloseSheet: () => void,
     decline: ((ticket: FeedTicket, reason: DeclineReason, note: string | undefined) => void) | null,
+    roleContext: "auto" | "shop" | "tow" = "auto",
   ) {
     const hasVolunteer = (bundle?.user.services ?? []).includes("VOLUNTEER");
     const ownShopIds = new Set(ownProviders.filter((item) => item.kind === "SHOP").map((item) => item.id));
-    const showRequestPhotos = canSeeRequestPhotos(ticket, ownShopIds, uid, hasVolunteer);
+    const showRequestPhotos = canSeeRequestPhotos(ticket, ownShopIds, uid, hasVolunteer, ownTowId, roleContext);
     const ownTowAccepting = ownProviders.some((item) => item.kind === "TOW" && item.status === "ACTIVE" && item.accepting !== false);
     const acceptOffDuty = ticket.ticketType === "TOW" &&
       ticket.status === "1" &&
@@ -815,7 +892,6 @@ export default function AssistScreen() {
         ticket={ticket}
         ratings={ticketRatings[ticket.id] ?? []}
         busy={recBusy}
-        gps={gps}
         uid={uid}
         hasRated={ratedScores[ticket.id] !== undefined}
         onClose={onCloseSheet}
@@ -870,6 +946,9 @@ export default function AssistScreen() {
         onReply={(ratingId, text) => void onReplyRating(ratingId, text)}
         onRateRider={(item) => onRateRider(item)}
         ownShopIds={ownShopIds}
+        ownTowId={ownTowId}
+        hasVolunteer={hasVolunteer}
+        roleContext={roleContext}
         showRequestPhotos={showRequestPhotos}
         onDeclineDestination={(item) => void onDeclineDestinationTicket(item)}
         onEditDestination={(item) => { setEditDestFor(item); setShopSearchMode("tow"); }}
@@ -883,6 +962,8 @@ export default function AssistScreen() {
         onRequeue={(item) => void onRequeueTicket(item)}
         payment={payments[ticket.id] ?? null}
         waiting={waiting[ticket.id] ?? null}
+        bill={billForTicket(ticket)}
+        quoteFunded={fundedForApproval(ticket)}
         onMarkUnfixable={(item) => { setUnfixableFor(item); setUnfixableError(null); }}
       />
     );
@@ -908,7 +989,7 @@ export default function AssistScreen() {
         }
         setShopSearchMode(null);
         setShopSheet(shop);
-        void cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600});
+        safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.setStop({center: [shop.lng, shop.lat], zoom: 15, duration: 600}));
       } catch (err) {
         setError(toMessage(err));
       }
@@ -1130,6 +1211,7 @@ export default function AssistScreen() {
       setPayments((prev) => ({...prev, [ticket.id]: confirmed}));
       setNotice(t.assist.cashReceiptDone);
       await reloadAll();
+      void refreshBills();
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -1138,13 +1220,16 @@ export default function AssistScreen() {
   }
   function fundedForApproval(ticket: FeedTicket): boolean {
     const live = payments[ticket.id] ?? null;
-    const method = typeof live?.method === "string" ? live.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : null;
-    const status = typeof live?.status === "string" ? live.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : null;
+    const bill = billForTicket(ticket);
+    const billPayment = bill !== null ? (bill.items.find((item) => item.ticketId === ticket.id)?.payment ?? bill.items[0]?.payment ?? null) : null;
+    const method = typeof live?.method === "string" ? live.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : (typeof billPayment?.method === "string" ? billPayment.method : null);
+    const status = typeof live?.status === "string" ? live.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : (typeof billPayment?.status === "string" ? billPayment.status : null);
     return (method === "CASH" && (status === "PENDING" || status === "CONFIRMED")) || (method === "SEPAY" && (status === "HELD" || status === "CONFIRMED"));
   }
   function openBill(ticket: FeedTicket): void {
+    const payee = ticket.direction === "in" && billForTicket(ticket) !== null && payeeBillList.some((row) => row.ticketId === ticket.id || row.items.some((item) => item.ticketId === ticket.id));
     setDetailFor(null);
-    navigation.navigate("BillDetail", {ticketId: ticket.id});
+    navigation.navigate("BillDetail", payee ? {ticketId: ticket.id, scope: "payee"} : {ticketId: ticket.id, ...(ticket.direction === "in" ? {readOnly: true} : {})});
   }
   async function onFileDispute(reason: string, noteText: string, photoUri: string | null): Promise<void> {
     if (!token || !disputeFor || disputeBusy) return;
@@ -1401,6 +1486,7 @@ export default function AssistScreen() {
     try {
       await updateTicketStatus(ticket.id, status, token);
       await reloadAll();
+      if (status === DISPATCH_STATUS.RESOLVED) await refreshBills();
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -1456,7 +1542,7 @@ export default function AssistScreen() {
     try {
       const p = await currentPoint();
       setGps(p);
-      void cameraRef.current?.setStop({center: [p.lng, p.lat], zoom: 15, duration: 600});
+      safeCameraReady(mapReadyRef.current && mapFocusedRef.current, () => cameraRef.current?.setStop({center: [p.lng, p.lat], zoom: 15, duration: 600}));
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -1474,7 +1560,7 @@ export default function AssistScreen() {
         pillTextForShop={pillForShop}
         walkRoute={browsing ? walkRoute : null}
         jobLayers={jobLayers}
-        onMapReady={() => applyCenter()}
+        onMapReady={() => { mapReadyRef.current = true; applyCenter(); }}
       />
       {liveTow && activeFeed ? (
         <View style={[styles.bottomContainer, {bottom: insets.bottom + 12}]}>
@@ -1529,6 +1615,7 @@ export default function AssistScreen() {
       <View style={[styles.topContainer, {top: insets.top + 12}]}>
         <View onLayout={(e) => setCardH(e.nativeEvent.layout.height)} style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <BillStrip t={t} theme={theme} bills={bills} dueCount={dueCount} dueTotal={dueTotal} onOpen={() => navigation.navigate("Bills" as never)} />
             {cardCollapsed && hasJobCard ? null : (
             <>
             <AssistSectionTabs
@@ -1584,16 +1671,25 @@ export default function AssistScreen() {
               <TowSection
                 t={t}
                 theme={theme}
-                tickets={nearbyTow}
+                tickets={nearbyOnly}
+                jobs={towJobs}
+                requests={towRequests}
                 loading={loading}
+                locationMissing={towLocationMissing}
                 onOpen={(id) => onOpenBoardTicket(id)}
+                onOpenJob={(ticket) => {
+                  setDetailContext("tow");
+                  setDetailFor(ticket);
+                  if (ticket.status === "4") void onLoadRatings(ticket);
+                }}
+                onOpenRequest={(ticket) => void onOpenTowRequest(ticket)}
               />
             ) : null}
             {section === "records" ? (
               <RecordsSection
                 t={t}
                 theme={theme}
-                tickets={feed}
+                tickets={recordFeed}
                 loading={loading}
                 shopKinds={new Map(
                   ownProviders
@@ -1601,6 +1697,7 @@ export default function AssistScreen() {
                     .map((p) => [p.id, p.kind]),
                 )}
                 onOpen={(ticket) => {
+                  setDetailContext("shop");
                   setDetailFor(ticket);
                   if (ticket.status === "4") void onLoadRatings(ticket);
                 }}
@@ -1609,10 +1706,10 @@ export default function AssistScreen() {
             </>
             )}
             {detailFor ? (
-              sheetFor(detailFor, () => setDetailFor(null), (ticket, reason, note) => void onDeclineTicket(ticket, reason, note))
+              sheetFor(detailFor, () => setDetailFor(null), (ticket, reason, note) => void onDeclineTicket(ticket, reason, note), detailContext)
             ) : null}
             {boardDetail ? (
-              sheetFor(boardDetail, () => setBoardDetail(null), null)
+              sheetFor(boardDetail, () => setBoardDetail(null), null, "tow")
             ) : null}
           </ScrollView>
           {hasJobCard ? (

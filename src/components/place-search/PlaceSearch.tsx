@@ -1,11 +1,12 @@
-import {ActivityIndicator, View, Pressable, StyleSheet, useColorScheme} from "react-native";
+import {ActivityIndicator, View, Pressable, StyleSheet} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {darkTheme, lightTheme} from "../../theme";
 import type {Place} from "./PlaceSearch.types";
 import type {PlaceSearch} from "./usePlaceSearch";
 type Props = {search: PlaceSearch; placeholder: string; noResultsText: string; onSelect: (place: Place) => void; groupLabels?: {saved: string; directory: string; map: string}};
 export default function PlaceSearchField({search, placeholder, noResultsText, onSelect, groupLabels = {saved: "Saved", directory: "Directory", map: "Map"}}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const grouped: {header: string | null; item: Place}[] = [];
   let last: string | null = null;

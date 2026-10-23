@@ -26,6 +26,7 @@ jest.mock("../../../src/context/LanguageContext", () => {
 
 jest.mock("../../../src/context/ThemeContext", () => ({
   useThemeMode: () => ({mode: "light" as const, toggle: () => undefined}),
+  useAppMode: () => "light" as const,
 }));
 
 const mockNavigate = jest.fn();
@@ -75,18 +76,23 @@ test("duplicated licenses render a single chip beside the role badge", async () 
   try {
     const all = textsUnder(renderer.root);
     expect(all.filter((text) => text === en.roles.volunteer).length).toBe(1);
-    expect(all.filter((text) => text === en.roles.rider).length).toBe(2);
+    expect(all.filter((text) => text === en.roles.rider).length).toBe(1);
   } finally {
     renderer.unmount();
   }
 });
 
-test("hub exposes settings and about rows that navigate", async () => {
+test("hub exposes payments, settings and about rows that navigate", async () => {
   const renderer = await mount();
   try {
     const all = textsUnder(renderer.root);
+    expect(all).toContain(en.payments.title);
     expect(all).toContain(en.more.settings);
     expect(all).toContain(en.more.about);
+    await act(async () => {
+      rowFor(renderer, en.payments.title)?.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("Payments");
     await act(async () => {
       rowFor(renderer, en.more.settings)?.props.onPress();
     });

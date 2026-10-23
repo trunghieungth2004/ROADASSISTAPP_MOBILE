@@ -1,8 +1,9 @@
-import {StyleSheet, View, useColorScheme} from "react-native";
+import {StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {darkTheme, lightTheme} from "../../theme";
 export default function ScreenContainer({children}: {children: React.ReactNode}) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   return <View style={[styles.outer, {backgroundColor: theme.background, paddingBottom: insets.bottom}]}><View style={styles.inner}>{children}</View></View>;

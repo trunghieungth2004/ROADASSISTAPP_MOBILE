@@ -13,12 +13,73 @@ export function visibleActions(status: string): RiderAction[] {
   return riderActionsFor(status);
 }
 
-export function canAccept(direction: FeedDirection, status: string): boolean {
-  return direction === "in" && status === DISPATCH_STATUS.PENDING;
+export type ViewerRoleKind = "SHOP" | "TOW";
+
+export type ViewerRole =
+  | {kind: "rider"}
+  | {kind: "assigned"; assignedKind: ViewerRoleKind | null}
+  | {kind: "candidate"; candidateKind: ViewerRoleKind}
+  | {kind: "destination"}
+  | {kind: "other"};
+
+export type ViewerScope = {
+  ownShopIds: Set<string>;
+  ownTowId: string | null;
+  uid: string | null;
+  hasVolunteer: boolean;
+};
+
+function idOf(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
-export function canDecline(direction: FeedDirection, status: string): boolean {
-  return direction === "in" && status === DISPATCH_STATUS.PENDING;
+export type ViewerRoleContext = "auto" | "shop" | "tow";
+
+export function viewerRoleOf(
+  ticket: Pick<FeedTicket, "direction" | "status" | "ticketType" | "assignedShopId" | "providerId" | "destinationShopId" | "assignedUid">,
+  scope: ViewerScope,
+  context: ViewerRoleContext = "auto",
+): ViewerRole {
+  if (ticket.direction === "out") return {kind: "rider"};
+  const assigned = idOf(ticket.assignedShopId);
+  const addressed = idOf(ticket.providerId);
+  const destination = idOf(ticket.destinationShopId);
+  if (context === "shop") {
+    if (assigned !== null && scope.ownShopIds.has(assigned)) return {kind: "assigned", assignedKind: "SHOP"};
+    if (ticket.status === DISPATCH_STATUS.PENDING && addressed !== null && scope.ownShopIds.has(addressed)) return {kind: "candidate", candidateKind: "SHOP"};
+    if (destination !== null && scope.ownShopIds.has(destination)) return {kind: "destination"};
+    if (ticket.ticketType !== "TOW") {
+      if (scope.hasVolunteer && scope.uid !== null && idOf(ticket.assignedUid) === scope.uid) return {kind: "assigned", assignedKind: null};
+    }
+    return {kind: "other"};
+  }
+  if (context === "tow") {
+    if (assigned !== null && scope.ownTowId !== null && assigned === scope.ownTowId) return {kind: "assigned", assignedKind: "TOW"};
+    if (scope.hasVolunteer && scope.uid !== null && idOf(ticket.assignedUid) === scope.uid) return {kind: "assigned", assignedKind: null};
+    if (ticket.status === DISPATCH_STATUS.PENDING && ticket.ticketType === "TOW" && (scope.ownTowId !== null || scope.hasVolunteer)) return {kind: "candidate", candidateKind: "TOW"};
+    return {kind: "other"};
+  }
+  if (assigned !== null) {
+    if (scope.ownShopIds.has(assigned)) return {kind: "assigned", assignedKind: "SHOP"};
+    if (scope.ownTowId !== null && assigned === scope.ownTowId) return {kind: "assigned", assignedKind: "TOW"};
+  }
+  if (scope.hasVolunteer && scope.uid !== null && idOf(ticket.assignedUid) === scope.uid) {
+    return {kind: "assigned", assignedKind: null};
+  }
+  if (ticket.status === DISPATCH_STATUS.PENDING) {
+    if (addressed !== null && scope.ownShopIds.has(addressed)) return {kind: "candidate", candidateKind: "SHOP"};
+    if (ticket.ticketType === "TOW" && (scope.ownTowId !== null || scope.hasVolunteer)) return {kind: "candidate", candidateKind: "TOW"};
+  }
+  if (destination !== null && scope.ownShopIds.has(destination)) return {kind: "destination"};
+  return {kind: "other"};
+}
+
+export function canAccept(role: ViewerRole): boolean {
+  return role.kind === "candidate";
+}
+
+export function canDecline(role: ViewerRole): boolean {
+  return role.kind === "candidate";
 }
 
 const SHOP_TYPES = new Set(["WALK_IN", "MECHANIC"]);
@@ -29,8 +90,8 @@ export function canEditWork(direction: FeedDirection, status: string, hasShop: b
   return status === DISPATCH_STATUS.IN_PROGRESS;
 }
 
-export function canRateRider(direction: FeedDirection, status: string): boolean {
-  return direction === "in" && status === DISPATCH_STATUS.RESOLVED;
+export function canRateRider(role: ViewerRole, status: string): boolean {
+  return role.kind === "assigned" && status === DISPATCH_STATUS.RESOLVED;
 }
 
 export function canStartWork(direction: FeedDirection, status: string, ticketType: string, hasQuote: boolean, hasShop: boolean): boolean {
@@ -64,11 +125,9 @@ export function canResolve(direction: FeedDirection, status: string): boolean {
   return direction === "out" && status === DISPATCH_STATUS.READY;
 }
 
-export function canDeclineDestination(status: string, destinationShopId: string | null | undefined, ownShopIds: Set<string>): boolean {
-  if (typeof destinationShopId !== "string" || destinationShopId === "") return false;
-  if (!ownShopIds.has(destinationShopId)) return false;
-  if (isTerminal(status)) return false;
-  return true;
+export function canDeclineDestination(status: string, isDestinationShop: boolean): boolean {
+  if (!isDestinationShop) return false;
+  return !isTerminal(status);
 }
 
 export function canEditDestination(direction: FeedDirection, status: string, ticketType: string): boolean {
@@ -77,11 +136,15 @@ export function canEditDestination(direction: FeedDirection, status: string, tic
   return status === DISPATCH_STATUS.PENDING || status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED;
 }
 
-export function canSeeRequestPhotos(ticket: Pick<FeedTicket, "direction" | "assignedShopId" | "providerId" | "destinationShopId" | "assignedUid">, ownShopIds: Set<string>, uid: string | null, hasVolunteer: boolean): boolean {
+export function canSeeRequestPhotos(ticket: Pick<FeedTicket, "direction" | "ticketType" | "status" | "assignedShopId" | "providerId" | "destinationShopId" | "assignedUid">, ownShopIds: Set<string>, uid: string | null, hasVolunteer: boolean, ownTowId: string | null = null, roleContext: ViewerRoleContext = "auto"): boolean {
   if (ticket.direction === "out") return true;
   if (typeof ticket.assignedShopId === "string" && ownShopIds.has(ticket.assignedShopId)) return true;
   if (typeof ticket.providerId === "string" && ownShopIds.has(ticket.providerId)) return true;
   if (typeof ticket.destinationShopId === "string" && ownShopIds.has(ticket.destinationShopId)) return true;
+  if (ticket.ticketType === "TOW" && ownTowId !== null) {
+    if (ticket.assignedShopId === ownTowId || ticket.providerId === ownTowId) return true;
+    if (roleContext === "tow" && ticket.status === "1") return true;
+  }
   return hasVolunteer && uid !== null && ticket.assignedUid === uid;
 }
 

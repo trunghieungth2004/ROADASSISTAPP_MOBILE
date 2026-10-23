@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {parseDispatchPush, parseHazardPush} from "../../../src/services/pushPayload";
+import {parseDispatchPush, parseHazardPush, parsePaymentPush} from "../../../src/services/pushPayload";
 
 test("parses a dispatch offer payload", () => {
   expect(
@@ -44,4 +44,27 @@ test("the hazard parser rejects dispatch payloads", () => {
     radiusMeters: undefined,
     removed: undefined,
   });
+});
+
+test("parses payment and payout deep links", () => {
+  expect(parsePaymentPush({
+    screen: "payments",
+    event: "PAYMENT_OPENED",
+    paymentId: "p1",
+    ticketId: "t1",
+  })).toEqual({event: "PAYMENT_OPENED", paymentId: "p1", ticketId: "t1"});
+  expect(parsePaymentPush({
+    screen: "payments",
+    event: "PAYOUT_SETTLED",
+    paymentId: "",
+    ticketId: "",
+    payoutId: "batch1",
+  })).toEqual({event: "PAYOUT_SETTLED", paymentId: "", ticketId: "", payoutId: "batch1"});
+});
+
+test("payment parser rejects other screens, missing events and empty targets", () => {
+  expect(parsePaymentPush({screen: "dispatch", event: "PAYMENT_OPENED", ticketId: "t1"})).toBeNull();
+  expect(parsePaymentPush({screen: "payments", event: "", ticketId: "t1"})).toBeNull();
+  expect(parsePaymentPush({screen: "payments", event: "PAYMENT_OPENED"})).toBeNull();
+  expect(parsePaymentPush(null)).toBeNull();
 });

@@ -297,7 +297,9 @@ comparing shops never leaves the map. The old tab-level cycler and background sh
 are gone; the background map is display-only again (GPS dot, tow destination,
 selected-shop context). Tow name-search runs at a 20 km radius (the BE
 defaults provider search to 2 km, which is why tow drop-offs felt locked);
-the overlay passes its own radius explicitly.
+the overlay passes its own radius explicitly. Tow destination search also
+passes `acceptingOnly`, hiding off-duty shops client-side while the backend
+remains authoritative.
 The onboarding shop step carries the same
 vehicle-class chips, so fresh shops declare at signup.
 Adding a shop address (place pick or map pick) also runs a one-shot
@@ -429,7 +431,14 @@ Either side's phone number rides the feed on live tickets
 (`2`/`3`/`4`/`6`/`7`/`9`, never pending or dead) and renders as a tappable
 `tel:` row in the matching block; absent when unregistered.
 
-## Hazard report form (`FlagSheet`)
+## Hazard screen
+
+`HazardScreen` uses a My Reports / Nearby segmented control. Nearby requests
+`/flags/near` from the current fix at a 2 km radius (`useNearbyFlags`) and
+reuses the existing filters, map, detail sheet, and confirm/deny handlers;
+removed flags are pruned locally. Vote history is scoped per uid
+(`roadassist.votedFlags.<uid>` / `roadassist.deniedFlags.<uid>`), and the
+screen reloads it on account change.
 
 Photo zone first, centred: up to three 48 px preview tiles (✕ badge to
 remove) beside a dashed add tile; tapping the tile swaps in the "Take
@@ -625,7 +634,10 @@ registered shop (`destinationShopId`), free point, or saved place through
 the shared picker. The live-ticket `409` dialog's Change-drop-off branch now
 serves the `needsNewDestination` rematch (destination declined, tower waiting)
 rather than destination-less filing — the client treats an amber
-`needsNewDestination` card as "pick one," never as a file-time state.
+`needsNewDestination` card as "pick one," never as a file-time state. A shop
+that switches duty off is hidden from new/retargeted tow destination search
+(`acceptingOnly`), but a destination already committed before the switch
+stays valid and resolves into a forced walk-in with an urgent drop-off push.
 
 ### Requeue with fresh GPS
 

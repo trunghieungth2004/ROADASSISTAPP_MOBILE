@@ -45,7 +45,6 @@ async function render(overrides?: Partial<Props>) {
           ticket={ticket()}
           ratings={[]}
           busy={false}
-          gps={null}
           uid="u1"
           hasRated={false}
           onClose={() => undefined}
@@ -69,6 +68,8 @@ async function render(overrides?: Partial<Props>) {
           onReply={() => undefined}
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
+          ownTowId={null}
+          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}

@@ -38,3 +38,10 @@ export function useThemeMode(): ThemeState {
   if (!ctx) throw new Error("ThemeProvider missing");
   return ctx;
 }
+
+export function useAppMode(): ThemeMode {
+  const systemMode = useColorScheme() === "dark" ? "dark" : "light";
+  const ctx = useContext(ThemeContext);
+  if (!ctx) return systemMode;
+  return ctx.mode;
+}

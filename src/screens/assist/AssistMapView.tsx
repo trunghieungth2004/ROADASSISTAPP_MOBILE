@@ -1,4 +1,5 @@
-import {StyleSheet, View, useColorScheme} from "react-native";
+import {StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {Camera, GeoJSONSource, Images, Map, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
 import type {RefObject} from "react";
 import {useMemo} from "react";
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function AssistMapView(props: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {theme} = props;
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);

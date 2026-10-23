@@ -1,5 +1,5 @@
 import {expect, jest, test} from "@jest/globals";
-import {drainDispatchLaunch, drainHazardLaunch, syncPushToken} from "../../../src/services/push";
+import {drainDispatchLaunch, drainHazardLaunch, drainPaymentLaunch, syncPushToken} from "../../../src/services/push";
 
 const mockStore = new Map<string, string>();
 
@@ -66,4 +66,19 @@ test("hazard launch parses coordinates", async () => {
   mockLastResponse = responseFor({flagId: "f1", lat: "10.7", lng: "106.6"}, 222);
   await expect(drainHazardLaunch()).resolves.toMatchObject({flagId: "f1", lat: 10.7, lng: 106.6});
   await expect(drainHazardLaunch()).resolves.toBeNull();
+});
+
+test("payment launch drains once per tap", async () => {
+  mockLastResponse = responseFor({
+    screen: "payments",
+    event: "PAYMENT_RECEIVED",
+    paymentId: "p1",
+    ticketId: "t1",
+  }, 333);
+  await expect(drainPaymentLaunch()).resolves.toEqual({
+    event: "PAYMENT_RECEIVED",
+    paymentId: "p1",
+    ticketId: "t1",
+  });
+  await expect(drainPaymentLaunch()).resolves.toBeNull();
 });

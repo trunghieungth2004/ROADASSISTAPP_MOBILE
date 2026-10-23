@@ -1,5 +1,6 @@
 import {useState, type ComponentProps} from "react";
-import {ActivityIndicator, FlatList, Keyboard, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, FlatList, Keyboard, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -39,7 +40,7 @@ function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
 }
 type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string; filters?: ShopSearchFilters};
 export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote, filters}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const [sortBy, setSortBy] = useState<"distance" | "rating">(filters?.sortBy ?? "distance");

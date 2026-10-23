@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {StyleSheet, View, useColorScheme} from "react-native";
+import {StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
@@ -29,7 +30,7 @@ type Props = {
 };
 
 export default function WorkSheet({t, ticketLabel, mode, status, busy, error, initialWorkType, initialInvoiceRef, onSubmit, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [workType, setWorkType] = useState(typeof initialWorkType === "string" ? initialWorkType : "");
   const [amount, setAmount] = useState("");

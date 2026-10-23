@@ -3,10 +3,11 @@ import {MaterialCommunityIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
-import type {DispatchTicket} from "../../api/dispatch";
+import type {DispatchTicket, FeedTicket} from "../../api/dispatch";
 import {formatPoint} from "../../api/places";
 import StatusRow from "../../components/ui/StatusRow";
 import {statusPillColor, ticketStatusLabel, ticketTitle} from "./ticketLabels";
+import TicketRow from "./TicketRow";
 
 function towDistance(item: DispatchTicket, t: Strings): string {
   if (typeof item.distance !== "number" || !Number.isFinite(item.distance) || item.distance < 0) {
@@ -21,15 +22,52 @@ type Props = {
   t: Strings;
   theme: AppTheme;
   tickets: DispatchTicket[];
+  jobs: FeedTicket[];
+  requests: FeedTicket[];
   loading: boolean;
+  locationMissing: boolean;
   onOpen: (id: string) => void;
+  onOpenJob: (ticket: FeedTicket) => void;
+  onOpenRequest: (ticket: FeedTicket) => void;
 };
 
-export default function TowSection({t, theme, tickets, loading, onOpen}: Props) {
+export default function TowSection({t, theme, tickets, jobs, requests, loading, locationMissing, onOpen, onOpenJob, onOpenRequest}: Props) {
   return (
     <View style={styles.wrap}>
+      {requests.length > 0 ? (
+        <View style={styles.wrap}>
+          <Text style={[styles.section, {color: theme.text}]}>{t.assist.requestsForYou}</Text>
+          {requests.map((item) => (
+            <TicketRow
+              key={item.id}
+              t={t}
+              theme={theme}
+              ticket={item}
+              kind="TOW"
+              onPress={() => onOpenRequest(item)}
+            />
+          ))}
+        </View>
+      ) : null}
+      {jobs.length > 0 ? (
+        <View style={styles.wrap}>
+          <Text style={[styles.section, {color: theme.text}]}>{t.assist.towJobs}</Text>
+          {jobs.map((item) => (
+            <TicketRow
+              key={item.id}
+              t={t}
+              theme={theme}
+              ticket={item}
+              kind="TOW"
+              onPress={() => onOpenJob(item)}
+            />
+          ))}
+        </View>
+      ) : null}
       <Text style={[styles.section, {color: theme.text}]}>{t.assist.nearby}</Text>
-      {loading && tickets.length === 0 ? (
+      {locationMissing ? (
+        <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.towLocationNeeded}</Text>
+      ) : loading && tickets.length === 0 && jobs.length === 0 ? (
         <StatusRow theme={theme} text={t.common.loading} />
       ) : tickets.length === 0 ? (
         <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.noNearby}</Text>
@@ -43,7 +81,6 @@ export default function TowSection({t, theme, tickets, loading, onOpen}: Props) 
                 <Text style={styles.pillText}>{ticketStatusLabel(item.status, t)}</Text>
               </View>
             </View>
-            {typeof item.note === "string" && item.note ? <Text style={{color: theme.text}}>{item.note}</Text> : null}
             <Text style={[styles.coords, {color: theme.muted}]}>{towDistance(item, t)}</Text>
           </Pressable>
         ))

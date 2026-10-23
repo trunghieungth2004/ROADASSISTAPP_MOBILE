@@ -40,7 +40,6 @@ async function render(overrides?: Partial<Props>) {
           ticket={ticket()}
           ratings={[]}
           busy={false}
-          gps={null}
           uid="u1"
           hasRated={false}
           onClose={() => undefined}
@@ -63,6 +62,8 @@ async function render(overrides?: Partial<Props>) {
           onReply={() => undefined}
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
+          ownTowId={null}
+          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={onDeclineDestination}
           onEditDestination={null}
@@ -148,29 +149,30 @@ test("non-tow tickets render no drop-off block without a destination", async () 
   }
 });
 
-test("tow names the tower as a tower with labeled pickup and drop-off", async () => {
+test("tow pickup keeps the tower card without the role title", async () => {
   const {renderer} = await render({
     ticket: ticket({
       direction: "out",
-      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW", label: "Depot 7"},
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW", label: "Depot 7", phone: "+84999"},
       destinationShopId: "shop-1",
       destinationSnapshot: {id: "shop-1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP"},
     }),
   });
   try {
     const all = texts(renderer);
-    expect(all).toContain("Tow Seven");
-    expect(all).toContain(en.roles.tow);
     expect(all).toContain(en.assist.pickup);
     expect(all).toContain(en.assist.dropOffPoint);
     expect(all).toContain("Fix Shop");
+    expect(all).toContain("Tow Seven");
+    expect(all).toContain("+84999");
+    expect(all).not.toContain(en.roles.tow);
     expect(all).not.toContain("Depot 7");
   } finally {
     renderer.unmount();
   }
 });
 
-test("shop block leads with the name above address, stars, phone and status", async () => {
+test("walk-in drop-off shows the address above the shop and its phone", async () => {
   const {renderer} = await render({
     ticket: ticket({
       ticketType: "WALK_IN",
@@ -180,11 +182,13 @@ test("shop block leads with the name above address, stars, phone and status", as
   });
   try {
     const all = texts(renderer);
-    expect(all).toContain(en.roles.shop);
+    expect(all).toContain(en.assist.dropOffPoint);
+    expect(all).not.toContain(en.assist.pickup);
+    expect(all).not.toContain(en.assist.startPoint);
     const names = all.map((text, i) => ({text, i})).filter((row) => row.text === "Fix Shop").map((row) => row.i);
     expect(names.length).toBeGreaterThanOrEqual(2);
-    expect(names[0]).toBeLessThan(all.indexOf("12 Le Loi"));
-    expect(all.indexOf("12 Le Loi")).toBeLessThan(all.indexOf("+84111"));
+    expect(names[0]).toBeGreaterThan(all.indexOf("12 Le Loi"));
+    expect(names[0]).toBeLessThan(all.indexOf("+84111"));
   } finally {
     renderer.unmount();
   }
@@ -290,8 +294,8 @@ test("pending tow with an owned destination offers decline drop-off", async () =
     ticket: ticket({
       ticketType: "TOW",
       status: "1",
-      direction: "out",
-      otherParty: null,
+      direction: "in",
+      otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
       destinationShopId: "shop-1",
       destinationSnapshot: {id: "shop-1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP"},
       destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65, label: "12 Le Loi", openNow: true},
@@ -300,6 +304,72 @@ test("pending tow with an owned destination offers decline drop-off", async () =
   try {
     expect(actionLabels(renderer)).toContain(en.assist.declineDestination);
     expect(texts(renderer)).not.toContain("Can't take this vehicle");
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("destination shop gets no rider-facing actions on a resolved tow", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "4",
+      direction: "in",
+      assignedShopId: "tow7",
+      destinationShopId: "shop-1",
+      otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
+    }),
+  });
+  try {
+    const labels = actionLabels(renderer);
+    expect(labels).not.toContain(en.assist.rateRider);
+    expect(labels).not.toContain(en.assist.arrived);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("tow owner never borrows destination-only actions on a shared ticket", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "in",
+      assignedShopId: "tow7",
+      destinationShopId: "shop-1",
+      otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
+    }),
+    ownTowId: "tow7",
+  });
+  try {
+    const labels = actionLabels(renderer);
+    expect(labels).not.toContain(en.assist.declineDestination);
+    expect(labels).not.toContain(en.assist.sendEstimate);
+    expect(labels).not.toContain(en.assist.startWork);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("inbound walk-in stacks the shop drop-off above the rider card", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "WALK_IN",
+      status: "1",
+      direction: "in",
+      providerId: "shop-1",
+      providerSnapshot: {id: "shop-1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP", closed: false},
+      otherParty: {id: "rider1", name: "Rider Two", kind: "RIDER", ratingAvg: 4.2, ratingCount: 5},
+    }),
+  });
+  try {
+    const all = texts(renderer);
+    expect(all).toContain(en.assist.dropOffPoint);
+    expect(all).not.toContain(en.assist.pickup);
+    expect(all).not.toContain(en.assist.startPoint);
+    expect(all.indexOf("Fix Shop")).toBeGreaterThan(-1);
+    expect(all.indexOf("Rider Two")).toBeGreaterThan(all.indexOf("Fix Shop"));
+    expect(all).toContain(en.roles.rider);
   } finally {
     renderer.unmount();
   }
@@ -327,6 +397,7 @@ test("pending walk-in rows keep the walk-in decline", async () => {
       ticketType: "WALK_IN",
       status: "1",
       direction: "in",
+      providerId: "shop-1",
       otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
     }),
   });
@@ -367,6 +438,7 @@ test("hidden accept keeps the flow hint without the action", async () => {
       direction: "in",
       otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
     }),
+    ownTowId: "tow7",
     acceptHidden: true,
   });
   try {
@@ -382,6 +454,7 @@ test("hidden accept keeps the flow hint without the action", async () => {
       direction: "in",
       otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
     }),
+    ownTowId: "tow7",
     acceptHidden: false,
   });
   try {
@@ -466,10 +539,9 @@ test("empty drop-off block carries its own add button", async () => {
   try {
     const block = renderer.root
       .findAll((n) => n.props?.accessibilityLabel === en.assist.changeDropOff && typeof n.props?.onPress === "function");
-    expect(block.length).toBe(2);
-    const inline = block[block.length - 1];
+    expect(block.length).toBe(1);
     await act(async () => {
-      await inline?.props.onPress?.();
+      await block[0]?.props.onPress?.();
     });
     expect(onEditDestination).toHaveBeenCalledTimes(1);
   } finally {
@@ -518,7 +590,7 @@ test("inbound tow sees the same ETA pill as the rider", async () => {
   }
 });
 
-test("outbound tow shows a helper card with call action", async () => {
+test("outbound tow keeps the helper card without the role title", async () => {
   const {renderer} = await render({
     ticket: ticket({
       ticketType: "TOW",
@@ -528,8 +600,12 @@ test("outbound tow shows a helper card with call action", async () => {
     }),
   });
   try {
-    expect(texts(renderer)).toContain("0901234567");
-    expect(texts(renderer)).toContain(en.roles.tow);
+    const all = texts(renderer);
+    expect(all).toContain(en.assist.pickup);
+    expect(all).toContain("Tow Seven");
+    expect(all).toContain("0901234567");
+    expect(renderer.root.findAll((n) => n.props?.name === "star").length).toBeGreaterThan(0);
+    expect(all).not.toContain(en.roles.tow);
   } finally {
     renderer.unmount();
   }

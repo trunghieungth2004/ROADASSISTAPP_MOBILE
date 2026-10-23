@@ -1,5 +1,6 @@
 import {useEffect, useState} from "react";
-import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {deleteSavedRoute, listSavedRoutes, renameSavedRoute, type SavedRouteSummary} from "../../api/routes";
@@ -10,7 +11,7 @@ import type {Strings} from "../../i18n/en";
 type Props = {t: Strings; token: string | null; onOpen: (routeId: string) => void};
 
 export default function SavedRoutesSheet({t, token, onOpen}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [routes, setRoutes] = useState<SavedRouteSummary[]>([]);
   const [loading, setLoading] = useState(false);

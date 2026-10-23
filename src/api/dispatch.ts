@@ -66,6 +66,7 @@ export type FeedTicket = DispatchTicket & {
   etaDropoffAt?: string | null;
   towerFix?: {lat: number; lng: number; at: string} | null;
   linkedTicketIds?: string[];
+  canConfirmCash?: boolean;
 };
 
 export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as const;

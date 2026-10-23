@@ -1,11 +1,13 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, AppState, Keyboard, Platform, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, AppState, Keyboard, Platform, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation, useIsFocused} from "@react-navigation/native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Location from "expo-location";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "../components/map/safeCamera";
 import {findRoute, getSavedRoute, saveRoute, isFlagWarning, isHazardZone, isWidthBlock, type RouteOption} from "../api/routes";
 import {windowAround} from "../services/navigation";
 import {drainHazardLaunch, ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
@@ -52,7 +54,7 @@ export default function RouteScreen() {
   const {token, uid} = useAuth();
   const navigation = useNavigation();
   const {vehicles, activeVehicle, activateVehicle, hasVehicle} = useProfile();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef | null>(null);
@@ -83,16 +85,23 @@ export default function RouteScreen() {
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
   useEffect(() => {
+    let alive = true;
+    setVotedIds(new Set());
+    setDeniedIds(new Set());
     void (async () => {
       try {
-        const [v, d] = await Promise.all([loadVotedIds(), loadDeniedIds()]);
+        const [v, d] = await Promise.all([loadVotedIds(uid), loadDeniedIds(uid)]);
+        if (!alive) return;
         setVotedIds(v);
         setDeniedIds(d);
       } catch {
         return;
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [uid]);
   const [flagsKey, setFlagsKey] = useState(0);
   const [gpsPos, setGpsPos] = useState<Point | null>(null);
   const [gpsBusy, setGpsBusy] = useState(false);
@@ -128,7 +137,7 @@ export default function RouteScreen() {
   function fitRouteGeometry(coords: [number, number][]) {
     if (coords.length < 2) return;
     const b = boundsOf(coords);
-    if (b) cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800});
+    if (b) safeCameraCall(() => cameraRef.current?.fitBounds([b.sw[0], b.sw[1], b.ne[0], b.ne[1]], {padding: {top: 80, right: 60, bottom: 340, left: 60}, duration: 800}));
   }
   const SAME_PLACE_METERS = 15;
   async function requestRoute(o: Point | null, d: Point | null, s: Stop[], width?: number, vehicleType?: string, fit?: boolean): Promise<RouteOption[] | null> {
@@ -261,7 +270,7 @@ export default function RouteScreen() {
       if (routes.length > 0 && origin && dest) void requestRoute(origin, dest, next);
     }
     if (routes.length === 0) {
-      void cameraRef.current?.setStop({center: [place.lng, place.lat], zoom: 15, duration: 500});
+      safeCameraCall(() => cameraRef.current?.setStop({center: [place.lng, place.lat], zoom: 15, duration: 500}));
     }
     setSearchingFor(null);
   }
@@ -298,7 +307,7 @@ export default function RouteScreen() {
     if (!pending || !cam) return false;
     pendingCenterRef.current = null;
     centeredRef.current = true;
-    void cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800});
+    safeCameraCall(() => cam.setStop({center: [pending.lng, pending.lat], zoom: 15, duration: 800}));
     return true;
   }
   async function centerOnLocal(): Promise<void> {
@@ -351,7 +360,7 @@ export default function RouteScreen() {
     return () => clearInterval(timer);
   }, [routeTabFocused, appActive, result !== null, busy, starting, searchingFor, mapPickFor, token, checking, retouchStart]);
   useEffect(() => {
-    ensurePushConfigured();
+    void ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
       if (token) bustFlagCaches(token);
       setFlagsKey((k) => k + 1);
@@ -404,7 +413,7 @@ export default function RouteScreen() {
     setSnack(t.flag.checkingRoute);
     try {
       const res = await confirmFlag(flagId, token);
-      void markVoted(flagId);
+      void markVoted(uid, flagId);
       setVotedIds((prev) => new Set(prev).add(flagId));
       setSelectedFlag(null);
       setFlagsKey((k) => k + 1);
@@ -427,7 +436,7 @@ export default function RouteScreen() {
     setFlagBusy(true);
     try {
       const res = await denyFlag(flagId, token);
-      void markDenied(flagId);
+      void markDenied(uid, flagId);
       setDeniedIds((prev) => new Set(prev).add(flagId));
       setSelectedFlag(null);
       setFlagsKey((k) => k + 1);
@@ -490,7 +499,7 @@ export default function RouteScreen() {
       if (status !== "granted") throw new Error("Location denied");
       const next = await getFix({timeoutMs: 5000});
       setGpsPos(next);
-      void cameraRef.current?.setStop({center: [next.lng, next.lat], duration: 500});
+      safeCameraCall(() => cameraRef.current?.setStop({center: [next.lng, next.lat], duration: 500}));
     } catch (err) {
       setError(toMessage(err));
     } finally {
@@ -526,7 +535,7 @@ export default function RouteScreen() {
     setHazardFocusIdx(next);
     setHazardHighlight(windowAround(res.geometry.coordinates, h.distanceMeters, HAZARD_HIGHLIGHT_HALF));
     const zoom = drag.camRef.current?.zoom ?? 13;
-    void cameraRef.current?.setStop({center: [h.lng, h.lat], zoom: Math.max(zoom, 16), duration: 500});
+    safeCameraCall(() => cameraRef.current?.setStop({center: [h.lng, h.lat], zoom: Math.max(zoom, 16), duration: 500}));
   }
   async function onVehiclePress(id: string) {
     setVehicleOpen(false);
@@ -783,8 +792,8 @@ export default function RouteScreen() {
             selectedFlag.id,
             selectedFlag.status,
             uid != null && selectedFlag.reporterId === uid,
-            votedIds.has(selectedFlag.id),
-            deniedIds.has(selectedFlag.id),
+            votedIds.has(selectedFlag.id) || selectedFlag.voteDirection === "up",
+            deniedIds.has(selectedFlag.id) || selectedFlag.voteDirection === "down",
             flagBusy,
             {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
             {onConfirm: (id) => void onConfirmFlag(id), onDeny: (id) => void onDenyFlag(id), onRemove: (id) => void onRemoveFlag(id)},

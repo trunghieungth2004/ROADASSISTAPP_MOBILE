@@ -1,6 +1,7 @@
 import type {RefObject} from "react";
 import {useEffect, useMemo, useRef, useState, type MutableRefObject} from "react";
-import {Pressable, ScrollView, StyleSheet, View, useColorScheme, type PanResponderInstance} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/ui/AppText";
@@ -50,7 +51,7 @@ type Props = {
 };
 
 export default function RouteMapView(props: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const {t, theme} = props;

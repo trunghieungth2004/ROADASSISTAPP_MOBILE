@@ -16,6 +16,7 @@ export type ShopEntry = {
   distance?: number | null;
   declined?: boolean | null;
   openNow?: boolean | null;
+  accepting?: boolean | null;
 };
 
 export function normalizeShopName(name: string): string {
@@ -76,6 +77,7 @@ export function toShopPlace(shop: ShopEntry & {lat: number; lng: number}): Place
     ...(typeof shop.distance === "number" ? {distance: shop.distance} : {}),
     ...(shop.declined === true ? {declined: true} : {}),
     ...(typeof shop.openNow === "boolean" ? {openNow: shop.openNow} : {}),
+    ...(typeof shop.accepting === "boolean" ? {accepting: shop.accepting} : {}),
   };
 }
 
@@ -83,6 +85,7 @@ export type ShopSearchFilters = {
   minRating?: number;
   sortBy?: "distance" | "rating";
   ticketId?: string;
+  acceptingOnly?: boolean;
 };
 
 export async function fetchShopPlaces(
@@ -104,6 +107,7 @@ export async function fetchShopPlaces(
   });
   return shops
     .filter((s) => !shopOnly || s.kind === "SHOP")
+    .filter((s) => filters?.acceptingOnly !== true || s.accepting !== false)
     .map((s) => ({
       id: s.id,
       name: s.name,
@@ -115,6 +119,7 @@ export async function fetchShopPlaces(
       ...(typeof s.distance === "number" ? {distance: s.distance} : {}),
       ...(s.declined === true ? {declined: true} : {}),
       ...(typeof s.openNow === "boolean" ? {openNow: s.openNow} : {}),
+      ...(typeof s.accepting === "boolean" ? {accepting: s.accepting} : {}),
     }));
 }
 

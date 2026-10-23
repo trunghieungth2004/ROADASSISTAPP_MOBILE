@@ -31,3 +31,12 @@ export const darkTheme = {
 };
 
 export type AppTheme = typeof lightTheme;
+
+export function onColor(color: string): string {
+  const hex = color.replace("#", "");
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luma > 0.6 ? "#111111" : "#ffffff";
+}

@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Pressable, ScrollView, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {formatPoint} from "../api/places";
@@ -37,7 +38,7 @@ function RoleIcon({name, active, theme}: {name: (typeof ROLE_ICONS)[keyof typeof
 }
 
 export default function OnboardingScreen({t, lang, token, busy, error, selectedServices, registered, onFinish, onSkip}: OnboardingProps) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const shopChosen = (selectedServices ?? []).includes("SHOP");
   const towChosen = (selectedServices ?? []).includes("TOW");

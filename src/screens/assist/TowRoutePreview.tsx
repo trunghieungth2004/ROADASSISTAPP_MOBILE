@@ -1,8 +1,10 @@
 import {useMemo, useRef} from "react";
-import {ActivityIndicator, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {Camera, GeoJSONSource, Images, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import type {RouteOption} from "../../api/routes";
 import {darkTheme, lightTheme} from "../../theme";
@@ -27,7 +29,7 @@ type Props = {
 };
 
 export default function TowRoutePreview({t, summary, route, origin, pickup, dest, busy, onAccept, onClose}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
@@ -40,10 +42,10 @@ export default function TowRoutePreview({t, summary, route, origin, pickup, dest
   function onMapReady(): void {
     onStyleLoaded();
     if (bounds) {
-      void cameraRef.current?.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
+      safeCameraCall(() => cameraRef.current?.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
         padding: {top: 80, right: 40, bottom: 200, left: 40},
         duration: 600,
-      });
+      }));
     }
   }
   return (

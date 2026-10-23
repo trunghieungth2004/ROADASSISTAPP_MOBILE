@@ -7,7 +7,7 @@ import PlaceSearchScreen from "../../screens/PlaceSearchScreen";
 import {useAuth} from "../../context/AuthContext";
 import {useStrings} from "../../context/LanguageContext";
 import {darkTheme, lightTheme} from "../../theme";
-import {useColorScheme} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import type {Provider} from "../../api/providers";
 import type {Strings} from "../../i18n/en";
 
@@ -23,7 +23,7 @@ type Props = {
 export default function ProviderFormDialog({t, token, kind, provider, onClose, onSaved}: Props) {
   const {lang} = useStrings();
   const {token: authToken} = useAuth();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const draft = useProviderDraft(kind, provider, t);
   async function save(): Promise<void> {

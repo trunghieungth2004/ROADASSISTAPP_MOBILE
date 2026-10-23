@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {Image, Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Image, Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {FlagType} from "../../api/flags";
@@ -71,7 +72,7 @@ const TYPES: {id: FlagType; icon: "flood" | "car-crash" | "construction"}[] = [
 const RADII = [25, 50, 100, 200, 250];
 
 export default function FlagSheet({t, draft}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const photoViewer = usePhotoViewer(t.common.cancel);
   const typeLabel = (id: FlagType): string => (id === "FLOOD" ? t.flag.flood : id === "ACCIDENT" ? t.flag.accident : t.flag.obstruction);

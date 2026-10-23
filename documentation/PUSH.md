@@ -26,6 +26,14 @@ permission-independent: a denied notification permission degrades to
 foreground-only updates, never to an unregistered token. Tokens are deduped
 per uid in `AsyncStorage`.
 
+Registration waits for Android channel creation before requesting the device
+token, is serialized per device, retries up to six times with backoff, and
+requests notification permission when the OS still allows it. `App.tsx`
+retries registration every 30 s while the app is active, resyncs on
+foreground, aborts stale account work on account change, and subscribes to FCM
+token rotation. `app.json` sets the Expo notifications `defaultChannel` to
+`dispatch`.
+
 ## Handling
 
 `subscribeHazardPush` serves foreground receipts and tray taps, deduped per
@@ -46,12 +54,13 @@ and tap-echoes collapse).
 
 ### Channels and banner policy
 
-`ensurePushConfigured` creates three Android channels: `hazard` and
+`ensurePushConfigured` creates four Android channels: `hazard` and
 `dispatch-urgent` at HIGH importance with a vibration pattern, `dispatch` at
-DEFAULT. The BE picks the channel per push (see its `PIPELINE.md` tier table)
-— the client never overrides it, it only guarantees the channel exists so the
-server's `channelId` resolves. Channel names are English-only, matching the
-existing `Hazards` channel; they are device settings, not copy.
+DEFAULT, and `payments` at DEFAULT. The BE picks the channel per push (see its
+`PIPELINE.md` tier table) — the client never overrides it, it only guarantees
+the channel exists so the server's `channelId` resolves. Channel names are
+English-only, matching the existing `Hazards` channel; they are device
+settings, not copy.
 
 The notification handler suppresses banners while navigation is foregrounded,
 so hazard heads-ups come from the in-app surface instead of stacking over the
@@ -136,14 +145,13 @@ walk-in ("Walk-in request", accept/decline the walk-in). All four flow
 through the unchanged payload shape, so the operator's Records reload needs
 no client change — only the server copy varies.
 
-**Payment state has no push.** The server sends no payment push events
-today — the IPN handler writes the charge and nothing else. The record money
-block (cash confirm and the SePay checkout return) re-reads the stored
-charge (`PaymentInfo` status) on the next record reload; the pay flow itself
-is a link-out to the hosted VietQR page, so the app sees `HELD` only when
-the record is re-fetched. If payment pushes land later, they follow the
-dispatch receipt pattern: bust ticket caches, reload, render from the stored
-charge, never from the payload.
+**Payment pushes.** Payment and payout pushes parse through `parsePaymentPush`
+and route through `PaymentPushSync`: `PAYMENT_OPENED`/`PAYMENT_RECEIVED` open
+`BillDetail` in payee scope, other payment events open `BillDetail` for the
+rider, and `PAYOUT_SETTLED` opens the Payments screen on the `receive` tab
+(optionally focused on `payoutId`). They are drained on app launch and
+subscribed per uid, mirroring the dispatch receipt pattern. Payment state is
+still rendered from the stored charge on reload, never from the payload.
 
 ## Hazard pin refresh model
 

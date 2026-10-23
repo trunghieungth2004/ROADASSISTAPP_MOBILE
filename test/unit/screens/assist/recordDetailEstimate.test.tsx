@@ -38,7 +38,6 @@ async function render(overrides?: Partial<Props>) {
           ticket={ticket()}
           ratings={[]}
           busy={false}
-          gps={null}
           uid="u1"
           hasRated={false}
           onClose={() => undefined}
@@ -63,6 +62,8 @@ async function render(overrides?: Partial<Props>) {
           onReply={() => undefined}
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
+          ownTowId={null}
+          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}
@@ -233,5 +234,106 @@ test("the bill link survives a payment on file", async () => {
     expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
   } finally {
     renderer.unmount();
+  }
+});
+
+test("assigned tow does not see the destination shop's estimate", async () => {
+  const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const {renderer} = await render({
+    ticket: ticket({assignedShopId: "tow-1", estimateAmount: 150000, estimateApprovedAt: past, estimateExpiresAt: past}),
+    ownTowId: "tow-1",
+  });
+  try {
+    const all = texts(renderer);
+    expect(all).not.toContain(en.assist.estimateTitle);
+    expect(all).not.toContain("150,000 VND");
+    expect(all).not.toContain(en.assist.estimateStateApproved);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+const towFare = {estimate: 150000, ceiling: 180000, deadheadKm: 2, loadedKm: 5, night: false};
+
+test("the assigned tow opens the journey bill", async () => {
+  const onOpenBill = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({ticketType: "TOW", status: "4", direction: "in", assignedShopId: "tow-1", towFare}),
+    ownShopIds: new Set(),
+    ownTowId: "tow-1",
+    onOpenBill,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+    const open = tap(renderer, en.bills.openBill);
+    await act(async () => {
+      open?.props.onPress?.();
+    });
+    expect(onOpenBill).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("the destination shop opens the journey bill", async () => {
+  const onOpenBill = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({ticketType: "TOW", status: "4", direction: "in", assignedShopId: "tow-1", destinationShopId: "shop-1", towFare}),
+    ownTowId: null,
+    onOpenBill,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a candidate and an unrelated viewer do not get the bill link", async () => {
+  const candidate = await render({
+    ticket: ticket({ticketType: "TOW", status: "1", direction: "in", assignedShopId: null, providerId: "shop-1", towFare}),
+    onOpenBill: jest.fn(),
+  });
+  try {
+    expect(actionLabels(candidate.renderer)).not.toContain(en.bills.openBill);
+  } finally {
+    candidate.renderer.unmount();
+  }
+  const other = await render({
+    ticket: ticket({ticketType: "TOW", status: "2", direction: "in", assignedShopId: "tow-1", towFare}),
+    ownShopIds: new Set(),
+    onOpenBill: jest.fn(),
+  });
+  try {
+    expect(actionLabels(other.renderer)).not.toContain(en.bills.openBill);
+  } finally {
+    other.renderer.unmount();
+  }
+});
+
+test("cash confirmation appears only for the payment payee", async () => {
+  const onConfirmCash = jest.fn();
+  const hidden = await render({
+    ticket: ticket({status: "2", paymentMethod: "CASH", paymentStatus: "PENDING", canConfirmCash: false}),
+    onConfirmCash,
+  });
+  try {
+    expect(actionLabels(hidden.renderer)).not.toContain(en.assist.cashConfirmReceipt);
+  } finally {
+    hidden.renderer.unmount();
+  }
+  const shown = await render({
+    ticket: ticket({status: "2", paymentMethod: "CASH", paymentStatus: "PENDING", canConfirmCash: true}),
+    onConfirmCash,
+  });
+  try {
+    expect(actionLabels(shown.renderer)).toContain(en.assist.cashConfirmReceipt);
+    const button = tap(shown.renderer, en.assist.cashConfirmReceipt);
+    await act(async () => {
+      button?.props.onPress?.();
+    });
+    expect(onConfirmCash).toHaveBeenCalledTimes(1);
+  } finally {
+    shown.renderer.unmount();
   }
 });

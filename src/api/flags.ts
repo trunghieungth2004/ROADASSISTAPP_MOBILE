@@ -14,6 +14,7 @@ export type Flag = {
   voteCount?: number;
   consensusThreshold?: number;
   confirmerCount?: number;
+  voteDirection?: "up" | "down" | null;
   reporterId?: string;
   reporterHandle?: string;
   createdAt?: string;
@@ -34,6 +35,7 @@ type FlagWire = {
   voteCount?: number;
   consensusThreshold?: number;
   confirmerCount?: number;
+  voteDirection?: "up" | "down" | null;
   reporterId?: string;
   reporterUid?: string;
   reporterHandle?: string;
@@ -69,6 +71,7 @@ export function toFlag(raw: FlagWire): Flag {  return {
     voteCount: raw.voteCount,
     consensusThreshold: raw.consensusThreshold,
     confirmerCount: raw.confirmerCount,
+    voteDirection: raw.voteDirection === "up" || raw.voteDirection === "down" ? raw.voteDirection : null,
     reporterId: raw.reporterId ?? raw.reporterUid,
     reporterHandle: raw.reporterHandle,
     createdAt: raw.createdAt,

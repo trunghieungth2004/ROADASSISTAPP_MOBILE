@@ -1,6 +1,67 @@
-import type {Bill, BillItem} from "../../api/bills";
+import type {Bill, BillItem, BillPayoutStatus} from "../../api/bills";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
+
+const RECEIVED = new Set(["HELD", "CONFIRMED", "PARTIAL"]);
+
+export type PayeeSummary = {
+  gross: number;
+  collected: number;
+  commission: number;
+  net: number;
+  payout: BillPayoutStatus;
+};
+
+export function itemPayoutStatus(item: BillItem): BillPayoutStatus {
+  const payment = item.payment;
+  if (!payment) return "NONE";
+  if (payment.payoutStatus) return payment.payoutStatus;
+  if (typeof payment.payoutAt === "string" && payment.payoutAt !== "") return "PAID";
+  if (RECEIVED.has(payment.status)) return "PENDING";
+  return "NONE";
+}
+
+export function itemNetPayout(item: BillItem): number {
+  const payment = item.payment;
+  if (!payment) return 0;
+  if (typeof payment.payoutAmount === "number") return payment.payoutAmount;
+  return Math.max(0, item.amount - (payment.commissionAmount ?? 0));
+}
+
+export function payeeSummary(bill: Bill): PayeeSummary {
+  let gross = 0;
+  let collected = 0;
+  let commission = 0;
+  let net = 0;
+  let received = 0;
+  let paidOut = 0;
+  for (const item of bill.items) {
+    gross += item.amount;
+    const payment = item.payment;
+    if (!payment || !RECEIVED.has(payment.status)) continue;
+    received += 1;
+    collected += payment.amount;
+    commission += payment.commissionAmount ?? 0;
+    net += itemNetPayout(item);
+    if (itemPayoutStatus(item) === "PAID") paidOut += 1;
+  }
+  const payout: BillPayoutStatus = received === 0 ?
+    "NONE" :
+    paidOut === received ? "PAID" : "PENDING";
+  return {gross, collected, commission, net, payout};
+}
+
+export function payoutStatusLabel(status: BillPayoutStatus, t: Strings): string {
+  if (status === "PAID") return t.payments.payoutPaid;
+  if (status === "PENDING") return t.payments.payoutPending;
+  return t.payments.payoutNone;
+}
+
+export function payoutStatusColor(status: BillPayoutStatus, theme: AppTheme): string {
+  if (status === "PAID") return theme.success;
+  if (status === "PENDING") return "#d97706";
+  return theme.muted;
+}
 
 export function billStatusLabel(status: string, t: Strings): string {
   if (status === "PAID") return t.bills.statusPaid;

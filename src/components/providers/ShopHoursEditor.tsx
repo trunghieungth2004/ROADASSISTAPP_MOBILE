@@ -1,4 +1,5 @@
-import {Pressable, StyleSheet, View, useColorScheme} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
+import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
@@ -22,7 +23,7 @@ function applyAll(setDay: Props["setDay"], open: string, close: string, days: re
 }
 
 export default function ShopHoursEditor({t, week, setDay}: Props) {
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   return (
     <View style={styles.editor}>

@@ -1,5 +1,6 @@
 import {useCallback, useState} from "react";
-import {ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View, useColorScheme} from "react-native";
+import {ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Linking from "expo-linking";
@@ -19,7 +20,7 @@ import {GITHUB_URL, REPO_SLUG} from "../services/appUpdate";
 export default function AboutScreen() {
   const {t} = useStrings();
   const navigation = useNavigation();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const [notice, setNotice] = useState<string | null>(null);

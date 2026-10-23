@@ -19,6 +19,7 @@ jest.mock("../../../src/context/LanguageContext", () => {
 
 jest.mock("../../../src/context/ThemeContext", () => ({
   useThemeMode: () => ({mode: "light" as const, toggle: () => undefined}),
+  useAppMode: () => "light" as const,
 }));
 
 const mockNavigate = jest.fn();
@@ -54,9 +55,11 @@ const TOW_BILL: Bill = {
   paid: 150000,
   due: 220000,
   status: "PARTIAL",
+  viewer: "RIDER",
+  canPay: true,
   items: [
-    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "PENDING", payeeId: "op1", payeeName: "Tow Co", qrUrl: null, payment: {id: "p1", method: "SEPAY", status: "PENDING", amount: 220000, refundAmount: null}},
-    {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "6", amount: 150000, waitingFee: 0, status: "PAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: {id: "p2", method: "CASH", status: "CONFIRMED", amount: 150000, refundAmount: null}},
+    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "PENDING", payeeId: "op1", payeeName: "Tow Co", qrUrl: null, payment: {id: "p1", method: "SEPAY", status: "PENDING", amount: 220000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: false}},
+    {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "6", amount: 150000, waitingFee: 0, status: "PAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: {id: "p2", method: "CASH", status: "CONFIRMED", amount: 150000, refundAmount: null, commissionRate: 10, commissionAmount: 15000, payoutAmount: 135000, payoutRef: null, payoutAt: null, payoutStatus: "PENDING", canConfirmCash: false}},
   ],
 };
 
@@ -71,6 +74,8 @@ const WALK_BILL: Bill = {
   paid: 0,
   due: 90000,
   status: "UNPAID",
+  viewer: "RIDER",
+  canPay: true,
   items: [
     {kind: "REPAIR", ticketId: "walk2", ticketType: "WALK_IN", ticketStatus: "1", amount: 90000, waitingFee: 0, status: "UNPAID", payeeId: null, payeeName: "Fix Shop", qrUrl: null, payment: null},
   ],

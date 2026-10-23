@@ -2,9 +2,9 @@ import {Platform} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {registerPush, unregisterPush} from "../api/push";
-import {parseDispatchPush, parseHazardPush, type DispatchPushData, type HazardPushData} from "./pushPayload";
+import {parseDispatchPush, parseHazardPush, parsePaymentPush, type DispatchPushData, type HazardPushData, type PaymentPushData} from "./pushPayload";
 
-export type {DispatchPushData, HazardPushData};
+export type {DispatchPushData, HazardPushData, PaymentPushData};
 
 const DEVICE_KEY = "roadassist.push.device";
 const OWNER_KEY = "roadassist.push.owner";
@@ -14,8 +14,15 @@ const CLAIM_TTL_MS = 120000;
 
 const DISPATCH_CHANNEL = "dispatch";
 const URGENT_DISPATCH_CHANNEL = "dispatch-urgent";
+const PAYMENT_CHANNEL = "payments";
 
 let configured = false;
+let configuring: Promise<void> | null = null;
+let registrationInFlight: Promise<boolean> | null = null;
+let registrationInFlightKey: string | null = null;
+let lastDeviceToken: string | null = null;
+let permissionPrompted = false;
+let registrationQueue: Promise<unknown> = Promise.resolve();
 const claimed = new Map<string, number>();
 let navForeground = false;
 
@@ -36,61 +43,143 @@ export function claimPush(id: string, status?: string, owner?: string): boolean 
   return true;
 }
 
-export function ensurePushConfigured(): void {
-  if (configured) return;
-  configured = true;
+export function ensurePushConfigured(): Promise<void> {
+  if (configured) return Promise.resolve();
+  if (configuring) return configuring;
   navForeground = false;
-  Notifications.setNotificationHandler({
-    handleNotification: async (req) => {
-      const urgent = parseDispatchPush(req.request.content.data)?.urgent === true;
-      const quiet = navForeground && !urgent;
-      return quiet
-        ? {
-            shouldShowBanner: false,
-            shouldShowList: false,
-            shouldPlaySound: false,
-            shouldSetBadge: false,
-          }
-        : {
-            shouldShowBanner: true,
-            shouldShowList: true,
-            shouldPlaySound: true,
-            shouldSetBadge: false,
-          };
-    },
+  configuring = (async () => {
+    Notifications.setNotificationHandler({
+      handleNotification: async (req) => {
+        const urgent = parseDispatchPush(req.request.content.data)?.urgent === true;
+        const quiet = navForeground && !urgent;
+        return quiet
+          ? {
+              shouldShowBanner: false,
+              shouldShowList: false,
+              shouldPlaySound: false,
+              shouldSetBadge: false,
+            }
+          : {
+              shouldShowBanner: true,
+              shouldShowList: true,
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+            };
+      },
+    });
+    if (Platform.OS === "android") {
+      await Promise.all([
+        Notifications.setNotificationChannelAsync("hazard", {
+          name: "Hazards",
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+        }),
+        Notifications.setNotificationChannelAsync(DISPATCH_CHANNEL, {
+          name: "Dispatch",
+          importance: Notifications.AndroidImportance.DEFAULT,
+        }),
+        Notifications.setNotificationChannelAsync(URGENT_DISPATCH_CHANNEL, {
+          name: "Dispatch (urgent)",
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+        }),
+        Notifications.setNotificationChannelAsync(PAYMENT_CHANNEL, {
+          name: "Payments",
+          importance: Notifications.AndroidImportance.DEFAULT,
+        }),
+      ]);
+    }
+    configured = true;
+  })().catch(() => undefined).finally(() => {
+    configuring = null;
   });
-  if (Platform.OS === "android") {
-    void Notifications.setNotificationChannelAsync("hazard", {
-      name: "Hazards",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-    }).catch(() => undefined);
-    void Notifications.setNotificationChannelAsync(DISPATCH_CHANNEL, {
-      name: "Dispatch",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    }).catch(() => undefined);
-    void Notifications.setNotificationChannelAsync(URGENT_DISPATCH_CHANNEL, {
-      name: "Dispatch (urgent)",
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-    }).catch(() => undefined);
+  return configuring;
+}
+
+async function ensureNotificationPermission(): Promise<void> {
+  if (permissionPrompted) return;
+  permissionPrompted = true;
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    if (!current.granted && current.canAskAgain) {
+      await Notifications.requestPermissionsAsync();
+    }
+  } catch {
+    return;
   }
 }
 
 export async function syncPushToken(authToken: string | null, uid: string | null): Promise<boolean> {
   if (!authToken || !uid || Platform.OS === "web") return false;
-  try {
-    const device = (await Notifications.getDevicePushTokenAsync()).data ?? "";
-    if (device === "") return false;
-    await registerPush(authToken, device);
-    await AsyncStorage.multiSet([
-      [DEVICE_KEY, device],
-      [OWNER_KEY, uid],
-    ]);
-    return true;
-  } catch {
-    return false;
+  const key = `${uid}:${authToken}`;
+  if (registrationInFlight && registrationInFlightKey === key) {
+    return registrationInFlight;
   }
+  const run = async (): Promise<boolean> => {
+    try {
+      await ensurePushConfigured();
+      await ensureNotificationPermission();
+      const device = (await Notifications.getDevicePushTokenAsync()).data ?? "";
+      if (device === "") return false;
+      lastDeviceToken = device;
+      await registerPush(authToken, device);
+      try {
+        await AsyncStorage.multiSet([
+          [DEVICE_KEY, device],
+          [OWNER_KEY, uid],
+        ]);
+      } catch {
+        return true;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const next = registrationQueue.then(run, run);
+  registrationQueue = next.catch(() => undefined);
+  const tracked = next.finally(() => {
+    if (registrationInFlight === tracked) {
+      registrationInFlight = null;
+      registrationInFlightKey = null;
+    }
+  });
+  registrationInFlight = tracked;
+  registrationInFlightKey = key;
+  return tracked;
+}
+
+export async function syncPushTokenWithRetry(
+  authToken: string | null,
+  uid: string | null,
+  attempts = 6,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (!authToken || !uid || Platform.OS === "web") return false;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (signal?.aborted) return false;
+    if (await syncPushToken(authToken, uid)) return true;
+    if (signal?.aborted) return false;
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
+export function subscribePushTokenRefresh(
+  authToken: string | null,
+  uid: string | null,
+): () => void {
+  if (!authToken || !uid || Platform.OS === "web") return () => undefined;
+  const sub = Notifications.addPushTokenListener((token) => {
+    const device = typeof token?.data === "string" ? token.data : "";
+    if (device !== "" && device === lastDeviceToken) return;
+    void syncPushToken(authToken, uid);
+  });
+  return () => {
+    sub.remove();
+  };
 }
 
 export async function unsyncPushToken(authToken: string): Promise<void> {
@@ -114,6 +203,18 @@ export function subscribeHazardPush(onPush: (data: HazardPushData) => void, owne
   const tapped = Notifications.addNotificationResponseReceivedListener((r) => fromNotification(r.notification));
   return () => {
     received.remove();
+    tapped.remove();
+  };
+}
+
+export function subscribePaymentPush(onPush: (data: PaymentPushData) => void, owner: string): () => void {
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
+    const parsed = parsePaymentPush(r.notification.request.content.data);
+    if (!parsed) return;
+    const key = `${parsed.event}:${parsed.paymentId}:${parsed.payoutId ?? ""}`;
+    if (claimPush(key, undefined, owner)) onPush(parsed);
+  });
+  return () => {
     tapped.remove();
   };
 }
@@ -161,6 +262,7 @@ export async function getLastDispatchPush(): Promise<{ticketId: string; status: 
 
 let drainedDispatchLaunch: string | null = null;
 let drainedHazardLaunch: string | null = null;
+let drainedPaymentLaunch: string | null = null;
 
 function launchKey(data: {ticketId?: string; flagId?: string}, at: number | undefined): string | null {
   const id = data.ticketId ?? data.flagId;
@@ -198,8 +300,26 @@ export async function drainHazardLaunch(): Promise<HazardPushData | null> {
   }
 }
 
+export async function drainPaymentLaunch(): Promise<PaymentPushData | null> {
+  try {
+    const res = await Notifications.getLastNotificationResponseAsync();
+    const at = res?.notification.date;
+    if (at === undefined) return null;
+    const parsed = parsePaymentPush(res?.notification.request.content.data);
+    if (!parsed) return null;
+    const claimKey = `${parsed.event}:${parsed.paymentId}:${parsed.payoutId ?? ""}`;
+    const launchKey = `${claimKey}:${at}`;
+    if (drainedPaymentLaunch === launchKey) return null;
+    drainedPaymentLaunch = launchKey;
+    return claimPush(claimKey) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function probeDeviceToken(): Promise<{token: string | null; error: string | null}> {
   try {
+    await ensurePushConfigured();
     const device = (await Notifications.getDevicePushTokenAsync()).data ?? "";
     if (device === "") return {token: null, error: "empty token"};
     return {token: device, error: null};

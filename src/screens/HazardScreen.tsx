@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {FlatList, Pressable, RefreshControl, StyleSheet, View, useColorScheme} from "react-native";
+import {FlatList, Pressable, RefreshControl, StyleSheet, View} from "react-native";
+import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -21,8 +22,8 @@ import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {darkTheme, lightTheme} from "../theme";
 import type {Flag} from "../api/flags";
-import {bustFlagCaches, confirmFlag, denyFlag} from "../api/flags";
-import {markDenied, markVoted} from "../storage/votedFlags";
+import {bustFlagCaches, confirmFlag, denyFlag, unflag} from "../api/flags";
+import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../storage/votedFlags";
 import {toMessage} from "../api/client";
 import {flagTypeLabel} from "../i18n/labels";
 import {distBetween} from "./navigation/navUtils";
@@ -30,14 +31,16 @@ import HazardMapView from "./hazards/HazardMapView";
 import HazardRow from "./hazards/HazardRow";
 import {filterFlags, HAZARD_FILTERS, type HazardFilter} from "./hazards/hazardFilter";
 import {useMyFlags} from "./hazards/useMyFlags";
+import {useNearbyFlags} from "./hazards/useNearbyFlags";
 
 export default function HazardScreen() {
   const {t, lang} = useStrings();
   const {token, uid} = useAuth();
-  const scheme = useColorScheme();
+  const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
   const mine = useMyFlags(token);
+  const [tab, setTab] = useState<"mine" | "nearby">("mine");
   const [showMap, setShowMap] = useState(false);
   const [filter, setFilter] = useState<HazardFilter>("ALL");
   const [selected, setSelected] = useState<Flag | null>(null);
@@ -45,35 +48,63 @@ export default function HazardScreen() {
   const [snack, setSnack] = useState<string | null>(null);
   const [pos, setPos] = useState<{lat: number; lng: number} | null>(null);
   const [voteBusy, setVoteBusy] = useState(false);
+  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+  const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
+  const nearby = useNearbyFlags(token, pos, tab === "nearby");
   const focusN = useRef(0);
   const lastRefreshRef = useRef(0);
   const refreshMine = mine.refresh;
+  const refreshNearby = nearby.refresh;
   const removeMineLocal = mine.removeLocal;
+  const removeNearbyLocal = nearby.removeLocal;
+  const clearMineError = mine.clearError;
+  const clearNearbyError = nearby.clearError;
   useFocusEffect(
     useCallback(() => {
       const now = Date.now();
       if (isStaleForRefresh(lastRefreshRef.current, now)) {
         lastRefreshRef.current = now;
-        refreshMine();
+        if (tab === "nearby") refreshNearby();
+        else refreshMine();
       }
-    }, [refreshMine]),
+    }, [tab, refreshMine, refreshNearby]),
   );
   useEffect(() => {
-    ensurePushConfigured();
+    let alive = true;
+    setVotedIds(new Set());
+    setDeniedIds(new Set());
+    void (async () => {
+      try {
+        const [v, d] = await Promise.all([loadVotedIds(uid), loadDeniedIds(uid)]);
+        if (!alive) return;
+        setVotedIds(v);
+        setDeniedIds(d);
+      } catch {
+        return;
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [uid]);
+  useEffect(() => {
+    void ensurePushConfigured();
     const onHazard = (data: HazardPushData): void => {
       if (token) bustFlagCaches(token);
       if (data.removed) {
         removeMineLocal(data.flagId);
+        removeNearbyLocal(data.flagId);
         setSelected((cur) => (cur?.id === data.flagId ? null : cur));
       }
       lastRefreshRef.current = Date.now();
       refreshMine();
+      refreshNearby();
     };
     void drainHazardLaunch().then((drained) => {
       if (drained) onHazard(drained);
     });
     return subscribeHazardPush(onHazard, "hazards");
-  }, [refreshMine, removeMineLocal]);
+  }, [refreshMine, refreshNearby, removeMineLocal, removeNearbyLocal]);
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -90,7 +121,12 @@ export default function HazardScreen() {
       alive = false;
     };
   }, []);
-  const visible = useMemo(() => filterFlags(mine.flags, filter), [mine.flags, filter]);
+  const activeFlags = tab === "nearby" ? nearby.flags : mine.flags;
+  const activeError = tab === "nearby" ? nearby.error : mine.error;
+  const clearActiveError = tab === "nearby" ? clearNearbyError : clearMineError;
+  const activeRefreshing = tab === "nearby" ? nearby.refreshing : mine.refreshing;
+  const activeLoading = tab === "nearby" ? nearby.loading : mine.loading;
+  const visible = useMemo(() => filterFlags(activeFlags, filter), [activeFlags, filter]);
   function centerOn(flag: Flag): void {
     focusN.current += 1;
     setFocus({lat: flag.lat, lng: flag.lng, n: focusN.current});
@@ -104,9 +140,11 @@ export default function HazardScreen() {
     setVoteBusy(true);
     try {
       await confirmFlag(flagId, token);
-      await markVoted(flagId);
+      await markVoted(uid, flagId);
+      setVotedIds((prev) => new Set(prev).add(flagId));
       setSelected(null);
       refreshMine();
+      refreshNearby();
     } catch (err) {
       setSnack(toMessage(err));
     } finally {
@@ -118,9 +156,11 @@ export default function HazardScreen() {
     setVoteBusy(true);
     try {
       await denyFlag(flagId, token);
-      await markDenied(flagId);
+      await markDenied(uid, flagId);
+      setDeniedIds((prev) => new Set(prev).add(flagId));
       setSelected(null);
       refreshMine();
+      refreshNearby();
     } catch (err) {
       setSnack(toMessage(err));
     } finally {
@@ -128,25 +168,67 @@ export default function HazardScreen() {
     }
   }
   async function onRemove(flagId: string): Promise<void> {
-    const target = mine.flags.find((f) => f.id === flagId);
+    if (!token || voteBusy) return;
+    const target = selected?.id === flagId ?
+      selected :
+      mine.flags.find((f) => f.id === flagId) ??
+        nearby.flags.find((f) => f.id === flagId);
     if (target?.status === "3") {
       setSnack(t.flag.lockedRemoveDenied);
       return;
     }
-    const ok = await mine.remove(flagId);
-    if (ok) {
+    setVoteBusy(true);
+    try {
+      await unflag(flagId, token);
+      mine.removeLocal(flagId);
+      nearby.removeLocal(flagId);
       setSelected(null);
       setSnack(t.flag.removedMsg);
+      refreshMine();
+      refreshNearby();
+    } catch (err) {
+      setSnack(toMessage(err));
+    } finally {
+      setVoteBusy(false);
+    }
+  }
+  async function locate(): Promise<void> {
+    try {
+      const {status} = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setSnack(t.nav.locationDenied);
+        return;
+      }
+      const current = await Location.getCurrentPositionAsync({accuracy: Location.Accuracy.Balanced});
+      setPos({lat: current.coords.latitude, lng: current.coords.longitude});
+    } catch (err) {
+      setSnack(toMessage(err));
     }
   }
   return (
     <ScreenContainer>
       <View style={styles.root}>
         <View style={styles.headerRow}>
-          <Text style={[styles.title, {color: theme.text}]}>{t.hazards.myReports}</Text>
+          <Text style={[styles.title, {color: theme.text}]}>{tab === "nearby" ? t.hazards.nearby : t.hazards.myReports}</Text>
           <Fab theme={theme} size={40} label={showMap ? t.hazards.hideMap : t.hazards.showMap} onPress={() => setShowMap((v) => !v)}>
             <MaterialIcons name={showMap ? "list" : "map"} size={20} color={theme.primary} />
           </Fab>
+        </View>
+        <View style={styles.tabRow}>
+          {(["mine", "nearby"] as const).map((id) => {
+            const active = tab === id;
+            return (
+              <Pressable
+                key={id}
+                style={[styles.tab, {borderColor: theme.border, backgroundColor: active ? theme.primary : theme.paper}]}
+                onPress={() => setTab(id)}
+                accessibilityRole="button"
+                accessibilityState={{selected: active}}
+              >
+                <Text style={{color: active ? "#fff" : theme.text, fontWeight: "700"}}>{id === "nearby" ? t.hazards.nearby : t.hazards.myReports}</Text>
+              </Pressable>
+            );
+          })}
         </View>
         {showMap ? (
           <View style={[styles.mapPanel, {borderColor: theme.border}]}>
@@ -169,15 +251,21 @@ export default function HazardScreen() {
             );
           })}
         </View>
-        {mine.loading ? (
+        {activeLoading ? (
           <StatusRow theme={theme} text={t.hazards.loading} />
         ) : (
           <FlatList
             data={visible}
             keyExtractor={(f) => f.id}
             contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={mine.refreshing} onRefresh={mine.refresh} tintColor={theme.primary} />}
-            ListEmptyComponent={<Text style={[styles.hint, {color: theme.muted}]}>{t.hazards.myEmpty}</Text>}
+            refreshControl={<RefreshControl refreshing={activeRefreshing} onRefresh={tab === "nearby" ? refreshNearby : refreshMine} tintColor={theme.primary} />}
+            ListEmptyComponent={tab === "nearby" && !pos ? (
+              <Pressable onPress={() => void locate()} accessibilityRole="button">
+                <Text style={[styles.hint, {color: theme.primary}]}>{t.hazards.locationNeeded}</Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.hint, {color: theme.muted}]}>{tab === "nearby" ? t.hazards.nearbyEmpty : t.hazards.myEmpty}</Text>
+            )}
             renderItem={({item}) => (
               <HazardRow
                 t={t}
@@ -195,8 +283,8 @@ export default function HazardScreen() {
           />
         )}
       </View>
-      {mine.error ? (
-        <Snack message={mine.error} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={mine.clearError} />
+      {activeError ? (
+        <Snack message={activeError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={clearActiveError} />
       ) : (
         <Snack message={snack} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setSnack(null)} />
       )}
@@ -218,9 +306,9 @@ export default function HazardScreen() {
             selected.id,
             selected.status,
             uid != null && selected.reporterId === uid,
-            false,
-            false,
-            mine.busyId !== null || voteBusy,
+            votedIds.has(selected.id) || selected.voteDirection === "up",
+            deniedIds.has(selected.id) || selected.voteDirection === "down",
+            voteBusy,
             {confirm: t.flag.confirm, deny: t.flag.deny, remove: t.flag.remove},
             {onConfirm: (id) => void onConfirm(id), onDeny: (id) => void onDeny(id), onRemove: (id) => void onRemove(id)},
           )}
@@ -240,6 +328,8 @@ const styles = StyleSheet.create({
   root: {flex: 1, padding: 16, gap: 12},
   headerRow: {flexDirection: "row", alignItems: "center", gap: 8},
   title: {flex: 1, fontSize: 20, fontWeight: "700"},
+  tabRow: {flexDirection: "row", gap: 8},
+  tab: {flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: "center"},
   mapPanel: {height: 260, borderWidth: 1, borderRadius: 16, overflow: "hidden"},
   pillRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},

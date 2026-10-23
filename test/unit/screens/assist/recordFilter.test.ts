@@ -38,6 +38,10 @@ test("business kind resolves through assignment, then type", () => {
   expect(filterByKind(all, true, false, true, kinds).map((t) => t.id)).toEqual(["a", "d"]);
   expect(filterByKind(all, false, true, true, kinds).map((t) => t.id)).toEqual(["b", "c", "d"]);
   expect(filterByKind(all, false, false, false, kinds).map((t) => t.id)).toEqual([]);
+  const mixed = {id: "e", userId: "u", ticketType: "TOW", lat: 0, lng: 0, status: "2", direction: "in", assignedShopId: "tow8", destinationShopId: "shop9"} as never;
+  expect(businessKindOf(mixed, kinds)).toBe("SHOP");
+  const ownTow = {id: "f", userId: "u", ticketType: "TOW", lat: 0, lng: 0, status: "2", direction: "in", assignedShopId: "tow7", destinationShopId: "shop9"} as never;
+  expect(businessKindOf(ownTow, kinds)).toBe("TOW");
 });
 
 test("rider chip gates kind-less rows", () => {

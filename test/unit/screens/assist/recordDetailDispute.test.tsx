@@ -37,7 +37,6 @@ async function render(overrides?: Partial<Props>) {
           ticket={ticket()}
           ratings={[]}
           busy={false}
-          gps={null}
           uid="u1"
           hasRated={false}
           onClose={() => undefined}
@@ -61,6 +60,8 @@ async function render(overrides?: Partial<Props>) {
           onReply={() => undefined}
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
+          ownTowId={null}
+          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}
@@ -126,7 +127,7 @@ test("tower cancel banner carries the only dispute entry while requeued", async 
   }
 });
 
-test("a re-matched tow drops the banner and keeps the footer chip", async () => {
+test("a re-matched tow drops the banner and keeps one action entry", async () => {
   const {renderer} = await render({ticket: ticket({status: "2", cancelledBy: null})});
   try {
     expect(texts(renderer)).not.toContain(en.assist.towerCancelMid);
@@ -136,7 +137,7 @@ test("a re-matched tow drops the banner and keeps the footer chip", async () => 
   }
 });
 
-test("shop decline banner supersedes the footer chip", async () => {
+test("shop decline banner carries the only dispute entry", async () => {
   const {renderer} = await render({ticket: ticket({status: "2", towLegs: [{toShopId: "shop-9"}]})});
   try {
     expect(texts(renderer)).toContain(en.assist.shopDeclineMid);
@@ -187,7 +188,7 @@ test("final quote card stays the only dispute entry", async () => {
   }
 });
 
-test("dispute chip fires the handler", async () => {
+test("dispute action fires the handler", async () => {
   const {renderer, onOpenDispute} = await render();
   try {
     const chip = renderer.root
