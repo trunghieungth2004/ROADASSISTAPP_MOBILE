@@ -453,9 +453,9 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
         {linked ? (
           <Pressable style={[styles.linkRow, {borderColor: theme.border}]} onPress={() => onOpenLinked(linked)} accessibilityRole="button" accessibilityLabel={ticketTitle(linked, t)}>
             <MaterialIcons name="link" size={16} color={theme.primary} />
-            <Text style={[styles.coords, {color: theme.primary, flex: 1}]}>{ticketTitle(linked, t)}</Text>
+            <Text style={[styles.coords, {color: theme.primary, flex: 1}]}>{ticketTypeLabel(linked.ticketType, t)}</Text>
             <View style={[styles.pill, {backgroundColor: statusPillColor(linked.status, theme)}]}>
-              <Text style={styles.pillText}>{ticketStatusLabel(linked.status, t)}</Text>
+              <Text style={[styles.pillText, {color: "#fff"}]}>{ticketStatusLabel(linked.status, t)}</Text>
             </View>
           </Pressable>
         ) : null}
