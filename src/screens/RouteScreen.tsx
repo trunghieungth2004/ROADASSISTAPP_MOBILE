@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {ActivityIndicator, AppState, Keyboard, Platform, StyleSheet, View} from "react-native";
+import {ActivityIndicator, AppState, Keyboard, Platform, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation, useIsFocused} from "@react-navigation/native";
@@ -31,6 +31,7 @@ import Snack from "../components/ui/Snack";
 import {flagOverlayActions} from "./hazards/flagActions";
 import type {FlagReport} from "../components/flags/FlagSheet";
 import FlagDetailSheet from "../components/flags/FlagDetailSheet";
+import ChatSheet from "./assist/ChatSheet";
 import {bustFlagCaches, confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {flagTypeLabel} from "../i18n/labels";
 import {hazardKind} from "../components/flags/hazardStyle";
@@ -81,6 +82,7 @@ export default function RouteScreen() {
   const [flagMode, setFlagMode] = useState(false);
   const [flagPoint, setFlagPoint] = useState<Point | null>(null);
   const [selectedFlag, setSelectedFlag] = useState<Flag | null>(null);
+  const [chatFlag, setChatFlag] = useState<Flag | null>(null);
   const [flagBusy, setFlagBusy] = useState(false);
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [deniedIds, setDeniedIds] = useState<Set<string>>(new Set());
@@ -395,7 +397,7 @@ export default function RouteScreen() {
     setFlagBusy(true);
     try {
       const photoUrls = report.photoUrls && report.photoUrls.length > 0 && uid ? await uploadFlagPhotos(uid, report.photoUrls) : [];
-      await submitFlag({type: report.type, lat: flagPoint.lat, lng: flagPoint.lng, radiusMeters: report.radiusMeters, note: report.note, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
+      await submitFlag({type: report.type, lat: flagPoint.lat, lng: flagPoint.lng, radiusMeters: report.radiusMeters, note: report.note, ttlMinutes: report.ttlMinutes, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
       setFlagPoint(null);
       setFlagMode(false);
       setFlagsKey((k) => k + 1);
@@ -803,8 +805,20 @@ export default function RouteScreen() {
             t={t}
             flag={selectedFlag}
             isOwn={uid != null && selectedFlag.reporterId === uid}
+            onChat={(flag) => setChatFlag(flag)}
           />
         </Overlay>
+      ) : null}
+      {chatFlag && token ? (
+        <ChatSheet
+          t={t}
+          token={token}
+          uid={uid}
+          scope="HAZARD"
+          refId={chatFlag.id}
+          title={flagTypeLabel(chatFlag.type, t)}
+          onClose={() => setChatFlag(null)}
+        />
       ) : null}
     </View>
   );

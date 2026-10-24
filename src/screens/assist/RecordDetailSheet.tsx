@@ -42,6 +42,11 @@ type Props = {
   onAccept: (ticket: FeedTicket) => void;
   onDecline: ((ticket: FeedTicket, reason: DeclineReason, note: string | undefined) => void) | null;
   onOpenWork: (ticket: FeedTicket) => void;
+  onOpenMobileFix?: ((ticket: FeedTicket) => void) | null;
+  onOpenChat?: ((ticket: FeedTicket) => void) | null;
+  onOfferMobileTow?: ((ticket: FeedTicket) => void) | null;
+  onRespondMobileTow?: ((ticket: FeedTicket, accept: boolean) => void) | null;
+  onRespondReturnTow?: ((ticket: FeedTicket, accept: boolean) => void) | null;
   onOpenQuote: (ticket: FeedTicket) => void;
   onOpenEstimate?: ((ticket: FeedTicket) => void) | null;
   onApproveQuote: (ticket: FeedTicket) => void;
@@ -59,6 +64,7 @@ type Props = {
   onRateRider: (ticket: FeedTicket) => void;
   ownShopIds: Set<string>;
   ownTowId: string | null;
+  ownMobileShopId?: string | null;
   hasVolunteer: boolean;
   roleContext?: ViewerRoleContext;
   showRequestPhotos: boolean;
@@ -126,7 +132,7 @@ function StatusHistory({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket:
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, hasVolunteer, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onOpenBill, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable, bill, quoteFunded, roleContext}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onOfferMobileTow, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, hasVolunteer, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onOpenBill, onOpenDispute, onRequeue, payment, waiting, onMarkUnfixable, bill, quoteFunded, roleContext}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -138,8 +144,12 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   const [replyText, setReplyText] = useState("");
   const photoViewer = usePhotoViewer(t.common.cancel);
   const party = partyOf(ticket, t.assist.unassigned);
-  const role: ViewerRole = viewerRoleOf(ticket, {ownShopIds, ownTowId, uid, hasVolunteer}, roleContext ?? "auto");
+  const role: ViewerRole = viewerRoleOf(ticket, {ownShopIds, ownTowId, ownMobileShopId: ownMobileShopId ?? null, uid, hasVolunteer}, roleContext ?? "auto");
   const hasShop = role.kind === "assigned" && role.assignedKind === "SHOP";
+  const mobileShopAssigned = ticket.ticketType === "SOS" &&
+    ownMobileShopId != null &&
+    typeof ticket.assignedShopId === "string" &&
+    ticket.assignedShopId === ownMobileShopId;
   const showShop = party.kind === "SHOP";
   const etaInMin = (iso: string | null | undefined): number | null => {
     if (typeof iso !== "string" || iso === "") return null;
@@ -286,6 +296,25 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
     actions.push({label: t.provider.workDone, tone: "neutral", outline: true, busy, onPress: () => onOpenWork(ticket)});
   }
   const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && ticket.direction === "in" && hasShop && !showUnfixable && canMarkUnfixable(ticket.ticketType, ticket.status);
+  if (mobileShopAssigned && onOpenMobileFix && (ticket.status === "2" || ticket.status === "3")) {
+    actions.push({label: t.assist.mobileFixAction, tone: "primary", onPress: () => onOpenMobileFix(ticket)});
+  }
+  if (mobileShopAssigned && ticket.status === "15" &&
+    ticket.mobileTowOffer?.status !== "PENDING" &&
+    ticket.mobileTowOffer?.status !== "ACCEPTED" && onOfferMobileTow) {
+    actions.push({label: t.assist.offerTow, tone: "primary", onPress: () => onOfferMobileTow(ticket)});
+  }
+  if (role.kind === "rider" && ticket.mobileTowOffer?.status === "PENDING" && onRespondMobileTow) {
+    actions.push({label: t.assist.acceptTow, tone: "primary", onPress: () => onRespondMobileTow(ticket, true)});
+    actions.push({label: t.assist.declineTow, tone: "danger", outline: true, onPress: () => onRespondMobileTow(ticket, false)});
+  }
+  if (role.kind === "rider" && ticket.returnTowOffer?.status === "PENDING" && ticket.status === "7" && onRespondReturnTow) {
+    actions.push({label: t.assist.returnTow, tone: "primary", onPress: () => onRespondReturnTow(ticket, true)});
+    actions.push({label: t.assist.declineReturnTow, tone: "neutral", outline: true, onPress: () => onRespondReturnTow(ticket, false)});
+  }
+  if (onOpenChat && (role.kind === "rider" || role.kind === "assigned") && !isTerminal(ticket.status)) {
+    actions.push({label: t.chat.open, tone: "neutral", outline: true, onPress: () => onOpenChat(ticket)});
+  }
   if (unfixableReady) {
     actions.push({label: t.assist.unfixableAction, tone: "danger", outline: true, busy, onPress: () => onMarkUnfixable(ticket)});
   }

@@ -11,16 +11,18 @@ import type {Strings} from "../../i18n/en";
 import {isPhotoPermissionError, takePhoto} from "../../services/photos";
 import {usePhotoViewer} from "../ui/PhotoViewer";
 
-export type FlagReport = {type: FlagType; radiusMeters: number; note?: string; photoUrls?: string[]};
+export type FlagReport = {type: FlagType; radiusMeters: number; note?: string; photoUrls?: string[]; ttlMinutes?: number};
 
 export type FlagDraftState = {
   type: FlagType;
   radiusMeters: number;
+  ttlMinutes: number;
   note: string;
   photoUris: string[];
   photoError: string | null;
   setType: (next: FlagType) => void;
   setRadiusMeters: (next: number) => void;
+  setTtlMinutes: (next: number) => void;
   setNote: (next: string) => void;
   addPhoto: () => Promise<void>;
   removePhoto: (uri: string) => void;
@@ -30,6 +32,7 @@ export type FlagDraftState = {
 export function useFlagDraft(t: Strings): FlagDraftState {
   const [type, setType] = useState<FlagType>("FLOOD");
   const [radiusMeters, setRadiusMeters] = useState(50);
+  const [ttlMinutes, setTtlMinutes] = useState(120);
   const [note, setNote] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -49,15 +52,17 @@ export function useFlagDraft(t: Strings): FlagDraftState {
   return {
     type,
     radiusMeters,
+    ttlMinutes,
     note,
     photoUris,
     photoError,
     setType,
     setRadiusMeters,
+    setTtlMinutes,
     setNote,
     addPhoto,
     removePhoto,
-    build: () => ({type, radiusMeters, ...(note.trim() !== "" ? {note: note.trim()} : {}), ...(photoUris.length > 0 ? {photoUrls: photoUris} : {})}),
+    build: () => ({type, radiusMeters, ttlMinutes, ...(note.trim() !== "" ? {note: note.trim()} : {}), ...(photoUris.length > 0 ? {photoUrls: photoUris} : {})}),
   };
 }
 
@@ -97,31 +102,32 @@ export default function FlagSheet({t, draft}: Props) {
         ) : null}
       </View>
       {draft.photoError ? <Text style={[styles.photoError, {color: theme.danger}]}>{draft.photoError}</Text> : null}
-      <View style={styles.detailRow}>
-        <View style={styles.typeCol}>
-          <Text style={[styles.label, {color: theme.text, textAlign: "center"}]}>{t.flag.type}</Text>
-          <View style={styles.typeRow}>
-            {TYPES.map((o) => {
-              const kind = hazardKind(o.id);
-              const active = draft.type === o.id;
-              return (
-                <Pressable
-                  key={o.id}
-                  style={[styles.typeBtn, {borderColor: active ? kind.color : theme.border, backgroundColor: active ? `${kind.color}22` : "transparent"}]}
-                  onPress={() => draft.setType(o.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={typeLabel(o.id)}
-                  accessibilityState={{checked: active}}
-                >
-                  <MaterialIcons name={o.icon} size={20} color={active ? kind.color : theme.muted} />
-                </Pressable>
-              );
-            })}
-          </View>
+      <View style={styles.fieldBlock}>
+        <Text style={[styles.label, {color: theme.text}]}>{t.flag.type}</Text>
+        <View style={styles.typeRow}>
+          {TYPES.map((o) => {
+            const kind = hazardKind(o.id);
+            const active = draft.type === o.id;
+            return (
+              <Pressable
+                key={o.id}
+                style={[styles.typeBtn, {borderColor: active ? kind.color : theme.border, backgroundColor: active ? `${kind.color}22` : "transparent"}]}
+                onPress={() => draft.setType(o.id)}
+                accessibilityRole="button"
+                accessibilityLabel={typeLabel(o.id)}
+                accessibilityState={{checked: active}}
+              >
+                <MaterialIcons name={o.icon} size={20} color={active ? kind.color : theme.muted} />
+                <Text numberOfLines={1} style={[styles.typeText, {color: active ? kind.color : theme.text}]}>{typeLabel(o.id)}</Text>
+              </Pressable>
+            );
+          })}
         </View>
-        <View style={styles.radiusCol}>
-          <Text style={[styles.label, {color: theme.text, textAlign: "center"}]}>{t.flag.radius} (m)</Text>
-          <View style={styles.radiusRow}>
+      </View>
+      <View style={styles.twoColRow}>
+        <View style={styles.col}>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, {color: theme.text}]}>{t.flag.radius} (m)</Text>
             {RADII.map((r) => (
               <Pressable
                 key={r}
@@ -131,6 +137,22 @@ export default function FlagSheet({t, draft}: Props) {
                 accessibilityState={{checked: draft.radiusMeters === r}}
               >
                 <Text style={[styles.radiusText, {color: draft.radiusMeters === r ? theme.primary : theme.text}]}>{r}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        <View style={styles.col}>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, {color: theme.text}]}>{t.hazards.ttl}</Text>
+            {[60, 120, 240, 720, 1440].map((minutes) => (
+              <Pressable
+                key={minutes}
+                style={[styles.ttlChip, {borderColor: draft.ttlMinutes === minutes ? theme.primary : theme.border, backgroundColor: draft.ttlMinutes === minutes ? `${theme.primary}22` : "transparent"}]}
+                onPress={() => draft.setTtlMinutes(minutes)}
+                accessibilityRole="button"
+                accessibilityState={{checked: draft.ttlMinutes === minutes}}
+              >
+                <Text style={[styles.ttlText, {color: draft.ttlMinutes === minutes ? theme.primary : theme.text}]}>{minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}</Text>
               </Pressable>
             ))}
           </View>
@@ -159,13 +181,16 @@ const styles = StyleSheet.create({
   photoRemove: {position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center"},
   photoAdd: {width: "100%", height: 48, minHeight: 48, borderWidth: 1, borderStyle: "dashed", borderRadius: 8, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6},
   photoError: {fontSize: 12},
-  detailRow: {flexDirection: "row", alignItems: "flex-start", gap: 8},
-  typeCol: {flex: 1, minWidth: 0, gap: 6},
-  radiusCol: {flex: 1, minWidth: 0, gap: 6},
-  typeRow: {flexDirection: "row", gap: 4, justifyContent: "center"},
-  typeBtn: {width: 40, height: 44, minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: 12},
-  radiusRow: {flexDirection: "row", gap: 4, alignItems: "center", justifyContent: "center"},
-  radiusChip: {flex: 1, maxWidth: 40, minWidth: 0, height: 44, minHeight: 44, borderWidth: 1, borderRadius: 999, alignItems: "center", justifyContent: "center"},
+  fieldBlock: {gap: 6},
+  typeRow: {flexDirection: "row", gap: 8, justifyContent: "space-between"},
+  typeBtn: {flex: 1, minWidth: 0, height: 48, minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderRadius: 12, paddingHorizontal: 8},
+  typeText: {fontSize: 12, fontWeight: "700", flexShrink: 1},
+  twoColRow: {flexDirection: "row", alignItems: "flex-start", gap: 12},
+  col: {flex: 1, minWidth: 0},
+  labelRow: {flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap"},
+  radiusChip: {minWidth: 34, height: 44, minHeight: 44, paddingHorizontal: 8, borderWidth: 1, borderRadius: 999, alignItems: "center", justifyContent: "center"},
   radiusText: {fontSize: 12, fontWeight: "700"},
+  ttlChip: {minWidth: 38, height: 44, minHeight: 44, paddingHorizontal: 8, borderWidth: 1, borderRadius: 999, alignItems: "center", justifyContent: "center"},
+  ttlText: {fontSize: 12, fontWeight: "700"},
   noteInput: {borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 13},
 });

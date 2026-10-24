@@ -7,7 +7,7 @@ import type {Strings} from "../../i18n/en";
 import {DOW, buildOpenHours, parseOpenHours, validateWeek, type WeekHours} from "../../screens/more/shopHours";
 import {isValidTowPlate, normalizeTowPlate, parseTowWidth} from "../../services/towPlates";
 
-export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null, t: Strings) {
+export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider: Provider | null, t: Strings) {
   const [name, setName] = useState(provider?.name ?? "");
   const [point, setPoint] = useState<{lat: number; lng: number; label?: string} | null>(
     provider ? {lat: provider.lat, lng: provider.lng, label: typeof provider.label === "string" ? provider.label : undefined} : null,
@@ -23,6 +23,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
   const [vehicleClasses, setVehicleClasses] = useState<string[]>(() =>
     Array.isArray(provider?.vehicleClasses) && provider.vehicleClasses.length > 0 ? [...provider.vehicleClasses] : ["SOLO_BIKE", "CAR"],
   );
+  const [licenseNumber, setLicenseNumber] = useState(typeof provider?.licenseNumber === "string" ? provider.licenseNumber : "");
   const [shopSearch, setShopSearch] = useState(false);
   const [towSearch, setTowSearch] = useState(false);
   const [mapPick, setMapPick] = useState(false);
@@ -90,6 +91,15 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
         setError(t.provider.invalidHours);
         return false;
       }
+    } else if (kind === "MOBILE_SHOP") {
+      if (!point) {
+        setError(t.provider.invalidLocation);
+        return false;
+      }
+      if (licenseNumber.trim() === "") {
+        setError(t.provider.invalidLicense);
+        return false;
+      }
     } else {
       if (!isValidTowPlate(plate)) {
         setError(t.provider.invalidPlate);
@@ -112,10 +122,21 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
         await updateProvider({
           providerId: provider.id,
           name: name.trim(),
-          ...(locTouched && point && kind === "SHOP" ? {lat: point.lat, lng: point.lng, label: point.label ?? null} : {}),
+          ...(locTouched && point && kind !== "TOW" ? {lat: point.lat, lng: point.lng, label: point.label ?? null} : {}),
           ...(locTouched && towPoint && kind === "TOW" ? {lat: towPoint.lat, lng: towPoint.lng} : {}),
           ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
+          ...(kind === "MOBILE_SHOP" ? {vehicleClasses, licenseNumber: licenseNumber.trim()} : {}),
           ...(kind === "TOW" ? {plate: normalizeTowPlate(plate), vehicleType: towType, vehicleWidth: parseTowWidth(towWidth) ?? undefined} : {}),
+        }, token);
+      } else if (kind === "MOBILE_SHOP" && point) {
+        await createProvider({
+          kind: "MOBILE_SHOP",
+          name: name.trim(),
+          lat: point.lat,
+          lng: point.lng,
+          ...(point.label ? {label: point.label} : {}),
+          vehicleClasses,
+          licenseNumber: licenseNumber.trim(),
         }, token);
       } else if (kind === "TOW" && towPoint) {
         await createProvider({
@@ -163,6 +184,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW", provider: Provider | null
     week,
     vehicleClasses,
     toggleVehicleClass,
+    licenseNumber,
+    setLicenseNumber,
     shopSearch,
     setShopSearch,
     towSearch,

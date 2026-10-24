@@ -1,4 +1,5 @@
 import {Image, Pressable, StyleSheet, View} from "react-native";
+import {MaterialIcons} from "@expo/vector-icons";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
 import type {Flag} from "../../api/flags";
@@ -12,9 +13,10 @@ type Props = {
   t: Strings;
   flag: Flag | null;
   isOwn: boolean;
+  onChat?: ((flag: Flag) => void) | null;
 };
 
-export default function FlagDetailSheet({t, flag, isOwn}: Props) {
+export default function FlagDetailSheet({t, flag, isOwn, onChat}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const photos = usePhotoUrls(flag?.photoUrls);
@@ -28,7 +30,14 @@ export default function FlagDetailSheet({t, flag, isOwn}: Props) {
     <View style={styles.body}>
       {showLocked ? <Text style={[styles.lockedNote, {color: theme.muted}]}>{t.flag.lockedNote}</Text> : null}
       {meta !== "" ? <Text style={[styles.meta, {color: theme.muted}]}>{meta}</Text> : null}
-      {flag.note ? <Text style={{color: theme.text}}>{flag.note}</Text> : null}
+      <View style={styles.noteRow}>
+        <Text style={[styles.noteText, {color: theme.text}]}>{flag.note ?? ""}</Text>
+        {onChat ? (
+          <Pressable style={[styles.chatBtn, {borderColor: theme.primary}]} onPress={() => onChat(flag)} accessibilityRole="button" accessibilityLabel={t.chat.open}>
+            <MaterialIcons name="chat" size={22} color={theme.primary} />
+          </Pressable>
+        ) : null}
+      </View>
       {photos.length > 0 ? (
         <View style={styles.photoRow}>
           {photos.map((uri, index) => (
@@ -53,6 +62,9 @@ const styles = StyleSheet.create({
   body: {gap: 10, width: "100%"},
   lockedNote: {fontSize: 12},
   meta: {fontSize: 13},
+  noteRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  noteText: {flex: 1, fontSize: 14},
+  chatBtn: {width: 44, height: 44, borderWidth: 1, borderRadius: 22, alignItems: "center", justifyContent: "center"},
   photoRow: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
   thumb: {width: 64, height: 64, borderRadius: 8},
 });

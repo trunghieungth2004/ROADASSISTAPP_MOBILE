@@ -30,6 +30,7 @@ import TurnListSheet from "./navigation/TurnListSheet";
 import {Fab, FabColumn} from "../components/ui/Fab";
 import {SNACK_GAP} from "../components/ui/snackOffset";
 import FlagDetailSheet from "../components/flags/FlagDetailSheet";
+import ChatSheet from "./assist/ChatSheet";
 import {hazardKind} from "../components/flags/hazardStyle";
 import {flagTypeLabel} from "../i18n/labels";
 import {drainHazardLaunch, ensurePushConfigured, notifyHazardHeadsUp, setNavForeground, subscribeDispatchPush, subscribeHazardPush, type DispatchPushData, type HazardPushData} from "../services/push";
@@ -159,6 +160,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
   const MAX_TOP_CARDS = 3;
   const {uid} = useAuth();
   const [selectedFlag, setSelectedFlag] = useState<Flag | null>(null);
+  const [chatFlag, setChatFlag] = useState<Flag | null>(null);
   const [autoOpened, setAutoOpened] = useState(false);
   const autoIdRef = useRef<string | null>(null);
   const [flagBusy, setFlagBusy] = useState(false);
@@ -303,7 +305,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     if (!reportAt) return;
     try {
       const photoUrls = report.photoUrls && report.photoUrls.length > 0 && uid ? await uploadFlagPhotos(uid, report.photoUrls) : [];
-      await submitFlag({type: report.type, lat: reportAt.lat, lng: reportAt.lng, radiusMeters: report.radiusMeters, note: report.note, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
+      await submitFlag({type: report.type, lat: reportAt.lat, lng: reportAt.lng, radiusMeters: report.radiusMeters, note: report.note, ttlMinutes: report.ttlMinutes, ...(photoUrls.length > 0 ? {photoUrls} : {})}, token);
       setReportAt(null);
       setFlagsKey((k) => k + 1);
       voice.speak(t.flag.reported);
@@ -707,8 +709,20 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
             t={t}
             flag={selectedFlag}
             isOwn={uid != null && selectedFlag.reporterId === uid}
+            onChat={(flag) => setChatFlag(flag)}
           />
         </Overlay>
+      ) : null}
+      {chatFlag && token ? (
+        <ChatSheet
+          t={t}
+          token={token}
+          uid={uid}
+          scope="HAZARD"
+          refId={chatFlag.id}
+          title={flagTypeLabel(chatFlag.type, t)}
+          onClose={() => setChatFlag(null)}
+        />
       ) : null}
     </View>
   );

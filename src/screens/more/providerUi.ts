@@ -41,7 +41,7 @@ export function switchEnabled(
 
 export function missingKinds(
   providers: {kind: string; status: string}[],
-): {shop: boolean; tow: boolean} {
+): {shop: boolean; tow: boolean; mobileShop: boolean} {
   return {
     shop: !providers.some(
       (p) => p.kind === "SHOP" && p.status !== "DENIED",
@@ -49,18 +49,24 @@ export function missingKinds(
     tow: !providers.some(
       (p) => p.kind === "TOW" && p.status !== "DENIED",
     ),
+    mobileShop: !providers.some(
+      (p) => p.kind === "MOBILE_SHOP" && p.status !== "DENIED",
+    ),
   };
 }
 
 export function operatedKinds(
   providers: {kind: string; status: string}[],
-): {shop: boolean; tow: boolean} {
+): {shop: boolean; tow: boolean; mobileShop: boolean} {
   return {
     shop: providers.some(
       (p) => p.kind === "SHOP" && p.status !== "DENIED",
     ),
     tow: providers.some(
       (p) => p.kind === "TOW" && p.status !== "DENIED",
+    ),
+    mobileShop: providers.some(
+      (p) => p.kind === "MOBILE_SHOP" && p.status !== "DENIED",
     ),
   };
 }
@@ -69,7 +75,7 @@ export function providerRowSubtitle(provider: Provider, t: Strings): string {
   if (provider.kind === "TOW" && typeof provider.plate === "string") {
     return provider.plate;
   }
-  if (provider.kind === "SHOP" && Array.isArray(provider.vehicleClasses) && provider.vehicleClasses.length > 0 && provider.vehicleClasses.length < 2) {
+  if ((provider.kind === "SHOP" || provider.kind === "MOBILE_SHOP") && Array.isArray(provider.vehicleClasses) && provider.vehicleClasses.length > 0 && provider.vehicleClasses.length < 2) {
     const only = provider.vehicleClasses[0];
     return `${providerStatusLabel(provider, t)} · ${only === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike}`;
   }
@@ -77,7 +83,8 @@ export function providerRowSubtitle(provider: Provider, t: Strings): string {
 }
 
 export function serviceLabel(code: string, t: Strings): string {
-  if (code === "VOLUNTEER") return t.roles.volunteer;
+  if (code === "VOLUNTEER") return t.roles.mobileShop;
+  if (code === "MOBILE_SHOP") return t.roles.mobileShop;
   if (code === "SHOP") return t.roles.shop;
   if (code === "TOW") return t.roles.tow;
   return t.roles.rider;

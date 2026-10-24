@@ -30,7 +30,7 @@ export default function ProviderFormSheet({t, draft}: Props) {
       ) : null}
       <Text style={[styles.label, {color: theme.text}]}>{t.provider.name}</Text>
       <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.name} onChangeText={draft.setName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
-      {kind === "SHOP" ? (
+      {kind === "SHOP" || kind === "MOBILE_SHOP" ? (
         <>
           <Text style={[styles.label, {color: theme.text}]}>{t.provider.shopAddress}</Text>
           <Pressable onPress={() => draft.setShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
@@ -52,6 +52,12 @@ export default function ProviderFormSheet({t, draft}: Props) {
               );
             })}
           </View>
+          {kind === "MOBILE_SHOP" ? (
+            <>
+              <Text style={[styles.label, {color: theme.text}]}>{t.provider.licenseNumber}</Text>
+              <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={draft.licenseNumber} onChangeText={draft.setLicenseNumber} placeholder={t.provider.licenseNumber} placeholderTextColor={theme.muted} />
+            </>
+          ) : null}
         </>
       ) : (
         <>

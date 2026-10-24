@@ -14,7 +14,7 @@ import type {Strings} from "../../i18n/en";
 type Props = {
   t: Strings;
   token: string | null;
-  kind: "SHOP" | "TOW";
+  kind: "SHOP" | "TOW" | "MOBILE_SHOP";
   provider: Provider | null;
   onClose: () => void;
   onSaved: () => void;
@@ -34,8 +34,8 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
     <Overlay
       visible
       variant="dialog"
-      title={provider ? t.provider.edit : kind === "TOW" ? t.provider.registerTow : t.provider.addShop}
-      leading={<MaterialIcons name={kind === "TOW" ? "local-shipping" : "storefront"} size={20} color={theme.primary} />}
+      title={provider ? t.provider.edit : kind === "TOW" ? t.provider.registerTow : kind === "MOBILE_SHOP" ? t.provider.addMobileShop : t.provider.addShop}
+      leading={<MaterialIcons name={kind === "TOW" ? "local-shipping" : kind === "MOBILE_SHOP" ? "build" : "storefront"} size={20} color={theme.primary} />}
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={[{label: t.common.save, tone: "primary", busy: draft.busy, onPress: () => void save()}]}

@@ -9,7 +9,7 @@ import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/nat
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
 import {safeCameraCall, safeCameraReady} from "../components/map/safeCamera";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, refreshTowEta, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, nearTickets, offerMobileShopTow, refreshTowEta, refreshWaiting, reportUnfixable, respondMobileShopTow, respondReturnTow, sendEstimate, sendQuote, setMobileShopFix, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../api/dispatch";
 import {payeeBills} from "../api/bills";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, REPORT_REASONS, type Provider, type ProviderRating, type ReportReason} from "../api/providers";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../api/ratings";
@@ -38,6 +38,9 @@ import {vehicleClassOf} from "./assist/vehicleClass";
 import AssistSectionTabs, {type AssistSection} from "./assist/AssistSectionTabs";
 import RequestSection from "./assist/RequestSection";
 import TowSection from "./assist/TowSection";
+import MobileShopSection from "./assist/MobileShopSection";
+import MobileFixSheet from "./assist/MobileFixSheet";
+import ChatSheet from "./assist/ChatSheet";
 import {fetchShopPlaces, isRepairPlace} from "../components/place-search/shopMerge";
 import MapPickOverlay from "../components/map/MapPickOverlay";
 import PlaceSearchScreen from "./PlaceSearchScreen";
@@ -73,7 +76,9 @@ export default function AssistScreen() {
   const {activeVehicle, activateVehicle, bundle, hasVehicle} = useProfile();
   const [ownProviders, setOwnProviders] = useState<Provider[]>([]);
   const provider = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
-    ownProviders.some((p) => p.kind === "TOW" && p.status === "ACTIVE");
+    ownProviders.some((p) =>
+      (p.kind === "TOW" || p.kind === "MOBILE_SHOP") &&
+      p.status === "ACTIVE");
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -102,6 +107,10 @@ export default function AssistScreen() {
   const [unfixableBusy, setUnfixableBusy] = useState(false);
   const [unfixableError, setUnfixableError] = useState<string | null>(null);
   const [workFor, setWorkFor] = useState<{ticket: FeedTicket; mode: WorkFormMode} | null>(null);
+  const [mobileFixFor, setMobileFixFor] = useState<FeedTicket | null>(null);
+  const [mobileFixBusy, setMobileFixBusy] = useState(false);
+  const [mobileFixError, setMobileFixError] = useState<string | null>(null);
+  const [chatFor, setChatFor] = useState<FeedTicket | null>(null);
   const [workBusy, setWorkBusy] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
   const [payments, setPayments] = useState<Record<string, TicketPayment>>({});
@@ -132,6 +141,7 @@ export default function AssistScreen() {
   }, [feed]);
   const [vehicleOpen, setVehicleOpen] = useState(false);
   const [nearbyTow, setNearbyTow] = useState<DispatchTicket[]>([]);
+  const [nearbySos, setNearbySos] = useState<DispatchTicket[]>([]);
   const [gps, setGps] = useState<{lat: number; lng: number} | null>(null);
   const [towLocationMissing, setTowLocationMissing] = useState(false);
   const [active, setActive] = useState<DispatchTicket | null>(null);
@@ -142,6 +152,9 @@ export default function AssistScreen() {
   const [reportError, setReportError] = useState<string | null>(null);
   const towOnDuty = ownProviders.some((item) => item.kind === "TOW" && item.status === "ACTIVE" && item.accepting !== false && item.suspended !== true);
   const ownTowId = ownProviders.find((item) => item.kind === "TOW" && item.status === "ACTIVE")?.id ?? null;
+  const ownMobileShopId = ownProviders.find((item) => item.kind === "MOBILE_SHOP" && item.status === "ACTIVE")?.id ?? null;
+  const mobileShopOnDuty = ownProviders.some((item) => item.kind === "MOBILE_SHOP" && item.status === "ACTIVE" && item.accepting !== false && item.suspended !== true);
+  const ownShopProviderId = ownProviders.find((item) => item.kind === "SHOP" && item.status === "ACTIVE")?.id ?? null;
   const storedFeed = active ? feed.find((entry) => entry.id === active.id) ?? null : null;
   const ownLiveTow = storedFeed === null ? feed.find((t) => t.direction === "out" && t.ticketType === "TOW" && (t.status === "2" || t.status === "3")) ?? null : null;
   const activeFeed = storedFeed ?? ownLiveTow;
@@ -421,23 +434,34 @@ export default function AssistScreen() {
       setFeed(feedList);
       setOwnProviders(fetched);
       setPayeeBillList(payeeList);
-      const gate = (bundle?.user.services ?? []).includes("VOLUNTEER") ||
-        fetched.some((item) => item.kind === "TOW" && item.status === "ACTIVE");
       const activeTow = fetched.some((item) => item.kind === "TOW" && item.status === "ACTIVE");
+      const activeMobileShop = fetched.some((item) => item.kind === "MOBILE_SHOP" && item.status === "ACTIVE" && item.accepting !== false);
+      const gate = (bundle?.user.services ?? []).includes("VOLUNTEER") || activeTow || activeMobileShop;
       if (gate) {
         if (!granted) {
           setTowLocationMissing(false);
           throw new Error(t.nav.locationDenied);
         }
         if (pos) {
-          setNearbyTow(await nearTickets(pos.lat, pos.lng, token, activeTow ? 15000 : undefined, "TOW").catch((): DispatchTicket[] => []));
+          const [towRows, sosRows] = await Promise.all([
+            activeTow || (bundle?.user.services ?? []).includes("VOLUNTEER") ?
+              nearTickets(pos.lat, pos.lng, token, activeTow ? 15000 : undefined, "TOW").catch((): DispatchTicket[] => []) :
+              Promise.resolve([]),
+            activeMobileShop || (bundle?.user.services ?? []).includes("VOLUNTEER") ?
+              nearTickets(pos.lat, pos.lng, token, undefined, "SOS").catch((): DispatchTicket[] => []) :
+              Promise.resolve([]),
+          ]);
+          setNearbyTow(towRows);
+          setNearbySos(sosRows);
           setTowLocationMissing(false);
         } else {
           setNearbyTow([]);
+          setNearbySos([]);
           setTowLocationMissing(true);
         }
       } else {
         setNearbyTow([]);
+        setNearbySos([]);
         setTowLocationMissing(false);
       }
       const saved = await AsyncStorage.getItem(ACTIVE_KEY).catch(() => null);
@@ -874,7 +898,7 @@ export default function AssistScreen() {
   ) {
     const hasVolunteer = (bundle?.user.services ?? []).includes("VOLUNTEER");
     const ownShopIds = new Set(ownProviders.filter((item) => item.kind === "SHOP").map((item) => item.id));
-    const showRequestPhotos = canSeeRequestPhotos(ticket, ownShopIds, uid, hasVolunteer, ownTowId, roleContext);
+    const showRequestPhotos = canSeeRequestPhotos(ticket, ownShopIds, uid, hasVolunteer, ownTowId, roleContext, ownMobileShopId);
     const ownTowAccepting = ownProviders.some((item) => item.kind === "TOW" && item.status === "ACTIVE" && item.accepting !== false);
     const acceptOffDuty = ticket.ticketType === "TOW" &&
       ticket.status === "1" &&
@@ -900,6 +924,11 @@ export default function AssistScreen() {
         onAccept={(item) => void onAcceptTicket(item)}
         onDecline={decline === null ? null : (item, reason, note) => void onDeclineTicket(item, reason, note)}
         onOpenWork={(item) => { setWorkFor({ticket: item, mode: "done"}); setWorkError(null); }}
+        onOpenMobileFix={(item) => { setMobileFixFor(item); setMobileFixError(null); }}
+        onOpenChat={(item) => setChatFor(item)}
+        onOfferMobileTow={(item) => void onOfferMobileTow(item)}
+        onRespondMobileTow={(item, accept) => void onRespondMobileTow(item, accept)}
+        onRespondReturnTow={ticket.ticketType === "WALK_IN" && ticket.returnTowOffer?.status === "PENDING" && gps !== null && distBetween(gps, {lat: ticket.lat, lng: ticket.lng}) > 1000 ? (item, accept) => void onRespondReturnTow(item, accept) : null}
         onOpenQuote={(item) => { setWorkFor({ticket: item, mode: "quote"}); setWorkError(null); }}
         onOpenEstimate={(item) => {
           setEstimateFor(item);
@@ -947,6 +976,7 @@ export default function AssistScreen() {
         onRateRider={(item) => onRateRider(item)}
         ownShopIds={ownShopIds}
         ownTowId={ownTowId}
+        ownMobileShopId={ownMobileShopId}
         hasVolunteer={hasVolunteer}
         roleContext={roleContext}
         showRequestPhotos={showRequestPhotos}
@@ -1313,7 +1343,7 @@ export default function AssistScreen() {
     const fromBoard = boardDetail !== null && boardDetail.id === ticket.id;
     const addressed = typeof ticket.providerId === "string" && ticket.providerId ? ticket.providerId : null;
     const isVolunteer = (bundle?.user.services ?? []).includes("VOLUNTEER");
-    const shopId = addressed ?? (ticket.ticketType === "TOW" ? ownTowId : null);
+    const shopId = addressed ?? (ticket.ticketType === "TOW" ? ownTowId : ticket.ticketType === "SOS" ? ownMobileShopId : null);
     const volunteerPath = shopId === null && ticket.ticketType === "TOW" && (fromBoard || isVolunteer);
     if (shopId === null && !volunteerPath) {
       setError(ticket.ticketType === "TOW" ? t.assist.towOperatorsOnly : t.assist.alreadyGone);
@@ -1386,6 +1416,68 @@ export default function AssistScreen() {
       setWorkError(toMessage(err));
     } finally {
       setWorkBusy(false);
+    }
+  }
+  async function onSaveMobileFix(amount: number): Promise<void> {
+    if (!token || !mobileFixFor || mobileFixBusy) return;
+    setMobileFixBusy(true);
+    setMobileFixError(null);
+    try {
+      await setMobileShopFix(mobileFixFor.id, amount, token);
+      setMobileFixFor(null);
+      setNotice(t.provider.workSaved);
+      await reloadAll();
+    } catch (err) {
+      setMobileFixError(toMessage(err));
+    } finally {
+      setMobileFixBusy(false);
+    }
+  }
+  async function onOfferMobileTow(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await offerMobileShopTow(ticket.id, ownShopProviderId ?? undefined, token);
+      setNotice(t.assist.offerTow);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onRespondMobileTow(ticket: FeedTicket, accept: boolean): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await respondMobileShopTow(ticket.id, accept, token);
+      setDetailFor(null);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onRespondReturnTow(ticket: FeedTicket, accept: boolean): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      if (accept) {
+        const point = await getFix();
+        await respondReturnTow(ticket.id, true, token, point);
+      } else {
+        await respondReturnTow(ticket.id, false, token);
+      }
+      setDetailFor(null);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
     }
   }
   async function onSendEstimate(amount: number, note: string): Promise<void> {
@@ -1622,7 +1714,7 @@ export default function AssistScreen() {
               theme={theme}
               tabs={[
                 {id: "request", label: t.assist.sectionRequest},
-                ...(provider ? [{id: "tow", label: t.assist.sectionTow}] : []),
+                ...(provider ? [{id: "tow", label: ownTowId !== null || hasVolunteer ? t.assist.sectionTow : t.assist.sectionMobileShop}] : []),
                 {id: "records", label: t.assist.sectionRecords},
               ]}
               selected={section}
@@ -1668,22 +1760,39 @@ export default function AssistScreen() {
               )
             ) : null}
             {section === "tow" && provider ? (
-              <TowSection
-                t={t}
-                theme={theme}
-                tickets={nearbyOnly}
-                jobs={towJobs}
-                requests={towRequests}
-                loading={loading}
-                locationMissing={towLocationMissing}
-                onOpen={(id) => onOpenBoardTicket(id)}
-                onOpenJob={(ticket) => {
-                  setDetailContext("tow");
-                  setDetailFor(ticket);
-                  if (ticket.status === "4") void onLoadRatings(ticket);
-                }}
-                onOpenRequest={(ticket) => void onOpenTowRequest(ticket)}
-              />
+              <>
+                {mobileShopOnDuty ? (
+                  <MobileShopSection
+                    t={t}
+                    theme={theme}
+                    tickets={nearbySos}
+                    loading={loading}
+                    locationMissing={towLocationMissing}
+                    onOpen={(ticket) => {
+                      setDetailContext("shop");
+                      setDetailFor(ticket);
+                    }}
+                  />
+                ) : null}
+                {ownTowId !== null || hasVolunteer ? (
+                  <TowSection
+                    t={t}
+                    theme={theme}
+                    tickets={nearbyOnly}
+                    jobs={towJobs}
+                    requests={towRequests}
+                    loading={loading}
+                    locationMissing={towLocationMissing}
+                    onOpen={(id) => onOpenBoardTicket(id)}
+                    onOpenJob={(ticket) => {
+                      setDetailContext("tow");
+                      setDetailFor(ticket);
+                      if (ticket.status === "4") void onLoadRatings(ticket);
+                    }}
+                    onOpenRequest={(ticket) => void onOpenTowRequest(ticket)}
+                  />
+                ) : null}
+              </>
             ) : null}
             {section === "records" ? (
               <RecordsSection
@@ -1694,7 +1803,7 @@ export default function AssistScreen() {
                 shopKinds={new Map(
                   ownProviders
                     .filter((p) => p.status !== "DENIED" && (p.kind === "SHOP" || p.kind === "TOW"))
-                    .map((p) => [p.id, p.kind]),
+                    .map((p) => [p.id, p.kind as "SHOP" | "TOW"]),
                 )}
                 onOpen={(ticket) => {
                   setDetailContext("shop");
@@ -1988,6 +2097,31 @@ export default function AssistScreen() {
           onClose={() => {
             setEstimateFor(null);
             setEstimateError(null);
+          }}
+        />
+      ) : null}
+      {chatFor && token ? (
+        <ChatSheet
+          t={t}
+          token={token}
+          uid={uid}
+          scope="TICKET"
+          refId={chatFor.id}
+          title={ticketTitle(chatFor, t)}
+          onClose={() => setChatFor(null)}
+        />
+      ) : null}
+      {mobileFixFor ? (
+        <MobileFixSheet
+          t={t}
+          ticketLabel={ticketTitle(mobileFixFor, t)}
+          busy={mobileFixBusy}
+          error={mobileFixError}
+          initialAmount={typeof mobileFixFor.finalAmount === "number" ? mobileFixFor.finalAmount : null}
+          onSubmit={(amount) => void onSaveMobileFix(amount)}
+          onClose={() => {
+            setMobileFixFor(null);
+            setMobileFixError(null);
           }}
         />
       ) : null}

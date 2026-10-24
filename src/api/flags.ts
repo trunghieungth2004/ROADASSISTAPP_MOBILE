@@ -91,6 +91,7 @@ export type SubmitFlagPayload = {
   note?: string;
   radiusMeters?: number;
   photoUrls?: string[];
+  ttlMinutes?: number;
 };
 
 export async function submitFlag(payload: SubmitFlagPayload, token: string): Promise<{id: string; status: string}> {

@@ -67,6 +67,8 @@ export type FeedTicket = DispatchTicket & {
   towerFix?: {lat: number; lng: number; at: string} | null;
   linkedTicketIds?: string[];
   canConfirmCash?: boolean;
+  mobileTowOffer?: {status: string; shopId: string; destinationShopId: string | null; by: string; at: string} | null;
+  returnTowOffer?: {status: string; shopId: string; by: string; at: string} | null;
 };
 
 export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as const;
@@ -344,6 +346,30 @@ export async function sendQuote(ticketId: string, quotedAmount: number, workType
 
 export async function approveFinalQuote(ticketId: string, token: string): Promise<{approved: boolean}> {
   const res = await api.post<{approved: boolean}>("/dispatch/quote/approve", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function offerMobileShopTow(ticketId: string, destinationShopId: string | undefined, token: string): Promise<{offered: boolean}> {
+  const res = await api.post<{offered: boolean}>("/dispatch/mobile-shop/tow-offer", {ticketId, ...(destinationShopId ? {destinationShopId} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function respondMobileShopTow(ticketId: string, accept: boolean, token: string, destinationPoint?: {lat: number; lng: number; label?: string}): Promise<{accepted: boolean; ticketId?: string}> {
+  const res = await api.post<{accepted: boolean; ticketId?: string}>("/dispatch/mobile-shop/tow-offer/respond", {ticketId, accept, ...(destinationPoint ? {destinationPoint} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function respondReturnTow(ticketId: string, accept: boolean, token: string, destinationPoint?: {lat: number; lng: number; label?: string}): Promise<{accepted: boolean; ticketId?: string}> {
+  const res = await api.post<{accepted: boolean; ticketId?: string}>("/dispatch/walk-in/return-tow", {ticketId, accept, ...(destinationPoint ? {destinationPoint} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function setMobileShopFix(ticketId: string, fixAmount: number, token: string): Promise<{updated: number}> {
+  const res = await api.post<{updated: number}>("/dispatch/mobile-shop/fix", {ticketId, fixAmount}, token);
   bustTicketCaches(token);
   return res;
 }

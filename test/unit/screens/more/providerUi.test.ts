@@ -26,18 +26,20 @@ test("switch is only enabled for live providers", () => {
 });
 
 test("cta visibility is per kind, not per list", () => {
-  expect(missingKinds([])).toEqual({shop: true, tow: true});
-  expect(missingKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: false, tow: true});
-  expect(missingKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: true, tow: true});
-  expect(missingKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: true, tow: false});
-  expect(missingKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: true, tow: true});
-  expect(missingKinds([{kind: "SHOP", status: "PENDING"}])).toEqual({shop: false, tow: true});
+  expect(missingKinds([])).toEqual({shop: true, tow: true, mobileShop: true});
+  expect(missingKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: false, tow: true, mobileShop: true});
+  expect(missingKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: true, tow: true, mobileShop: true});
+  expect(missingKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: true, tow: false, mobileShop: true});
+  expect(missingKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: true, tow: true, mobileShop: true});
+  expect(missingKinds([{kind: "SHOP", status: "PENDING"}])).toEqual({shop: false, tow: true, mobileShop: true});
+  expect(missingKinds([{kind: "MOBILE_SHOP", status: "PENDING"}])).toEqual({shop: true, tow: true, mobileShop: false});
 });
 
 test("operated kinds ignore denied records", () => {
-  expect(operatedKinds([])).toEqual({shop: false, tow: false});
-  expect(operatedKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: true, tow: false});
-  expect(operatedKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: false, tow: false});
-  expect(operatedKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: false, tow: true});
-  expect(operatedKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: false, tow: false});
+  expect(operatedKinds([])).toEqual({shop: false, tow: false, mobileShop: false});
+  expect(operatedKinds([{kind: "SHOP", status: "ACTIVE"}])).toEqual({shop: true, tow: false, mobileShop: false});
+  expect(operatedKinds([{kind: "SHOP", status: "DENIED"}])).toEqual({shop: false, tow: false, mobileShop: false});
+  expect(operatedKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: false, tow: true, mobileShop: false});
+  expect(operatedKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: false, tow: false, mobileShop: false});
+  expect(operatedKinds([{kind: "MOBILE_SHOP", status: "ACTIVE"}])).toEqual({shop: false, tow: false, mobileShop: true});
 });

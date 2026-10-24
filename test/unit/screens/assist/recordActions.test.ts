@@ -77,6 +77,8 @@ test("unfixable runs from live shop states", () => {
   for (const s of ["2", "3", "6", "9", "10", "11"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(true);
   for (const s of ["1", "4", "7", "8", "12", "15"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(false);
   expect(canMarkUnfixable("TOW", "3")).toBe(false);
+  expect(canMarkUnfixable("SOS", "2")).toBe(true);
+  expect(canMarkUnfixable("SOS", "3")).toBe(true);
   expect(canMarkUnfixable("SOS", "6")).toBe(false);
 });
 

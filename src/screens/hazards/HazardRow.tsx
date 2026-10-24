@@ -59,9 +59,6 @@ export default function HazardRow(props: Props) {
         <View style={styles.main}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, {color: theme.text}]}>{flagTypeLabel(flag.type, t)}</Text>
-            <View style={[styles.chip, {backgroundColor: flagStatusColor(flag.status)}]}>
-              <Text style={styles.chipText}>{flagStatusLabel(flag.status, t)}</Text>
-            </View>
           </View>
           <Text style={[styles.meta, {color: theme.muted}]}>
             {flag.reporterHandle ? `${flag.reporterHandle} · ` : ""}
@@ -84,9 +81,14 @@ export default function HazardRow(props: Props) {
           ) : null}
         </View>
       </Pressable>
-      <Fab theme={theme} size={44} hitSlop={6} label={t.hazards.centerPin} onPress={() => props.onCenter(flag)}>
-        <MaterialIcons name="my-location" size={20} color={theme.primary} />
-      </Fab>
+      <View style={styles.trailing}>
+        <View style={[styles.chip, {backgroundColor: flagStatusColor(flag.status)}]}>
+          <Text style={styles.chipText}>{flagStatusLabel(flag.status, t)}</Text>
+        </View>
+        <Fab theme={theme} size={44} hitSlop={6} label={t.hazards.centerPin} onPress={() => props.onCenter(flag)}>
+          <MaterialIcons name="my-location" size={20} color={theme.primary} />
+        </Fab>
+      </View>
     </View>
   );
 }
@@ -98,6 +100,7 @@ const styles = StyleSheet.create({
   main: {flex: 1, minWidth: 0, gap: 2},
   titleRow: {flexDirection: "row", alignItems: "center", gap: 8},
   title: {fontSize: 15, fontWeight: "700"},
+  trailing: {alignItems: "flex-end", gap: 6},
   chip: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
   chipText: {color: "#fff", fontSize: 11, fontWeight: "700"},
   meta: {fontSize: 12},

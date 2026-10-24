@@ -37,8 +37,10 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
   const volunteerOn = user?.volunteerAvailable === true;
   const towDuty = providers.filter((p) => p.kind === "TOW");
   const shopDuty = providers.filter((p) => p.kind === "SHOP");
+  const mobileDuty = providers.filter((p) => p.kind === "MOBILE_SHOP");
   const towOn = towDuty.some((p) => p.accepting !== false);
   const shopOn = shopDuty.some((p) => p.accepting !== false);
+  const mobileOn = mobileDuty.some((p) => p.accepting !== false);
   void tick;
   const towBeat = lastBeat("tower");
   const towFresh = towBeat !== null && Date.now() - towBeat < 15 * 60 * 1000;
@@ -62,24 +64,24 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
       setVolBusy(false);
     }
   }
-  async function onDutyToggle(kind: "TOW" | "SHOP", next: boolean): Promise<void> {
+  async function onDutyToggle(kind: "TOW" | "SHOP" | "MOBILE_SHOP", next: boolean): Promise<void> {
     if (!token || providerBusy) return;
     setProviderBusy(true);
     try {
       const targets = providers.filter((p) => p.kind === kind && switchEnabled(p, false));
       if (targets.length === 0) {
-        onNotice(kind === "TOW" ? t.more.dutyTowOff : t.more.dutyShopOff);
+        onNotice(kind === "TOW" ? t.more.dutyTowOff : kind === "MOBILE_SHOP" ? t.more.dutyMobileShopOff : t.more.dutyShopOff);
         return;
       }
       for (const target of targets) {
         await updateProvider({providerId: target.id, accepting: next}, token);
       }
       onProvidersChanged();
-      if (next && kind === "TOW") {
+      if (next && (kind === "TOW" || kind === "MOBILE_SHOP")) {
         const pos = await capturePosition();
         if (pos) {
           await pingProviderLocation(pos.lat, pos.lng, token);
-          markBeat("tower");
+          if (kind === "TOW") markBeat("tower");
         }
       }
       setTick((n) => n + 1);
@@ -90,7 +92,7 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
       setProviderBusy(false);
     }
   }
-  if (!isVolunteer && towDuty.length === 0 && shopDuty.length === 0) return null;
+  if (!isVolunteer && towDuty.length === 0 && shopDuty.length === 0 && mobileDuty.length === 0) return null;
   return (
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
       {isVolunteer ? (
@@ -119,7 +121,19 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
           <View pointerEvents="none"><Switch value={towOn} onValueChange={(v) => void onDutyToggle("TOW", v)} disabled={providerBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View>
         </Pressable>
       ) : null}
-      {(isVolunteer || towDuty.length > 0) && shopDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
+      {(isVolunteer || towDuty.length > 0) && mobileDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
+      {mobileDuty.length > 0 ? (
+        <Pressable style={styles.listRow} onPress={() => void onDutyToggle("MOBILE_SHOP", !mobileOn)} accessibilityRole="switch" accessibilityState={{checked: mobileOn}} accessibilityLabel={t.more.dutyMobileShop}>
+          <MaterialIcons name="build" size={20} color={theme.primary} />
+          <View style={styles.permText}>
+            <Text style={[styles.listText, {color: theme.text}]}>{t.more.dutyMobileShop}</Text>
+            <Text style={[styles.permHint, {color: theme.muted}]}>{mobileOn ? t.more.dutyMobileShopOn : t.more.dutyMobileShopOff}</Text>
+          </View>
+          <View style={[styles.permPill, {backgroundColor: mobileOn ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{mobileOn ? t.more.permOn : t.more.permOff}</Text></View>
+          <View pointerEvents="none"><Switch value={mobileOn} onValueChange={(v) => void onDutyToggle("MOBILE_SHOP", v)} disabled={providerBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View>
+        </Pressable>
+      ) : null}
+      {(isVolunteer || towDuty.length > 0 || mobileDuty.length > 0) && shopDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
       {shopDuty.length > 0 ? (
         <Pressable style={styles.listRow} onPress={() => void onDutyToggle("SHOP", !shopOn)} accessibilityRole="switch" accessibilityState={{checked: shopOn}} accessibilityLabel={t.more.dutyShop}>
           <MaterialIcons name="storefront" size={20} color={theme.primary} />

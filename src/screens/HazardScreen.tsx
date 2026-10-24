@@ -32,6 +32,7 @@ import HazardRow from "./hazards/HazardRow";
 import {filterFlags, HAZARD_FILTERS, type HazardFilter} from "./hazards/hazardFilter";
 import {useMyFlags} from "./hazards/useMyFlags";
 import {useNearbyFlags} from "./hazards/useNearbyFlags";
+import ChatSheet from "./assist/ChatSheet";
 
 export default function HazardScreen() {
   const {t, lang} = useStrings();
@@ -44,6 +45,7 @@ export default function HazardScreen() {
   const [showMap, setShowMap] = useState(false);
   const [filter, setFilter] = useState<HazardFilter>("ALL");
   const [selected, setSelected] = useState<Flag | null>(null);
+  const [chatFlag, setChatFlag] = useState<Flag | null>(null);
   const [focus, setFocus] = useState<{lat: number; lng: number; n: number} | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
   const [pos, setPos] = useState<{lat: number; lng: number} | null>(null);
@@ -317,8 +319,20 @@ export default function HazardScreen() {
             t={t}
             flag={selected}
             isOwn={uid != null && selected.reporterId === uid}
+            onChat={(flag) => setChatFlag(flag)}
           />
         </Overlay>
+      ) : null}
+      {chatFlag && token ? (
+        <ChatSheet
+          t={t}
+          token={token}
+          uid={uid}
+          scope="HAZARD"
+          refId={chatFlag.id}
+          title={flagTypeLabel(chatFlag.type, t)}
+          onClose={() => setChatFlag(null)}
+        />
       ) : null}
     </ScreenContainer>
   );

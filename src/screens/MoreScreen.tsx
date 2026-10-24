@@ -95,6 +95,7 @@ export default function MoreScreen() {
                 {[...new Set(services.filter((s) => s !== "RIDER" && s !== "SHOP" && s !== "TOW"))].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
                 {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
                 {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
+                {operated.mobileShop ? (<View key="MOBILE_SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("MOBILE_SHOP", t)}</Text></View>) : null}
               </View>
             </View>
           </View>

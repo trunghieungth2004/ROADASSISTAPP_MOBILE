@@ -178,11 +178,13 @@ test("add tile disappears at the three-photo cap", async () => {
   const draft: FlagDraftState = {
     type: "FLOOD",
     radiusMeters: 50,
+    ttlMinutes: 120,
     note: "",
     photoUris: ["a.jpg", "b.jpg", "c.jpg"],
     photoError: null,
     setType: () => undefined,
     setRadiusMeters: () => undefined,
+    setTtlMinutes: () => undefined,
     setNote: () => undefined,
     addPhoto: async () => undefined,
     removePhoto: () => undefined,

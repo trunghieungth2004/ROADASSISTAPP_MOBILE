@@ -26,7 +26,7 @@ export default function ProvidersScreen() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerBusy, setProviderBusy] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
-  const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | null>(null);
+  const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | "MOBILE_SHOP" | null>(null);
   const [providerEdit, setProviderEdit] = useState<Provider | null>(null);
   const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
@@ -62,8 +62,14 @@ export default function ProvidersScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
         <View style={styles.header}>
           <Text style={[styles.title, {color: theme.text}]}>{t.provider.title}</Text>
-          {missing.shop || missing.tow ? (
+          {missing.shop || missing.tow || missing.mobileShop ? (
             <View style={styles.headerBtns}>
+              {missing.mobileShop ? (
+                <Pressable style={[styles.addBtn, {backgroundColor: theme.primary}]} onPress={() => setProviderCreate("MOBILE_SHOP")} accessibilityRole="button" accessibilityLabel={t.provider.addMobileShop}>
+                  <MaterialIcons name="build" size={20} color="#fff" />
+                  <Text style={styles.addBtnText}>{t.provider.addMobileShop}</Text>
+                </Pressable>
+              ) : null}
               {missing.shop ? (
                 <Pressable style={[styles.addBtn, {backgroundColor: theme.primary}]} onPress={() => setProviderCreate("SHOP")} accessibilityRole="button" accessibilityLabel={t.provider.addShop}>
                   <MaterialIcons name="add" size={20} color="#fff" />
@@ -93,7 +99,7 @@ export default function ProvidersScreen() {
               <View key={provider.id}>
                 {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
                 <View style={styles.listRow}>
-                  <MaterialIcons name={provider.kind === "TOW" ? "local-shipping" : "storefront"} size={20} color={theme.primary} />
+                  <MaterialIcons name={provider.kind === "TOW" ? "local-shipping" : provider.kind === "MOBILE_SHOP" ? "build" : "storefront"} size={20} color={theme.primary} />
                   <Pressable style={styles.permText} onPress={() => setProviderEdit(provider)} accessibilityRole="button" accessibilityLabel={`${provider.name}, ${pill.label}`}>
                     <Text style={[styles.listText, {color: theme.text}]}>{provider.name}</Text>
                     <Text style={[styles.permHint, {color: theme.muted}]}>{providerRowSubtitle(provider, t)}</Text>
@@ -119,7 +125,7 @@ export default function ProvidersScreen() {
           <ProviderFormDialog t={t} token={token} kind={providerCreate} provider={null} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); }} onSaved={() => { setProviderCreate(null); setNotice(t.provider.saved); void loadProviders(); }} />
         ) : null}
         {providerEdit ? (
-          <ProviderFormDialog t={t} token={token} kind={providerEdit.kind === "TOW" ? "TOW" : "SHOP"} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />
+          <ProviderFormDialog t={t} token={token} kind={providerEdit.kind} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />
         ) : null}
       </ScrollView>
       {providerError ? (

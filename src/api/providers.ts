@@ -1,7 +1,7 @@
 import {api} from "./client";
 import {CACHE_TTL_MS, cacheClear, cacheDel, withCache} from "../services/cache";
 
-export type ProviderKind = "SHOP" | "TOW";
+export type ProviderKind = "SHOP" | "TOW" | "MOBILE_SHOP";
 export type ProviderStatus = "ACTIVE" | "PENDING" | "DENIED";
 
 export type Provider = {
@@ -20,6 +20,8 @@ export type Provider = {
   vehicleType?: string | null;
   vehicleWidth?: number | null;
   serviceFee?: number | null;
+  licenseNumber?: string | null;
+  licensePhotoUrl?: string | null;
   towBaseFee?: number | null;
   towPerKmFee?: number | null;
   status: ProviderStatus;
@@ -133,7 +135,18 @@ export type CreateTowProviderPayload = {
   towPerKmFee?: number;
 };
 
-export async function createProvider(payload: CreateShopProviderPayload | CreateTowProviderPayload, token: string): Promise<Provider> {
+export type CreateMobileShopProviderPayload = {
+  kind: "MOBILE_SHOP";
+  name: string;
+  lat: number;
+  lng: number;
+  label?: string;
+  vehicleClasses: string[];
+  licenseNumber: string;
+  licensePhotoUrl?: string;
+};
+
+export async function createProvider(payload: CreateShopProviderPayload | CreateTowProviderPayload | CreateMobileShopProviderPayload, token: string): Promise<Provider> {
   const created = await api.post<Provider>("/providers", payload, token);
   cacheDel(`providersMine:${token}`);
   cacheClear(`providersNear:${token}:`);
@@ -152,6 +165,8 @@ export type UpdateProviderPayload = {
   vehicleType?: string;
   vehicleWidth?: number;
   serviceFee?: number;
+  licenseNumber?: string;
+  licensePhotoUrl?: string | null;
   towBaseFee?: number;
   towPerKmFee?: number;
   accepting?: boolean;

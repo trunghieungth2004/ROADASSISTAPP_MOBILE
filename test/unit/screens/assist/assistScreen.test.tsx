@@ -2059,7 +2059,7 @@ test("volunteer record accept posts without a shop", async () => {
       await flush();
     });
     await tapTab(renderer, en.assist.sectionTow);
-    const row2 = texts(renderer.root, "Tow · Pending").find((n) => typeof n.props?.onPress === "function");
+    const row2 = renderer.root.findAll((n) => typeof n.props?.onPress === "function" && n.props?.accessibilityLabel === "Tow · Pending").pop();
     await act(async () => {
       await row2?.props.onPress();
       await flush(12);
