@@ -7,6 +7,15 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-30
+
+### Fixed
+
+- The hazard-placement hint no longer blocks map taps or makes the Route
+  screen appear frozen.
+- Route-context hints stay inline so the map remains interactive while the
+  rider places a report.
+
 ## [0.2.0] - 2026-10-30
 
 ### Added
