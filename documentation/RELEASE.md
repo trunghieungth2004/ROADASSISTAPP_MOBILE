@@ -97,9 +97,10 @@ breaks updates without a compile error anywhere.
 
 ### Current rollout
 
-`v0.1.2` is the current published build. `v0.2.0` is the next release and the
-first one to use curated release notes plus explicit Latest marking. Install
-it over `v0.1.2` with the same signing key to verify the in-app updater path.
+`v0.2.1` is the current published build. `v0.2.0` introduced curated release
+notes and explicit Latest marking; `v0.2.1` fixes the Route hazard-placement
+hint that blocked map taps. Install `v0.2.1` over `v0.2.0` with the same
+signing key to verify the in-app updater path.
 
 ### Verify a published release
 
