@@ -2,7 +2,8 @@ import type {RefObject} from "react";
 import {useMemo} from "react";
 import {StyleSheet} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
-import {Camera, Images, Map, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
 import StyledLayer from "../../components/map/StyledLayer";
 import {requireMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
@@ -47,7 +48,7 @@ export default function NavMapView(props: Props) {
   const b = coords.length > 0 ? coords[coords.length - 1] : null;
   return (
     <>
-    <Map
+    <MapSurface
       style={StyleSheet.absoluteFill}
       mapStyle={mapStyle}
       logo={false}
@@ -99,7 +100,7 @@ export default function NavMapView(props: Props) {
         </GeoJSONSource>
       ) : null}
         <NavFlags pos={props.flagsPos} token={props.flagsToken} refreshKey={props.flagsKey} forceKey={props.flagsForceKey} seedFlags={props.flagsSeeds} uid={props.flagsUid} votedIds={props.flagsVoted} deniedIds={props.flagsDenied} suppressAuto={props.flagsSuppressAuto} arrived={props.flagsArrived} onPick={props.onPickFlag} onAutoFlag={props.onAutoFlag} />
-    </Map>
+    </MapSurface>
     <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
     </>
   );

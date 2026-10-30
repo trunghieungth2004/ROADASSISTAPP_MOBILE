@@ -1,7 +1,8 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useEffect, useMemo, useRef} from "react";
 import {StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
-import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
 import {safeCameraCall} from "../../components/map/safeCamera";
 import {requireMapStyle} from "../../map/style";
 import type {Flag} from "../../api/flags";
@@ -56,7 +57,7 @@ export default function HazardMapView(props: Props) {
   const initial: [number, number] = props.flags.length > 0 ? [props.flags[0]?.lng ?? HCMC_CENTER[0], props.flags[0]?.lat ?? HCMC_CENTER[1]] : HCMC_CENTER;
   return (
     <View style={styles.clip}>
-      <Map
+      <MapSurface
         style={StyleSheet.absoluteFill}
         mapStyle={mapStyle}
         logo={false}
@@ -67,7 +68,7 @@ export default function HazardMapView(props: Props) {
         <Camera ref={cameraRef} initialViewState={{center: initial, zoom: 12}} />
         <FlagPinImages />
         <FlagMapLayers flags={props.flags} onPick={props.onPickFlag} />
-      </Map>
+      </MapSurface>
       <MapStyleVeil visible={veiled} backgroundColor={veilBackground} />
     </View>
   );

@@ -3,7 +3,8 @@ import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {Camera, GeoJSONSource, Images, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, GeoJSONSource, Images, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
 import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import type {RouteOption} from "../../api/routes";
@@ -57,7 +58,7 @@ export default function TowRoutePreview({t, summary, route, origin, pickup, dest
         <Text style={[styles.title, {color: theme.text}]}>{t.assist.towRoutePreview}</Text>
       </View>
       <View style={styles.mapWrap}>
-        <Map
+        <MapSurface
           style={StyleSheet.absoluteFill}
           mapStyle={mapStyle}
           logo={false}
@@ -93,7 +94,7 @@ export default function TowRoutePreview({t, summary, route, origin, pickup, dest
               <StyledLayer type="symbol" id="tow-preview-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
             </GeoJSONSource>
           ) : null}
-        </Map>
+        </MapSurface>
         <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
       </View>
       <View style={[styles.footer, {paddingBottom: insets.bottom + 12}]}>

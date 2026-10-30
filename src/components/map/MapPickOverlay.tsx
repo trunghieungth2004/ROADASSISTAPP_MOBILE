@@ -3,7 +3,8 @@ import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {Camera, Map, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "./MapSurface";
 import {safeCameraCall} from "./safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {formatPoint, reverseLabel} from "../../api/places";
@@ -80,7 +81,7 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
       </View>
       {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}
       <View style={styles.mapWrap}>
-        <Map
+        <MapSurface
           style={StyleSheet.absoluteFill}
           mapStyle={mapStyle}
           logo={false}
@@ -93,7 +94,7 @@ export default function MapPickOverlay({t, lang, title, initial, onPick, onClose
           onDidFinishLoadingStyle={onStyleLoaded}
         >
           <Camera ref={cameraRef} initialViewState={{center, zoom: 15}} />
-        </Map>
+        </MapSurface>
         <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
         <View style={styles.crosshair} pointerEvents="none">
           <MaterialIcons name="place" size={40} color={theme.primary} />

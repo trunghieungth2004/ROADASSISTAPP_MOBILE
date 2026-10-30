@@ -27,7 +27,7 @@ async function renderMap(status: string, withDest: boolean, route: boolean, rout
           selectedShop={null}
           pillTextForShop={() => null}
           walkRoute={null}
-          jobLayers={{tower, pickup, dest: withDest ? dest : null, status, route: route ? {source: "test", geometry: {type: "LineString", coordinates: routeCoords}} : null}}
+          jobLayers={{provider: tower, providerKind: "tow", pickup, showPickup: true, dest: withDest ? dest : null, status, route: route ? {source: "test", geometry: {type: "LineString", coordinates: routeCoords}} : null}}
           onMapReady={() => undefined}
         />
       </SafeAreaProvider>,
@@ -44,9 +44,9 @@ function sourceById(renderer: ReturnType<typeof create>, id: string) {
 test("tower pin uses the tower icon", async () => {
   const renderer = await renderMap("2", true, false);
   try {
-    const towerSources = sourceById(renderer, "tow-job-tower");
+    const towerSources = sourceById(renderer, "job-provider");
     expect(towerSources.length).toBeGreaterThan(0);
-    const symbols = towerSources[0]?.findAll((n) => n.props?.id === "tow-job-tower-icon") ?? [];
+    const symbols = towerSources[0]?.findAll((n) => n.props?.id === "job-provider-icon") ?? [];
     expect(symbols.length).toBeGreaterThan(0);
     expect(JSON.stringify(symbols[0]?.props?.style)).toContain("tower-dot");
   } finally {
@@ -83,7 +83,7 @@ test("arrived without a destination draws no connector", async () => {
   try {
     expect(sourceById(renderer, "tow-job-line").length).toBe(0);
     expect(sourceById(renderer, "tow-job-dest").length).toBe(0);
-    expect(sourceById(renderer, "tow-job-pickup").length).toBeGreaterThan(0);
+    expect(sourceById(renderer, "job-pickup").length).toBeGreaterThan(0);
   } finally {
     renderer.unmount();
   }
@@ -105,6 +105,37 @@ test("no route keeps the straight connector", async () => {
   try {
     expect(sourceById(renderer, "tow-job-route").length).toBe(0);
     expect(sourceById(renderer, "tow-job-line").length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("mobile shop uses its own marker and hides the pickup at the rider", async () => {
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <AssistMapView
+          theme={lightTheme}
+          cameraRef={{current: null}}
+          gps={pickup}
+          dest={null}
+          selectedShop={null}
+          pillTextForShop={() => null}
+          walkRoute={null}
+          jobLayers={{provider: pickup, providerKind: "mobileShop", pickup, showPickup: false, dest: null, status: "2", route: null}}
+          onMapReady={() => undefined}
+        />
+      </SafeAreaProvider>,
+    );
+  });
+  if (!renderer) throw new Error("render failed");
+  try {
+    expect(sourceById(renderer, "job-mobile-shop").length).toBeGreaterThan(0);
+    expect(sourceById(renderer, "job-provider").length).toBe(0);
+    expect(sourceById(renderer, "job-pickup").length).toBe(0);
+    const icons = renderer.root.findAll((n) => n.props?.name === "build");
+    expect(icons.length).toBeGreaterThan(0);
   } finally {
     renderer.unmount();
   }

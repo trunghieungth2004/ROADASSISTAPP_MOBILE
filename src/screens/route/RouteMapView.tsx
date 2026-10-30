@@ -1,11 +1,12 @@
 import type {RefObject} from "react";
-import {useEffect, useMemo, useRef, useState, type MutableRefObject} from "react";
+import {useEffect, useMemo, useRef, type MutableRefObject} from "react";
 import {Pressable, ScrollView, StyleSheet, View, type PanResponderInstance} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../../components/ui/AppText";
-import {Camera, Images, Map, Marker, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, Images, Marker, GeoJSONSource, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
 import StyledLayer from "../../components/map/StyledLayer";
 import {requireMapStyle} from "../../map/style";
 import FlagPinImages from "../../components/flags/MapPinImages";
@@ -74,7 +75,7 @@ export default function RouteMapView(props: Props) {
           if (e.nativeEvent.touches.length > 1) touchRef.current = {stamp: Date.now()};
         }}
       >
-      <Map style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => { props.onMapReady(); onStyleLoaded(); }}>
+      <MapSurface style={StyleSheet.absoluteFill} mapStyle={mapStyle} logo={false} attribution={false} androidView="texture" onPress={(e: unknown) => guardedPress(e)} onRegionIsChanging={(e: unknown) => props.onRegionChange(e)} onRegionDidChange={(e: unknown) => props.onRegionDid(e)} onDidFinishLoadingStyle={() => { props.onMapReady(); onStyleLoaded(); }}>
         <Camera ref={props.cameraRef} initialViewState={{center: HCMC_CENTER, zoom: 13}} />
         <Images images={{
           "a-dot": require("../../../assets/map/route/a-dot.png"),
@@ -134,7 +135,7 @@ export default function RouteMapView(props: Props) {
           </Marker>
         ) : null}
         <RouteFlags camRef={props.flagCamRef} token={props.flagsToken} refreshKey={props.flagsKey} onPick={props.onPickFlag} subscribeRegionDid={props.subscribeRegionDid} />
-      </Map>
+      </MapSurface>
         <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
       </View>
       {props.routes.length >= 1 ? (

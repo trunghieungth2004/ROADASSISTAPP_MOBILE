@@ -3,7 +3,8 @@ import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDim
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
-import {Camera, GeoJSONSource, Images, Map, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, GeoJSONSource, Images, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
 import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {nearProviders, providerRatings, type Provider, type ProviderRating} from "../../api/providers";
@@ -144,7 +145,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
       </Pressable>
       {error ? <Text style={[styles.note, {color: theme.danger}]}>{error}</Text> : null}
       <View style={styles.mapWrap}>
-        <Map
+        <MapSurface
           style={StyleSheet.absoluteFill}
           mapStyle={mapStyle}
           logo={false}
@@ -194,7 +195,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
               </Marker>
             );
           })}
-        </Map>
+        </MapSurface>
         <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
         {loading ? (
           <View style={styles.loading} pointerEvents="none">

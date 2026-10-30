@@ -1,12 +1,14 @@
 import {StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
-import {Camera, GeoJSONSource, Images, Map, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
+import {Camera, GeoJSONSource, Images, Marker, type CameraRef} from "@maplibre/maplibre-react-native";
+import MapSurface from "../../components/map/MapSurface";
+import {MaterialIcons} from "@expo/vector-icons";
 import type {RefObject} from "react";
 import {useMemo} from "react";
 import StyledLayer from "../../components/map/StyledLayer";
 import {requireMapStyle} from "../../map/style";
 import type {AppTheme} from "../../theme";
-import type {DispatchTicket} from "../../api/dispatch";
+
 import type {Provider} from "../../api/providers";
 import type {RouteOption} from "../../api/routes";
 import {HCMC_CENTER, type Point} from "../route/types";
@@ -23,7 +25,7 @@ type Props = {
   selectedShop: Provider | null;
   pillTextForShop: (shop: Provider) => string | null;
   walkRoute: RouteOption | null;
-  jobLayers: {tower: Point | null; pickup: Point; dest: Point | null; status: string; route: RouteOption | null} | null;
+  jobLayers: {provider: Point | null; providerKind: "tow" | "mobileShop"; pickup: Point; showPickup: boolean; dest: Point | null; status: string; route: RouteOption | null} | null;
   onMapReady: () => void;
 };
 
@@ -34,7 +36,7 @@ export default function AssistMapView(props: Props) {
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Map
+      <MapSurface
         style={StyleSheet.absoluteFill}
         mapStyle={mapStyle}
         logo={false}
@@ -66,14 +68,25 @@ export default function AssistMapView(props: Props) {
             <StyledLayer type="symbol" id="assist-dest-icon" style={{iconImage: "b-dot", iconSize: 0.33, iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.jobLayers && props.jobLayers.tower ? (
-          <GeoJSONSource id="tow-job-tower" data={pointFeature(props.jobLayers.tower.lng, props.jobLayers.tower.lat)}>
-            <StyledLayer type="symbol" id="tow-job-tower-icon" style={{iconImage: "tower-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+        {props.jobLayers?.provider && props.jobLayers.providerKind === "tow" ? (
+          <GeoJSONSource id="job-provider" data={pointFeature(props.jobLayers.provider.lng, props.jobLayers.provider.lat)}>
+            <StyledLayer type="symbol" id="job-provider-icon" style={{iconImage: "tower-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
-        {props.jobLayers ? (
-          <GeoJSONSource id="tow-job-pickup" data={pointFeature(props.jobLayers.pickup.lng, props.jobLayers.pickup.lat)}>
-            <StyledLayer type="symbol" id="tow-job-pickup-icon" style={{iconImage: "ticket-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
+        {props.jobLayers?.provider && props.jobLayers.providerKind === "mobileShop" ? (
+          <Marker
+            id="job-mobile-shop"
+            lngLat={[props.jobLayers.provider.lng, props.jobLayers.provider.lat]}
+            anchor="center"
+          >
+            <View style={[styles.providerBadge, {backgroundColor: theme.primary, borderColor: theme.paper}]}>
+              <MaterialIcons name="build" size={18} color="#fff" />
+            </View>
+          </Marker>
+        ) : null}
+        {props.jobLayers && props.jobLayers.showPickup ? (
+          <GeoJSONSource id="job-pickup" data={pointFeature(props.jobLayers.pickup.lng, props.jobLayers.pickup.lat)}>
+            <StyledLayer type="symbol" id="job-pickup-icon" style={{iconImage: "ticket-dot", iconSize: 0.33, iconAnchor: "center", iconAllowOverlap: true, iconIgnorePlacement: true}} />
           </GeoJSONSource>
         ) : null}
         {props.jobLayers && props.jobLayers.dest ? (
@@ -83,13 +96,14 @@ export default function AssistMapView(props: Props) {
         ) : null}
         {(() => {
           const layers = props.jobLayers;
-          if (!layers || !layers.tower || layers.route) return null;
+          if (!layers || !layers.provider || layers.route) return null;
+          if (layers.providerKind !== "tow") return null;
           const far = layers.status === "3" ? layers.dest : layers.pickup;
           if (!far) return null;
           return (
           <GeoJSONSource
             id="tow-job-line"
-            data={{type: "Feature", geometry: {type: "LineString", coordinates: [[layers.tower.lng, layers.tower.lat], [far.lng, far.lat]]}, properties: {}}}
+            data={{type: "Feature", geometry: {type: "LineString", coordinates: [[layers.provider.lng, layers.provider.lat], [far.lng, far.lat]]}, properties: {}}}
           >
             <StyledLayer type="line" id="tow-job-line-line" beforeId="Ferry labels" style={{lineColor: theme.primary, lineWidth: 3, lineOpacity: 0.6, lineCap: "round", lineJoin: "round"}} />
           </GeoJSONSource>
@@ -132,8 +146,19 @@ export default function AssistMapView(props: Props) {
           })()}
           </>
         ) : null}
-      </Map>
+      </MapSurface>
       <MapStyleVeil visible={veiled} backgroundColor={theme.background} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  providerBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

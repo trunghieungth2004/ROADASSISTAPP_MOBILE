@@ -1,4 +1,4 @@
-import type {CameraRef} from "@maplibre/maplibre-react-native";
+
 
 export function safeCameraCall(call: () => void | Promise<void>): void {
   try {
