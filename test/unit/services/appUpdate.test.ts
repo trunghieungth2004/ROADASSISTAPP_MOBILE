@@ -1,17 +1,7 @@
 import {expect, jest, test, beforeEach, afterEach} from "@jest/globals";
 import {Platform} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  downloadAndInstall,
-  fetchLatestRelease,
-  installedVersion,
-  isAutoCheckEnabled,
-  isNewer,
-  parseVersionTag,
-  setAutoCheckEnabled,
-  shouldOfferUpdate,
-  skipRelease,
-} from "../../../src/services/appUpdate";
+import {downloadAndInstall, fetchLatestRelease, installedVersion, isAutoCheckEnabled, isNewer, parseVersionTag, setAutoCheckEnabled, shouldOfferUpdate, skipRelease} from "../../../src/services/appUpdate";
 
 const mockDownload = {exists: true, size: 1024};
 
