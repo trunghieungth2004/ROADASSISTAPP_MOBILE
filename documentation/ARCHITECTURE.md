@@ -76,6 +76,12 @@ capped at `MAX_STOPS`). Sub-8px releases disarm without committing.
 `requestRoute` is sequence-guarded; camera `fitBounds` runs only on explicit
 search actions (Find/pick/swap), never on drag reroutes.
 
+Route-context hints — flag placement, marker drag, and paused alerts — render
+as inline snacks (`modal={false}`). They must not use the modal snack path: a
+transparent full-screen modal blocks the map underneath, so the placement tap
+never arrives and the screen looks frozen. Transient errors and confirmations
+keep the modal path so they can appear above open sheets.
+
 Same-place trips never reach the network: when origin and destination are
 within 15 m and no stops are set, `requestRoute` shows `route.samePlace` and
 returns early (Start re-routes from live GPS and relies on the BE guard).

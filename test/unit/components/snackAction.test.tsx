@@ -48,6 +48,28 @@ test("plain snacks render through a modal above overlays", async () => {
   }
 });
 
+test("inline snacks skip the modal so map hints stay tappable", async () => {
+  const onHide = jest.fn();
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <Snack message="Tap the map" onHide={onHide} modal={false} sticky />,
+    );
+  });
+  if (!renderer) throw new Error("render failed");
+  try {
+    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+    expect(
+      renderer.root.findAll((n) => n.props?.pointerEvents === "box-none").length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAll((n) => n.props?.children === "Tap the map").length,
+    ).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("plain snacks auto hide without a press", async () => {
   jest.useFakeTimers();
   const onHide = jest.fn();

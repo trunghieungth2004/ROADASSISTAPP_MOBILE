@@ -223,6 +223,7 @@ export default function RouteScreen() {
                   : null
           }
           sticky
+          modal={false}
           bottom={snackBottom(insets.bottom)}
           action={pausedKey !== null && !drag.dragging && !(flagMode && !flagPoint) ? {label: t.assist.refresh, onPress: () => void onRefreshAlertsQuiet()} : undefined}
           onHide={() => {
