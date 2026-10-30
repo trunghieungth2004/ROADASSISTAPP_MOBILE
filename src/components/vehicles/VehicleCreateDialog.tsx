@@ -16,7 +16,7 @@ type Props = {
 };
 
 export default function VehicleCreateDialog({t, theme, token, onClose, onCreated}: Props) {
-  const [type, setType] = useState<VehicleType>("SCOOTER");
+  const [type, setType] = useState<VehicleType>("BIKE");
   const [width, setWidth] = useState("0.7");
   const [height, setHeight] = useState("1.1");
   const [busy, setBusy] = useState(false);

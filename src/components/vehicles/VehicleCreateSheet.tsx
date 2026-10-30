@@ -7,7 +7,7 @@ import type {Strings} from "../../i18n/en";
 import {vehicleIcon} from "../../screens/route/routeGeo";
 import {vehicleTypeName} from "./vehicleMeta";
 
-export const VEHICLE_TYPE_CHOICES: VehicleType[] = ["SCOOTER", "CUB", "MANUAL", "CAR", "VAN", "TRUCK"];
+export const VEHICLE_TYPE_CHOICES: VehicleType[] = ["BIKE", "CAR"];
 
 type Props = {
   t: Strings;

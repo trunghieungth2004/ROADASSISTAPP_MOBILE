@@ -83,7 +83,6 @@ export function providerRowSubtitle(provider: Provider, t: Strings): string {
 }
 
 export function serviceLabel(code: string, t: Strings): string {
-  if (code === "VOLUNTEER") return t.roles.mobileShop;
   if (code === "MOBILE_SHOP") return t.roles.mobileShop;
   if (code === "SHOP") return t.roles.shop;
   if (code === "TOW") return t.roles.tow;

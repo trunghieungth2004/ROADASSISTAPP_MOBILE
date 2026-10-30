@@ -4,10 +4,12 @@ import {createProvider, nearProviders, updateProvider, type Provider} from "../.
 import {toMessage} from "../../api/client";
 import type {Place} from "../place-search/PlaceSearch.types";
 import type {Strings} from "../../i18n/en";
+import type {MeVehicle} from "../../api/users";
 import {DOW, buildOpenHours, parseOpenHours, validateWeek, type WeekHours} from "../../screens/more/shopHours";
 import {isValidTowPlate, normalizeTowPlate, parseTowWidth} from "../../services/towPlates";
+import {normalizeVehicleType} from "../../api/vehicles";
 
-export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider: Provider | null, t: Strings) {
+export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider: Provider | null, t: Strings, vehicles: MeVehicle[] = []) {
   const [name, setName] = useState(provider?.name ?? "");
   const [point, setPoint] = useState<{lat: number; lng: number; label?: string} | null>(
     provider ? {lat: provider.lat, lng: provider.lng, label: typeof provider.label === "string" ? provider.label : undefined} : null,
@@ -17,13 +19,33 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
   );
   const [locTouched, setLocTouched] = useState(false);
   const [plate, setPlate] = useState(typeof provider?.plate === "string" ? provider.plate : "");
-  const [towType, setTowType] = useState(typeof provider?.vehicleType === "string" ? provider.vehicleType : "VAN");
+  const [towType, setTowType] = useState<string>(normalizeVehicleType(provider?.vehicleType) ?? "CAR");
   const [towWidth, setTowWidth] = useState(typeof provider?.vehicleWidth === "number" ? String(provider.vehicleWidth) : "");
   const [week, setWeek] = useState<WeekHours>(() => parseOpenHours(typeof provider?.openHours === "string" ? provider.openHours : null));
   const [vehicleClasses, setVehicleClasses] = useState<string[]>(() =>
     Array.isArray(provider?.vehicleClasses) && provider.vehicleClasses.length > 0 ? [...provider.vehicleClasses] : ["SOLO_BIKE", "CAR"],
   );
   const [licenseNumber, setLicenseNumber] = useState(typeof provider?.licenseNumber === "string" ? provider.licenseNumber : "");
+  const existingVehicles = vehicles.flatMap((vehicle) =>
+    (vehicle.providerLinks ?? [])
+      .filter((link) => {
+        if (kind === "SHOP" || !link.plate) return false;
+        if (link.kind === kind && link.status !== "DENIED") return false;
+        if (kind === "TOW") return link.vehicleType === "CAR";
+        return link.vehicleType === "BIKE" || link.vehicleType === "CAR";
+      })
+      .map((link) => ({
+        plate: link.plate as string,
+        vehicleType: link.vehicleType as string,
+        vehicleWidth: link.vehicleWidth,
+        label: link.name,
+      })),
+  );
+  function useExistingVehicle(vehicle: {plate: string; vehicleType: string; vehicleWidth: number | null}): void {
+    setPlate(vehicle.plate);
+    setTowType(vehicle.vehicleType);
+    setTowWidth(vehicle.vehicleWidth !== null ? String(vehicle.vehicleWidth) : "");
+  }
   const [shopSearch, setShopSearch] = useState(false);
   const [towSearch, setTowSearch] = useState(false);
   const [mapPick, setMapPick] = useState(false);
@@ -100,6 +122,10 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
         setError(t.provider.invalidLicense);
         return false;
       }
+      if (!isValidTowPlate(plate)) {
+        setError(t.provider.invalidPlate);
+        return false;
+      }
     } else {
       if (!isValidTowPlate(plate)) {
         setError(t.provider.invalidPlate);
@@ -125,7 +151,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           ...(locTouched && point && kind !== "TOW" ? {lat: point.lat, lng: point.lng, label: point.label ?? null} : {}),
           ...(locTouched && towPoint && kind === "TOW" ? {lat: towPoint.lat, lng: towPoint.lng} : {}),
           ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
-          ...(kind === "MOBILE_SHOP" ? {vehicleClasses, licenseNumber: licenseNumber.trim()} : {}),
+          ...(kind === "MOBILE_SHOP" ? {plate: normalizeTowPlate(plate), vehicleType: towType, licenseNumber: licenseNumber.trim()} : {}),
           ...(kind === "TOW" ? {plate: normalizeTowPlate(plate), vehicleType: towType, vehicleWidth: parseTowWidth(towWidth) ?? undefined} : {}),
         }, token);
       } else if (kind === "MOBILE_SHOP" && point) {
@@ -135,7 +161,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           lat: point.lat,
           lng: point.lng,
           ...(point.label ? {label: point.label} : {}),
-          vehicleClasses,
+          plate: normalizeTowPlate(plate),
+          vehicleType: towType,
           licenseNumber: licenseNumber.trim(),
         }, token);
       } else if (kind === "TOW" && towPoint) {
@@ -186,6 +213,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     toggleVehicleClass,
     licenseNumber,
     setLicenseNumber,
+    existingVehicles,
+    useExistingVehicle,
     shopSearch,
     setShopSearch,
     towSearch,

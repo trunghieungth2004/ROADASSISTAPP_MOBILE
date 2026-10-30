@@ -2,7 +2,7 @@ import type {DispatchTicket, FeedTicket} from "../../api/dispatch";
 
 export type TowRouteTicket = Pick<
   DispatchTicket,
-  "id" | "lat" | "lng" | "ticketType" | "vehicleType" | "vehicleWidth" | "destinationSnapshot" | "destinationPoint"
+  "id" | "lat" | "lng" | "ticketType" | "vehicleId" | "vehicleType" | "vehicleWidth" | "destinationSnapshot" | "destinationPoint"
 > & {
   direction?: FeedTicket["direction"];
   status?: string;

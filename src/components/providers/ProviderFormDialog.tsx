@@ -4,8 +4,10 @@ import {useProviderDraft} from "./useProviderDraft";
 import Overlay from "../overlay/Overlay";
 import MapPickOverlay from "../map/MapPickOverlay";
 import PlaceSearchScreen from "../../screens/PlaceSearchScreen";
+import {useEffect, useState} from "react";
 import {useAuth} from "../../context/AuthContext";
 import {useStrings} from "../../context/LanguageContext";
+import {fetchMeBundle, type MeVehicle} from "../../api/users";
 import {darkTheme, lightTheme} from "../../theme";
 import {useAppMode} from "../../context/ThemeContext";
 import type {Provider} from "../../api/providers";
@@ -23,9 +25,16 @@ type Props = {
 export default function ProviderFormDialog({t, token, kind, provider, onClose, onSaved}: Props) {
   const {lang} = useStrings();
   const {token: authToken} = useAuth();
+  const [vehicles, setVehicles] = useState<MeVehicle[]>([]);
+  useEffect(() => {
+    if (!token) return;
+    void fetchMeBundle(token)
+      .then((bundle) => setVehicles(bundle.vehicles))
+      .catch(() => undefined);
+  }, [token]);
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const draft = useProviderDraft(kind, provider, t);
+  const draft = useProviderDraft(kind, provider, t, vehicles);
   async function save(): Promise<void> {
     if (!token) return;
     if (await draft.submit(token)) onSaved();

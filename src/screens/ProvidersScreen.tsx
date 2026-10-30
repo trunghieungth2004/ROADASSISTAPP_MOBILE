@@ -13,8 +13,9 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {missingKinds, providerPill, providerRowSubtitle, switchEnabled} from "./more/providerUi";
-import {myProviders, updateProvider, type Provider} from "../api/providers";
+import {myProviders, revokeProvider, updateProvider, type Provider} from "../api/providers";
 import ProviderFormDialog from "../components/providers/ProviderFormDialog";
+import Overlay from "../components/overlay/Overlay";
 
 export default function ProvidersScreen() {
   const {t} = useStrings();
@@ -28,6 +29,9 @@ export default function ProvidersScreen() {
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | "MOBILE_SHOP" | null>(null);
   const [providerEdit, setProviderEdit] = useState<Provider | null>(null);
+  const [revokeFor, setRevokeFor] = useState<Provider | null>(null);
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
       setProviders([]);
@@ -54,6 +58,21 @@ export default function ProvidersScreen() {
       setProviderError(toMessage(err));
     } finally {
       setProviderBusy(false);
+    }
+  }
+  async function onRevoke(): Promise<void> {
+    if (!token || !revokeFor || revokeBusy) return;
+    setRevokeBusy(true);
+    setRevokeError(null);
+    try {
+      await revokeProvider(revokeFor.id, token);
+      setRevokeFor(null);
+      setNotice(t.provider.revoked);
+      await loadProviders();
+    } catch (err) {
+      setRevokeError(toMessage(err));
+    } finally {
+      setRevokeBusy(false);
     }
   }
   const missing = missingKinds(providers);
@@ -90,11 +109,22 @@ export default function ProvidersScreen() {
             const pill = providerPill(provider, t);
             const pillBg = pill.tone === "on" ? theme.primary : pill.tone === "alert" ? theme.danger : theme.divider;
             const pillFg = pill.tone === "off" ? theme.text : "#fff";
+            const towLinked = provider.kind === "MOBILE_SHOP" &&
+              providers.some((item) =>
+                item.kind === "TOW" &&
+                item.status === "ACTIVE" &&
+                typeof item.vehicleProfileId === "string" &&
+                item.vehicleProfileId !== "" &&
+                item.vehicleProfileId === provider.vehicleProfileId);
             const note = provider.suspended === true && typeof provider.suspendedReason === "string" && provider.suspendedReason ?
               provider.suspendedReason :
               provider.status === "DENIED" && typeof provider.reviewNote === "string" && provider.reviewNote ?
                 provider.reviewNote :
-                null;
+                provider.kind === "MOBILE_SHOP" && !towLinked ?
+                  provider.vehicleType === "BIKE" ?
+                    t.provider.towBikeUnavailable :
+                    t.provider.towVehicleNotLinked :
+                  null;
             return (
               <View key={provider.id}>
                 {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
@@ -110,17 +140,37 @@ export default function ProvidersScreen() {
                   </View>
                   <Switch value={provider.accepting !== false} onValueChange={(v) => void onProviderToggle(provider, v)} disabled={!switchEnabled(provider, providerBusy)} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
                 </View>
-                {provider.kind === "TOW" && provider.status === "DENIED" ? (
-                  <View style={styles.providerCtas}>
+                <View style={styles.providerCtas}>
+                  {provider.kind === "TOW" && provider.status === "DENIED" ? (
                     <Pressable style={[styles.permBtn, {borderColor: theme.border}]} onPress={() => setProviderCreate("TOW")} accessibilityRole="button" accessibilityLabel={t.provider.reapplyTow}>
                       <Text style={[styles.permBtnText, {color: theme.primary}]}>{t.provider.reapplyTow}</Text>
                     </Pressable>
-                  </View>
-                ) : null}
+                  ) : null}
+                  <Pressable style={[styles.permBtn, {borderColor: theme.danger}]} onPress={() => { setRevokeFor(provider); setRevokeError(null); }} accessibilityRole="button" accessibilityLabel={t.provider.removeLicence}>
+                    <Text style={[styles.permBtnText, {color: theme.danger}]}>{t.provider.removeLicence}</Text>
+                  </Pressable>
+                </View>
               </View>
             );
           })}
         </View>
+        {revokeFor ? (
+          <Overlay
+            visible
+            variant="dialog"
+            title={t.provider.removeLicence}
+            closeLabel={t.common.cancel}
+            onClose={() => setRevokeFor(null)}
+            actionLayout="confirm"
+            actions={[
+              {label: t.provider.removeLicence, tone: "danger", busy: revokeBusy, onPress: () => void onRevoke()},
+              {label: t.common.cancel, tone: "neutral", outline: true, group: "secondary", onPress: () => setRevokeFor(null)},
+            ]}
+          >
+            <Text style={{color: theme.text}}>{t.provider.removeLicenceMessage}</Text>
+            {revokeError ? <Text style={{color: theme.danger}}>{revokeError}</Text> : null}
+          </Overlay>
+        ) : null}
         {providerCreate ? (
           <ProviderFormDialog t={t} token={token} kind={providerCreate} provider={null} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); }} onSaved={() => { setProviderCreate(null); setNotice(t.provider.saved); void loadProviders(); }} />
         ) : null}
@@ -129,7 +179,7 @@ export default function ProvidersScreen() {
         ) : null}
       </ScrollView>
       {providerError ? (
-        <Snack message={providerError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
+        <Snack message={providerError} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}

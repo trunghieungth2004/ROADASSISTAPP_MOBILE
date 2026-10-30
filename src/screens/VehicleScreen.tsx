@@ -4,7 +4,7 @@ import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {listProfiles, type VehicleProfile} from "../api/vehicles";
+import {listProfiles, removeProfile, type VehicleProfile} from "../api/vehicles";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -13,6 +13,7 @@ import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import StatusRow from "../components/ui/StatusRow";
+import Overlay from "../components/overlay/Overlay";
 import {snackBottom} from "../components/ui/snackOffset";
 import VehicleCreateDialog from "../components/vehicles/VehicleCreateDialog";
 import RideSetupDialog from "../components/vehicles/RideSetupDialog";
@@ -32,6 +33,9 @@ export default function VehicleScreen() {
   const [activeBusy, setActiveBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [setupFor, setSetupFor] = useState<VehicleProfile | null>(null);
+  const [removeFor, setRemoveFor] = useState<VehicleProfile | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reload = useCallback(
@@ -72,6 +76,22 @@ export default function VehicleScreen() {
       setActiveBusy(false);
     }
   }
+  async function onRemove(): Promise<void> {
+    if (!token || !removeFor || removeBusy) return;
+    setRemoveBusy(true);
+    setRemoveError(null);
+    try {
+      await removeProfile(removeFor.id, token);
+      setRemoveFor(null);
+      setNotice(t.vehicle.removed);
+      await reload();
+      await refresh();
+    } catch (err) {
+      setRemoveError(toMessage(err));
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
   return (
     <ScreenContainer>
       <View style={[styles.wrapper, {backgroundColor: theme.background}]}>
@@ -104,6 +124,11 @@ export default function VehicleScreen() {
                             <Text style={styles.statusChipText}>{t.vehicle.active}</Text>
                           </View>
                         ) : null}
+                        {(p.providerLinks ?? []).map((link) => (
+                          <View key={link.id} style={[styles.statusChip, {backgroundColor: theme.muted}]}>
+                            <Text style={styles.statusChipText}>{link.kind === "TOW" ? t.roles.tow : link.kind === "MOBILE_SHOP" ? t.roles.mobileShop : t.roles.shop}</Text>
+                          </View>
+                        ))}
                       </View>
                       <Text style={[styles.cardSub, {color: theme.muted}]}>{vehicleMeta(p.baseWidth, p.baseHeight)}</Text>
                     </View>
@@ -113,6 +138,9 @@ export default function VehicleScreen() {
                       <Text style={[styles.smallBtnText, {color: theme.primary}]}>{t.vehicle.setActive}</Text>
                     </Pressable>
                   ) : null}
+                  <Pressable style={[styles.iconBtn, {borderColor: theme.danger}]} onPress={() => { setRemoveFor(p); setRemoveError(null); }} accessibilityRole="button" accessibilityLabel={t.common.delete}>
+                    <MaterialIcons name="delete-outline" size={18} color={theme.danger} />
+                  </Pressable>
                 </View>
 
               </View>
@@ -121,10 +149,32 @@ export default function VehicleScreen() {
         )}
       </View>
       {error ? (
-        <Snack message={error} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
+        <Snack message={error} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
+      {removeFor ? (
+        <Overlay
+          visible
+          variant="dialog"
+          title={t.vehicle.removeTitle}
+          closeLabel={t.common.cancel}
+          onClose={() => setRemoveFor(null)}
+          actionLayout="confirm"
+          actions={[
+            {label: t.common.delete, tone: "danger", busy: removeBusy, onPress: () => void onRemove()},
+            {label: t.common.cancel, tone: "neutral", outline: true, group: "secondary", onPress: () => setRemoveFor(null)},
+          ]}
+        >
+          <Text style={{color: theme.text}}>{t.vehicle.removeMessage}</Text>
+          {removeFor.providerLinks && removeFor.providerLinks.length > 0 ? (
+            <Text style={{color: theme.danger}}>
+              {t.vehicle.removeProviderWarning.replace("{n}", String(removeFor.providerLinks.length))}
+            </Text>
+          ) : null}
+          {removeError ? <Text style={{color: theme.danger}}>{removeError}</Text> : null}
+        </Overlay>
+      ) : null}
       {createOpen ? (
         <VehicleCreateDialog
           t={t}
@@ -174,6 +224,7 @@ const styles = StyleSheet.create({
   cardSub: {fontSize: 12},
   smallBtn: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12},
   smallBtnText: {fontSize: 12, fontWeight: "600"},
+  iconBtn: {width: 34, height: 34, borderWidth: 1, borderRadius: 17, alignItems: "center", justifyContent: "center"},
   hint: {textAlign: "center", marginTop: 24},
   disabled: {opacity: 0.6},
 });
