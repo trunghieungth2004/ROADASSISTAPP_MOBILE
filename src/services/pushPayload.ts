@@ -18,6 +18,7 @@ export type DispatchPushData = {
   urgent?: boolean;
   kind?: string;
   paymentStatus?: string;
+  action?: string;
 };
 
 export type PaymentPushData = {
@@ -66,6 +67,7 @@ export function parseDispatchPush(data: unknown): DispatchPushData | null {
     urgent: d.urgent === true || d.urgent === "true" || undefined,
     kind: kindRaw,
     paymentStatus: payRaw,
+    action: typeof d.action === "string" ? d.action : undefined,
   };
 }
 

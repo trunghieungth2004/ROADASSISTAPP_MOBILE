@@ -30,9 +30,9 @@ export function setNavForeground(open: boolean): void {
   navForeground = open;
 }
 
-export function claimPush(id: string, status?: string, owner?: string): boolean {
+export function claimPush(id: string, status?: string, owner?: string, action?: string): boolean {
   void owner;
-  const key = `${id}:${status ?? "-"}`;
+  const key = `${id}:${status ?? "-"}:${action ?? ""}`;
   const now = Date.now();
   const at = claimed.get(key);
   if (at !== undefined && now - at < CLAIM_TTL_MS) return false;
@@ -219,13 +219,34 @@ export function subscribePaymentPush(onPush: (data: PaymentPushData) => void, ow
   };
 }
 
+export function subscribeChatPush(
+  scope: "TICKET" | "HAZARD",
+  refId: string,
+  onMessage: () => void,
+): () => void {
+  const fromNotification = (n: Notifications.Notification | null | undefined): void => {
+    if (!n) return;
+    const data = n.request.content.data as Record<string, unknown> | undefined;
+    if (data?.chatScope !== scope || data?.chatRefId !== refId) return;
+    onMessage();
+  };
+  const received = Notifications.addNotificationReceivedListener(fromNotification);
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
+    fromNotification(r.notification);
+  });
+  return () => {
+    received.remove();
+    tapped.remove();
+  };
+}
+
 export function subscribeDispatchPush(onPush: (data: DispatchPushData) => void, owner: string): () => void {
   const fromNotification = (n: Notifications.Notification | null | undefined): void => {
     if (!n) return;
     const parsed = parseDispatchPush(n.request.content.data);
     if (!parsed) return;
     void AsyncStorage.setItem(LAST_DISPATCH_PUSH_KEY, JSON.stringify({ticketId: parsed.ticketId, status: parsed.status ?? "", at: Date.now()})).catch(() => undefined);
-    if (claimPush(parsed.ticketId, parsed.status, owner)) {
+    if (claimPush(parsed.ticketId, parsed.status, owner, parsed.action)) {
       onPush(parsed);
     }
   };
