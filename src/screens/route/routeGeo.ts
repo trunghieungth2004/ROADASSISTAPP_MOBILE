@@ -1,7 +1,5 @@
-export function vehicleIcon(type?: string): "motorbike" | "car" | "van-utility" | "truck" {
-  if (type === "CAR") return "car";
-  if (type === "VAN") return "van-utility";
-  if (type === "TRUCK") return "truck";
+export function vehicleIcon(type?: string): "motorbike" | "car" {
+  if (type === "CAR" || type === "VAN" || type === "TRUCK") return "car";
   return "motorbike";
 }
 export function boundsOf(coords: [number, number][]): {ne: [number, number]; sw: [number, number]} | null {

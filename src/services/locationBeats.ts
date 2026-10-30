@@ -12,13 +12,13 @@ export async function capturePosition(): Promise<{lat: number; lng: number} | nu
   }
 }
 
-const lastBeatAt: {tower: number | null; volunteer: number | null} = {tower: null, volunteer: null};
+const lastBeatAt: {tower: number | null} = {tower: null};
 
-export function markBeat(kind: "tower" | "volunteer"): void {
+export function markBeat(kind: "tower"): void {
   lastBeatAt[kind] = Date.now();
 }
 
-export function lastBeat(kind: "tower" | "volunteer"): number | null {
+export function lastBeat(kind: "tower"): number | null {
   return lastBeatAt[kind];
 }
 

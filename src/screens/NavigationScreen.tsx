@@ -55,6 +55,7 @@ type Props = {
   seed: {lat: number; lng: number};
   stops: {lat: number; lng: number}[];
   width?: number;
+  vehicleId?: string;
   vehicleType?: string;
   checkIn: {providerId: string; name: string} | null;
   ticketId: string | null;
@@ -111,6 +112,7 @@ export default function NavigationScreen() {
       seed={session.seed}
       stops={session.stops}
       width={session.width}
+      vehicleId={session.vehicleId}
       vehicleType={session.vehicleType}
       checkIn={session.checkIn ?? null}
       ticketId={session.ticketId ?? null}
@@ -121,7 +123,7 @@ export default function NavigationScreen() {
   );
 }
 
-function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleType, checkIn, ticketId, onExit, onCheckedIn, onTicketCancelled}: Props) {
+function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, width, vehicleId, vehicleType, checkIn, ticketId, onExit, onCheckedIn, onTicketCancelled}: Props) {
   useKeepAwake();
   useEffect(() => {
     void warmAudio();
@@ -450,6 +452,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
       await checkInAtShop({
         providerId: checkIn.providerId,
         token,
+        vehicleId,
         vehicleType,
         vehicleWidth: width,
         deniedMessage: t.nav.locationDenied,
@@ -657,7 +660,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
         <MaterialIcons name="add-alert" size={22} color={nav.pos ? theme.primary : theme.muted} />
       </Fab>
       {nav.error ?? voiceError ?? fetchError ? (
-        <Snack message={nav.error ?? voiceError ?? fetchError} severity="error" sticky bottom={bottomH + insets.bottom + SNACK_GAP * 2} dangerColor={theme.danger} onHide={() => { nav.clearError(); setVoiceError(null); setFetchError(null); }} />
+        <Snack message={nav.error ?? voiceError ?? fetchError} severity="error" bottom={bottomH + insets.bottom + SNACK_GAP * 2} dangerColor={theme.danger} onHide={() => { nav.clearError(); setVoiceError(null); setFetchError(null); }} />
       ) : (
         <Snack message={confirmSnack ?? nav.notice} severity={pickFeedback(confirmSnack ? "success" : "neutral")} bottom={bottomH + insets.bottom + SNACK_GAP * 2} onHide={() => {}} />
       )}

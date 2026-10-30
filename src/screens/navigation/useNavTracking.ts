@@ -11,17 +11,7 @@ import {maneuverSteps} from "../../services/maneuvers";
 import {readBgFix, startBgNav, stopBgNav} from "../../services/bgNav";
 import {notifyHazardHeadsUp} from "../../services/push";
 import {playEventSound, unloadEventSounds} from "../../services/sound";
-import {
-  ANNOUNCE_CLOSE_METERS,
-  ANNOUNCE_NEAR_METERS,
-  ARRIVAL_METERS,
-  HAZARD_ALERT_METERS,
-  OFF_ROUTE_FIXES,
-  OFF_ROUTE_METERS,
-  projectOntoRoute,
-  windowAround,
-  type RouteProgress,
-} from "../../services/navigation";
+import {ANNOUNCE_CLOSE_METERS, ANNOUNCE_NEAR_METERS, ARRIVAL_METERS, HAZARD_ALERT_METERS, OFF_ROUTE_FIXES, OFF_ROUTE_METERS, projectOntoRoute, windowAround, type RouteProgress} from "../../services/navigation";
 import type {Strings} from "../../i18n/en";
 import {FOLLOW_MIN_MOVE_M, FOLLOW_PITCH, FOLLOW_ZOOM, courseBetween, distBetween, splitRoute} from "./navUtils";
 

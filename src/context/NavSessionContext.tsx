@@ -7,6 +7,7 @@ export type NavSession = {
   stops: {lat: number; lng: number}[];
   seed: {lat: number; lng: number};
   width?: number;
+  vehicleId?: string;
   vehicleType?: string;
   checkIn?: {providerId: string; name: string};
   ticketId?: string;
