@@ -98,9 +98,9 @@ test("findRoute keeps valid vehicleType and width", async () => {
     return okEnvelope({cached: false, routes: [route]});
   }) as unknown) as typeof fetch;
   try {
-    await findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7, vehicleType: "SCOOTER", width: 0.7}, "tok");
+    await findRoute({originLat: 10.7, originLng: 106.6, destLat: 10.8, destLng: 106.7, vehicleType: "BIKE", width: 0.7}, "tok");
   } finally {
     restoreFetch();
   }
-  expect(seen).toMatchObject({vehicleType: "SCOOTER", width: 0.7});
+  expect(seen).toMatchObject({vehicleType: "BIKE", width: 0.7});
 });

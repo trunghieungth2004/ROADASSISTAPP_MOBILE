@@ -1,6 +1,6 @@
 import {api} from "./client";
 
-export type RatingTargetKind = "VOLUNTEER" | "SHOP" | "RIDER";
+export type RatingTargetKind = "SHOP" | "RIDER";
 
 export type SubmitRatingPayload = {
   targetId: string;
@@ -45,7 +45,7 @@ export type UserRatings = {
   count: number;
 };
 
-export async function userRatings(userId: string, targetKind: "VOLUNTEER" | "RIDER", ticketId: string | undefined, token: string): Promise<UserRatings> {
+export async function userRatings(userId: string, targetKind: "RIDER", ticketId: string | undefined, token: string): Promise<UserRatings> {
   return api.post<UserRatings>("/users/ratings", {userId, targetKind, ticketId}, token);
 }
 

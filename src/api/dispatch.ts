@@ -24,7 +24,7 @@ export const DISPATCH_STATUS = {
 export type DispatchStatusCode = (typeof DISPATCH_STATUS)[keyof typeof DISPATCH_STATUS];
 
 export function isTerminal(status: string): boolean {
-  return status === DISPATCH_STATUS.RESOLVED || status === DISPATCH_STATUS.CANCELLED || status === DISPATCH_STATUS.DECLINED || status === DISPATCH_STATUS.RESOLVED_UNFIXABLE;
+  return status === DISPATCH_STATUS.RESOLVED || status === DISPATCH_STATUS.CANCELLED || status === DISPATCH_STATUS.DECLINED || status === DISPATCH_STATUS.RESOLVED_UNFIXABLE || status === DISPATCH_STATUS.UNFIXABLE;
 }
 
 export function isUnfixableStatus(status: string): boolean {
@@ -65,10 +65,32 @@ export type FeedTicket = DispatchTicket & {
   etaPickupAt?: string | null;
   etaDropoffAt?: string | null;
   towerFix?: {lat: number; lng: number; at: string} | null;
+  mobileShopFix?: {lat: number; lng: number; at: string} | null;
   linkedTicketIds?: string[];
   canConfirmCash?: boolean;
-  mobileTowOffer?: {status: string; shopId: string; destinationShopId: string | null; by: string; at: string} | null;
+  mobileTowOffer?: {
+    status: string;
+    shopId: string;
+    destinationShopId: string | null;
+    mode?: string;
+    towProviderId?: string | null;
+    by: string;
+    at: string;
+    expiresAt?: string | null;
+  } | null;
   returnTowOffer?: {status: string; shopId: string; by: string; at: string} | null;
+  mobileTowAvailable?: boolean;
+  mobileTowMode?: "DIRECT" | "NETWORK";
+  mobileTowState?: "DIRECT" | "TOW_OFF_DUTY" | "TOW_BUSY" | "NO_TOW" | "NONE_NEARBY";
+  sosCallOutTotal?: number;
+  linkedSummary?: {
+    ticketId: string;
+    ticketType: string;
+    evidencePhotoUrls: string[];
+    unfixableReason: string | null;
+    sosAttempt: number;
+    createdAt: string | null;
+  } | null;
 };
 
 export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as const;
@@ -105,6 +127,7 @@ export type DispatchTicket = {
   lng: number;
   note?: string | null;
   status: string;
+  vehicleId?: string | null;
   vehicleType?: string | null;
   vehicleWidth?: number | null;
   vehicleClass?: string | null;
@@ -114,9 +137,25 @@ export type DispatchTicket = {
   expiresAt?: string | null;
   destinationShopId?: string | null;
   destinationPoint?: {lat: number; lng: number; label?: string} | null;
+  destinationDecline?: {
+    shopId: string;
+    reasonCode: string;
+    by: string;
+    at: string;
+  } | null;
   destinationSnapshot?: {id?: string; name?: string; lat: number; lng: number; kind?: string; label?: string | null; source?: string} | null;
   assignedUid?: string | null;
   assignedShopId?: string | null;
+  formerAssignedShopIds?: string[];
+  towCancelHistory?: Array<{
+    shopId: string;
+    by: string;
+    at: string;
+    reasonCode?: string;
+  }>;
+  formerAssignment?: boolean;
+  formerAssignmentAt?: string | null;
+  needsNewDestination?: boolean | null;
   assignedKind?: string | null;
   towPlate?: string | null;
   towFare?: TowFare | null;
@@ -138,7 +177,38 @@ export type DispatchTicket = {
   commission?: number | null;
   payout?: number | null;
   waitingFee?: number | null;
-  unfixable?: boolean | null;
+  unfixable?: boolean | {reason?: string; photoUrls?: string[]; by?: string; at?: string} | null;
+  sosAttempt?: number;
+  continuedFromTicketId?: string | null;
+  continuationTicketId?: string | null;
+  sourceTicketId?: string | null;
+  mobileCallOutFee?: number | null;
+  mobileCallOutWaived?: boolean | null;
+  mobileTravelFee?: number | null;
+  chatVersion?: number;
+  chatHistory?: Array<{
+    version: number;
+    roomId: string;
+    shopId: string;
+    shopName?: string | null;
+    at: string;
+  }>;
+  disputeHold?: boolean | null;
+  openDisputeId?: string | null;
+  dispute?: {
+    id: string;
+    status: string;
+    type: string;
+    reasonCode: string;
+    filedBy: string;
+    accusedKind: string;
+    accusedId: string | null;
+    hold: boolean;
+    outcome?: string | null;
+    resolution?: string | null;
+    at: string;
+    resolvedAt?: string | null;
+  } | null;
   description?: string | null;
   photoUrls?: string[] | null;
   estimateAmount?: number | null;
@@ -167,10 +237,10 @@ export type CreateTicketPayload = {
   providerId?: string;
   destinationShopId?: string;
   destinationPoint?: {lat: number; lng: number; label?: string};
+  vehicleId?: string;
   vehicleType?: string;
   vehicleWidth?: number;
   vehicleLabel?: string;
-  force?: boolean;
 };
 
 export async function createTicket(payload: CreateTicketPayload, token: string): Promise<DispatchTicket> {
@@ -191,8 +261,8 @@ export function getTicket(ticketId: string, token: string): Promise<DispatchTick
   return api.post<DispatchTicket>("/dispatch/one", {ticketId}, token);
 }
 
-export async function cancelTicket(ticketId: string, token: string): Promise<{updated: number}> {
-  const res = await api.put<{updated: number}>("/dispatch/status", {ticketId, status: "5"}, token);
+export async function cancelTicket(ticketId: string, token: string, reasonCode?: string): Promise<{updated: number}> {
+  const res = await api.put<{updated: number}>("/dispatch/status", {ticketId, status: "5", ...(reasonCode ? {reasonCode} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -254,8 +324,8 @@ export async function approveQuote(ticketId: string, token: string): Promise<{ap
   return res;
 }
 
-export async function declineDestination(ticketId: string, token: string): Promise<{declined: boolean; legKm: number}> {
-  const res = await api.post<{declined: boolean; legKm: number}>("/dispatch/destination/decline", {ticketId}, token);
+export async function declineDestination(ticketId: string, reasonCode: string, token: string): Promise<{declined: boolean; legKm: number}> {
+  const res = await api.post<{declined: boolean; legKm: number}>("/dispatch/destination/decline", {ticketId, reasonCode}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -322,9 +392,30 @@ export function riderMovedMeters(ticket: Pick<DispatchTicket, "lat" | "lng" | "p
   return moved;
 }
 
-export const RIDER_DISPUTE_REASONS = ["LATE", "OVERCHARGE", "NO_SHOW", "RUDE", "WRONG_ROUTE", "OTHER"] as const;
+export const RIDER_DISPUTE_REASONS = [
+  "LATE",
+  "NO_SHOW",
+  "OVERCHARGE",
+  "WRONG_ROUTE",
+  "UNSAFE",
+  "RUDE",
+  "FIX_NOT_DONE",
+  "POOR_QUALITY",
+  "UNFIXABLE_DISAGREE",
+  "OTHER",
+] as const;
 
 export type RiderDisputeReason = (typeof RIDER_DISPUTE_REASONS)[number];
+
+export const PROVIDER_DISPUTE_REASONS = [
+  "RIDER_NO_SHOW",
+  "RIDER_UNREACHABLE",
+  "RIDER_REFUSED_PAYMENT",
+  "RIDER_ABUSIVE",
+  "OTHER",
+] as const;
+
+export type ProviderDisputeReason = (typeof PROVIDER_DISPUTE_REASONS)[number];
 
 export async function approveEstimate(ticketId: string, token: string): Promise<{approved: boolean}> {
   const res = await api.post<{approved: boolean}>("/dispatch/estimate/approve", {ticketId}, token);
@@ -350,14 +441,37 @@ export async function approveFinalQuote(ticketId: string, token: string): Promis
   return res;
 }
 
-export async function offerMobileShopTow(ticketId: string, destinationShopId: string | undefined, token: string): Promise<{offered: boolean}> {
-  const res = await api.post<{offered: boolean}>("/dispatch/mobile-shop/tow-offer", {ticketId, ...(destinationShopId ? {destinationShopId} : {})}, token);
+export async function offerMobileShopTow(ticketId: string, destinationShopId: string | undefined, token: string): Promise<{offered: boolean; expiresAt?: string; mode?: "DIRECT" | "NETWORK"}> {
+  const res = await api.post<{offered: boolean; expiresAt?: string; mode?: "DIRECT" | "NETWORK"}>("/dispatch/mobile-shop/tow-offer", {ticketId, ...(destinationShopId ? {destinationShopId} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
 
-export async function respondMobileShopTow(ticketId: string, accept: boolean, token: string, destinationPoint?: {lat: number; lng: number; label?: string}): Promise<{accepted: boolean; ticketId?: string}> {
-  const res = await api.post<{accepted: boolean; ticketId?: string}>("/dispatch/mobile-shop/tow-offer/respond", {ticketId, accept, ...(destinationPoint ? {destinationPoint} : {})}, token);
+export type MobileTowResponse = {
+  accepted: boolean;
+  ticketId?: string;
+  network?: boolean;
+  continuationTicketId?: string;
+  requiresContinuationConfirmation?: boolean;
+  noCandidates?: boolean;
+  nextAttempt?: number;
+  callOutTotal?: number;
+  attempt?: number;
+};
+
+export async function respondMobileShopTow(ticketId: string, accept: boolean, token: string, destination?: {destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}}): Promise<MobileTowResponse> {
+  const res = await api.post<MobileTowResponse>("/dispatch/mobile-shop/tow-offer/respond", {
+    ticketId,
+    accept,
+    ...(destination?.destinationShopId ? {destinationShopId: destination.destinationShopId} : {}),
+    ...(destination?.destinationPoint ? {destinationPoint: destination.destinationPoint} : {}),
+  }, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function continueSos(ticketId: string, token: string): Promise<{ticketId?: string; attempt?: number; callOutTotal?: number; noCandidates?: boolean}> {
+  const res = await api.post<{ticketId?: string; attempt?: number; callOutTotal?: number; noCandidates?: boolean}>("/dispatch/sos/continue", {ticketId}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -374,8 +488,8 @@ export async function setMobileShopFix(ticketId: string, fixAmount: number, toke
   return res;
 }
 
-export async function reportUnfixable(ticketId: string, reason: string, photoUrls: string[], token: string): Promise<{unfixable: boolean}> {
-  const res = await api.post<{unfixable: boolean}>("/dispatch/unfixable", {ticketId, reason, photoUrls}, token);
+export async function reportUnfixable(ticketId: string, reason: string, photoUrls: string[], token: string): Promise<{unfixable: boolean; continuationTicketId?: string; noCandidates?: boolean; requiresContinuationConfirmation?: boolean; nextAttempt?: number; callOutTotal?: number}> {
+  const res = await api.post<{unfixable: boolean; continuationTicketId?: string; noCandidates?: boolean; requiresContinuationConfirmation?: boolean; nextAttempt?: number; callOutTotal?: number}>("/dispatch/unfixable", {ticketId, reason, photoUrls}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -388,7 +502,9 @@ export type FileDisputePayload = {
 };
 
 export async function fileDispute(payload: FileDisputePayload, token: string): Promise<{id: string}> {
-  return api.post<{id: string}>("/disputes", payload, token);
+  const res = await api.post<{id: string}>("/disputes", payload, token);
+  bustTicketCaches(token);
+  return res;
 }
 
 export type TicketPayment = {

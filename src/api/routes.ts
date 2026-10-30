@@ -71,7 +71,7 @@ function normalizeRouteOption(route: RouteOption): RouteOption | null {
   return hasUsableGeometry(route.geometry) ? route : null;
 }
 
-const VEHICLE_TYPES = ["SCOOTER", "CUB", "MANUAL", "CAR", "VAN", "TRUCK"] as const;
+const VEHICLE_TYPES = ["BIKE", "CAR"] as const;
 
 export async function findRoute(payload: RouteRequest, token: string): Promise<RouteResult> {
   const {vehicleType, width, ...rest} = payload;

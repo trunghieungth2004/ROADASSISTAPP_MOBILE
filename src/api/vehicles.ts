@@ -1,13 +1,15 @@
 import {api} from "./client";
 
-export type VehicleType = "SCOOTER" | "CUB" | "MANUAL" | "CAR" | "VAN" | "TRUCK";
+export type VehicleType = "BIKE" | "CAR";
+
+export function normalizeVehicleType(value: unknown): VehicleType | null {
+  if (value === "CAR" || value === "VAN" || value === "TRUCK") return "CAR";
+  if (value === "BIKE" || value === "SCOOTER" || value === "CUB" || value === "MANUAL") return "BIKE";
+  return null;
+}
 export const VEHICLE_DEFAULT_WIDTH: Record<string, number> = {
-  SCOOTER: 0.7,
-  CUB: 0.7,
-  MANUAL: 0.8,
+  BIKE: 0.7,
   CAR: 1.9,
-  VAN: 2.0,
-  TRUCK: 2.3,
 };
 
 export type ConfigType = "SOLO" | "PASSENGER" | "CARGO";
@@ -17,6 +19,7 @@ export type VehicleProfile = {
   type: string;
   baseWidth: number;
   baseHeight: number;
+  providerLinks?: Array<{id: string; kind: string; name: string; status: string; plate: string | null; vehicleType: string | null; vehicleWidth: number | null}>;
 };
 
 export type CreateProfilePayload = {
@@ -39,6 +42,10 @@ export function listProfiles(token: string): Promise<VehicleProfile[]> {
 
 export function createProfile(payload: CreateProfilePayload, token: string): Promise<VehicleProfile> {
   return api.post<VehicleProfile>("/vehicleProfiles", payload, token);
+}
+
+export function removeProfile(profileId: string, token: string): Promise<{removed: boolean; revokedProviders: string[]}> {
+  return api.post<{removed: boolean; revokedProviders: string[]}>("/vehicleProfiles/remove", {profileId}, token);
 }
 
 export function addRideConfig(payload: RideConfigPayload, token: string): Promise<{id: string}> {

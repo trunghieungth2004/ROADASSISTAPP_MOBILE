@@ -35,6 +35,9 @@ export function toMessage(err: unknown): string {
     const detail = firstErrorDetail(err.errors);
     return detail ? `${err.message}: ${detail}` : err.message;
   }
+  if (err instanceof Error && err.message.includes("auth/network-request-failed")) {
+    return "Network unavailable — check your connection and try again.";
+  }
   if (err instanceof Error) return err.message;
   return "Something went wrong";
 }

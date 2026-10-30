@@ -19,6 +19,7 @@ export type Provider = {
   plateRaw?: string | null;
   vehicleType?: string | null;
   vehicleWidth?: number | null;
+  vehicleProfileId?: string | null;
   serviceFee?: number | null;
   licenseNumber?: string | null;
   licensePhotoUrl?: string | null;
@@ -33,7 +34,6 @@ export type Provider = {
   openNow?: boolean | null;
   closesInMinutes?: number | null;
   live?: boolean;
-  fitsAlley?: boolean | null;
   ratingAvg?: number;
   ratingCount?: number;
   reviewNote?: string | null;
@@ -141,7 +141,8 @@ export type CreateMobileShopProviderPayload = {
   lat: number;
   lng: number;
   label?: string;
-  vehicleClasses: string[];
+  plate: string;
+  vehicleType: string;
   licenseNumber: string;
   licensePhotoUrl?: string;
 };
@@ -161,12 +162,12 @@ export type UpdateProviderPayload = {
   lng?: number;
   openHours?: string | null;
   vehicleClasses?: string[];
-  plate?: string;
-  vehicleType?: string;
-  vehicleWidth?: number;
   serviceFee?: number;
   licenseNumber?: string;
   licensePhotoUrl?: string | null;
+  plate?: string;
+  vehicleType?: string;
+  vehicleWidth?: number;
   towBaseFee?: number;
   towPerKmFee?: number;
   accepting?: boolean;
@@ -182,6 +183,10 @@ export async function updateProvider(payload: UpdateProviderPayload, token: stri
 export type ReportReason = "FAKE_BUSINESS" | "WRONG_LOCATION" | "UNSAFE" | "HARASSMENT" | "SPAM" | "INFO_INACCURATE" | "OTHER";
 
 export const REPORT_REASONS: ReportReason[] = ["FAKE_BUSINESS", "WRONG_LOCATION", "UNSAFE", "HARASSMENT", "SPAM", "INFO_INACCURATE", "OTHER"];
+
+export function revokeProvider(providerId: string, token: string): Promise<{revoked: boolean}> {
+  return api.post<{revoked: boolean}>("/providers/revoke", {providerId}, token);
+}
 
 export function reportProvider(payload: {providerId: string; reason: ReportReason; note?: string; ticketId?: string}, token: string): Promise<{id: string}> {
   return api.post<{id: string}>("/providers/report", payload, token);

@@ -1,83 +1,16 @@
 import {expect, jest, test} from "@jest/globals";
 import {register} from "../../../src/api/auth";
-import {
-  acceptTicket,
-  approveEstimate,
-  approveFinalQuote,
-  approveQuote,
-  cancelTicket,
-  confirmCashReceipt,
-  createPayment,
-  createTicket,
-  declineDestination,
-  declineEstimate,
-  declineTicket,
-  estimateTowFare,
-  fileDispute,
-  refreshWaiting,
-  reportUnfixable,
-  sendEstimate,
-  sendQuote,
-  shopRecords,
-  shopRequests,
-  updateTicketDestination,
-  updateWorkOrder,
-  refreshTowEta,
-  feedTickets,
-  getTicket,
-  myTickets,
-  nearTickets,
-  updateTicketStatus,
-} from "../../../src/api/dispatch";
+import {acceptTicket, approveEstimate, approveFinalQuote, approveQuote, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, fileDispute, refreshWaiting, reportUnfixable, sendEstimate, sendQuote, shopRecords, shopRequests, updateTicketDestination, updateWorkOrder, refreshTowEta, feedTickets, getTicket, myTickets, nearTickets, updateTicketStatus} from "../../../src/api/dispatch";
 import {checkInAtShop} from "../../../src/screens/assist/checkIn";
 import {fetchBill, myBills} from "../../../src/api/bills";
 import {ratingsByTicket, submitRating} from "../../../src/api/ratings";
-import {
-  confirmFlag,
-  denyFlag,
-  flagsNear,
-  getFlag,
-  myFlags,
-  submitFlag,
-  unflag,
-} from "../../../src/api/flags";
-import {
-  listSavedPlaces,
-  removeSavedPlace,
-  savePlace,
-  searchDirectory,
-} from "../../../src/api/places";
-import {
-  createProvider,
-  myProviders,
-  nearProviders,
-  pingProviderLocation,
-  reportProvider,
-  updateProvider,
-} from "../../../src/api/providers";
+import {confirmFlag, denyFlag, flagsNear, getFlag, myFlags, submitFlag, unflag} from "../../../src/api/flags";
+import {listSavedPlaces, removeSavedPlace, savePlace, searchDirectory} from "../../../src/api/places";
+import {createProvider, myProviders, nearProviders, pingProviderLocation, reportProvider, updateProvider} from "../../../src/api/providers";
 import {registerPush, unregisterPush} from "../../../src/api/push";
-import {
-  deleteSavedRoute,
-  findRoute,
-  getSavedRoute,
-  listSavedRoutes,
-  renameSavedRoute,
-  saveRoute,
-} from "../../../src/api/routes";
-import {
-  fetchMeBundle,
-  setActiveVehicle,
-  setOnboarded,
-  setVolunteerAvailability,
-  updateProfile,
-  updateUserServices,
-  volunteerHeartbeat,
-} from "../../../src/api/users";
-import {
-  addRideConfig,
-  createProfile,
-  listProfiles,
-} from "../../../src/api/vehicles";
+import {deleteSavedRoute, findRoute, getSavedRoute, listSavedRoutes, renameSavedRoute, saveRoute} from "../../../src/api/routes";
+import {fetchMeBundle, setActiveVehicle, setOnboarded, updateProfile, updateUserServices} from "../../../src/api/users";
+import {addRideConfig, createProfile, listProfiles} from "../../../src/api/vehicles";
 
 const realFetch = globalThis.fetch;
 
@@ -90,13 +23,13 @@ const calls: Call[] = [
   {fn: () => myTickets(T), method: "POST", path: "/dispatch/mine"},
   {fn: () => feedTickets(undefined, T), method: "POST", path: "/dispatch/feed"},
   {fn: () => ratingsByTicket("t1", T), method: "POST", path: "/ratings/by-ticket"},
-  {fn: () => submitRating({targetId: "v1", targetKind: "VOLUNTEER", ticketId: "t1", score: 5}, T), method: "POST", path: "/ratings"},
+  {fn: () => submitRating({targetId: "v1", targetKind: "SHOP", ticketId: "t1", score: 5}, T), method: "POST", path: "/ratings"},
   {fn: () => getTicket("t1", T), method: "POST", path: "/dispatch/one"},
   {fn: () => cancelTicket("t1", T), method: "PUT", path: "/dispatch/status"},
   {fn: () => nearTickets(1, 2, T), method: "POST", path: "/dispatch/near"},
   {fn: () => acceptTicket("t1", T), method: "POST", path: "/dispatch/accept"},
   {fn: () => updateTicketStatus("t1", "4", T), method: "PUT", path: "/dispatch/status"},
-  {fn: () => declineDestination("t1", T), method: "POST", path: "/dispatch/destination/decline"},
+  {fn: () => declineDestination("t1", "SHOP_FULL", T), method: "POST", path: "/dispatch/destination/decline"},
   {fn: () => updateTicketDestination("t1", {destinationShopId: "s1"}, T), method: "POST", path: "/dispatch/destination"},
   {fn: () => refreshTowEta("t1", T), method: "POST", path: "/dispatch/eta/refresh"},
   {fn: () => checkInAtShop({providerId: "p1", token: T, deniedMessage: "denied"}), method: "POST", path: "/dispatch"},
@@ -127,13 +60,11 @@ const calls: Call[] = [
   {fn: () => deleteSavedRoute("r1", T), method: "POST", path: "/routes/unsave"},
   {fn: () => fetchMeBundle(T), method: "POST", path: "/users/me"},
   {fn: () => setOnboarded({service: "RIDER"}, T), method: "PUT", path: "/users/onboard"},
-  {fn: () => updateUserServices({targetUserId: "u1", revoke: ["VOLUNTEER"]}, T), method: "PUT", path: "/users/services"},
+  {fn: () => updateUserServices({targetUserId: "u1", revoke: ["RIDER"]}, T), method: "PUT", path: "/users/services"},
   {fn: () => setActiveVehicle({profileId: "p1"}, T), method: "PUT", path: "/users/activeVehicle"},
   {fn: () => updateProfile({displayName: "A"}, T), method: "PUT", path: "/users/profile"},
-  {fn: () => setVolunteerAvailability({available: true}, T), method: "PUT", path: "/users/volunteer"},
-  {fn: () => volunteerHeartbeat(1, 2, T), method: "POST", path: "/users/volunteer/heartbeat"},
   {fn: () => listProfiles(T), method: "POST", path: "/vehicleProfiles/all"},
-  {fn: () => createProfile({type: "SCOOTER", baseWidth: 0.7, baseHeight: 1.1}, T), method: "POST", path: "/vehicleProfiles"},
+  {fn: () => createProfile({type: "BIKE", baseWidth: 0.7, baseHeight: 1.1}, T), method: "POST", path: "/vehicleProfiles"},
   {fn: () => addRideConfig({profileId: "p1", configType: "SOLO"}, T), method: "POST", path: "/vehicleProfiles/rideConfig"},
   {fn: () => sendEstimate("t1", 100, undefined, T), method: "POST", path: "/dispatch/estimate"},
   {fn: () => approveEstimate("t1", T), method: "POST", path: "/dispatch/estimate/approve"},
