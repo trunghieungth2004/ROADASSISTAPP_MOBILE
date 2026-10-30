@@ -7,7 +7,7 @@ import {formatPoint} from "../api/places";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import type {Strings} from "../i18n/en";
 import {darkTheme, lightTheme} from "../theme";
-import {TOW_TYPES, validateTowDraft} from "../services/towPlates";
+import {TOW_TYPES, isValidTowPlate, normalizeTowPlate, validateTowDraft} from "../services/towPlates";
 import {DOW, buildOpenHours, emptyWeek, summarizeWeek, type Day, type WeekHours} from "./more/shopHours";
 import PlaceSearchScreen from "./PlaceSearchScreen";
 import MapPickOverlay from "../components/map/MapPickOverlay";
@@ -18,13 +18,15 @@ export type ShopDraft = {name: string; lat: number; lng: number; label?: string;
 
 export type TowDraft = {name: string; plate: string; vehicleType: string; width: string; lat: number; lng: number};
 
-export type OnboardingProps = {t: Strings; lang: string; token: string | null; busy?: boolean; error?: string | null; selectedServices?: string[]; registered?: {shop: boolean; tow: boolean}; onFinish: (services: string[], shop: ShopDraft | null, tow: TowDraft | null) => void; onSkip: () => void};
+export type MobileShopDraft = {name: string; plate: string; vehicleType: "BIKE" | "CAR"; licenseNumber: string; lat: number; lng: number; label?: string};
 
-type Step = "roles" | "shop" | "tow";
+export type OnboardingProps = {t: Strings; lang: string; token: string | null; busy?: boolean; error?: string | null; selectedServices?: string[]; registered?: {shop: boolean; tow: boolean; mobileShop?: boolean}; onFinish: (services: string[], shop: ShopDraft | null, tow: TowDraft | null, mobileShop: MobileShopDraft | null) => void; onSkip: () => void};
+
+type Step = "roles" | "mobileShop" | "shop" | "tow";
 
 const ROLE_ICONS = {
   rider: "two-wheeler",
-  volunteer: "volunteer-activism",
+  mobileShop: "build",
   shop: "storefront",
   tow: "local-shipping",
 } as const;
@@ -42,12 +44,15 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const shopChosen = (selectedServices ?? []).includes("SHOP");
   const towChosen = (selectedServices ?? []).includes("TOW");
+  const mobileShopChosen = (selectedServices ?? []).includes("MOBILE_SHOP");
   const shopRegistered = registered?.shop === true;
   const towRegistered = registered?.tow === true;
+  const mobileShopRegistered = registered?.mobileShop === true;
   const hasShop = shopChosen || shopRegistered;
   const hasTow = towChosen || towRegistered;
   const [step, setStep] = useState<Step>("roles");
-  const [volunteer, setVolunteer] = useState((selectedServices ?? []).includes("VOLUNTEER"));
+  const [mobileShopOpen, setMobileShopOpen] = useState(mobileShopChosen);
+  const hasMobileShop = mobileShopOpen || mobileShopRegistered;
   const [shopOpen, setShopOpen] = useState(false);
   const [shopName, setShopName] = useState("");
   const [shopPoint, setShopPoint] = useState<{lat: number; lng: number; label?: string} | null>(null);
@@ -72,20 +77,40 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
   const [towOpen, setTowOpen] = useState(false);
   const [towName, setTowName] = useState("");
   const [plate, setPlate] = useState("");
-  const [towType, setTowType] = useState<string>("VAN");
+  const [towType, setTowType] = useState<string>("CAR");
   const [width, setWidth] = useState("");
   const [towPoint, setTowPoint] = useState<{lat: number; lng: number} | null>(null);
   const [towSearch, setTowSearch] = useState(false);
   const [towMap, setTowMap] = useState(false);
   const [shopDraft, setShopDraft] = useState<ShopDraft | null>(null);
+  const [mobileShopName, setMobileShopName] = useState("");
+  const [mobileShopPoint, setMobileShopPoint] = useState<{lat: number; lng: number; label?: string} | null>(null);
+  const [mobileShopSearch, setMobileShopSearch] = useState(false);
+  const [mobileShopMap, setMobileShopMap] = useState(false);
+  const [mobileShopPlate, setMobileShopPlate] = useState("");
+  const [mobileShopType, setMobileShopType] = useState<"BIKE" | "CAR">("BIKE");
+  const [mobileShopLicense, setMobileShopLicense] = useState("");
+  const [mobileShopDraft, setMobileShopDraft] = useState<MobileShopDraft | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const showMobileShopStep = mobileShopOpen && !mobileShopRegistered;
   const showShopStep = (shopOpen || shopChosen) && !shopRegistered;
   const showTowStep = (towOpen || towChosen) && !towRegistered;
   const setupSteps: Step[] = ["roles"];
+  if (showMobileShopStep) setupSteps.push("mobileShop");
   if (showShopStep) setupSteps.push("shop");
   if (showTowStep) setupSteps.push("tow");
-  function nextStep(from: "roles" | "shop"): Step | null {
-    if (from === "roles" && showShopStep) return "shop";
+  function nextStep(from: "roles" | "mobileShop" | "shop"): Step | null {
+    if (from === "roles") {
+      if (showMobileShopStep) return "mobileShop";
+      if (showShopStep) return "shop";
+      if (showTowStep) return "tow";
+      return null;
+    }
+    if (from === "mobileShop") {
+      if (showShopStep) return "shop";
+      if (showTowStep) return "tow";
+      return null;
+    }
     if (showTowStep) return "tow";
     return null;
   }
@@ -105,8 +130,16 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
     setTowPoint({lat, lng});
     setTowMap(false);
   }
-  function finish(shop: ShopDraft | null, tow: TowDraft | null): void {
-    onFinish(["RIDER", ...(volunteer ? ["VOLUNTEER"] : [])], shop, tow);
+  function onPickMobileShopPlace(place: Place): void {
+    setMobileShopPoint({lat: place.lat, lng: place.lng, label: place.label});
+    setMobileShopSearch(false);
+  }
+  function onConfirmMobileShopMap(lat: number, lng: number, label: string): void {
+    setMobileShopPoint({lat, lng, label});
+    setMobileShopMap(false);
+  }
+  function finish(shop: ShopDraft | null, tow: TowDraft | null, mobileShop: MobileShopDraft | null = mobileShopDraft): void {
+    onFinish(["RIDER"], shop, tow, mobileShop);
   }
   function onContinueRoles(): void {
     if (busy) return;
@@ -141,7 +174,43 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
       setStep(next);
       return;
     }
-    finish(draft, null);
+    finish(draft, null, mobileShopDraft);
+  }
+  function onContinueMobileShop(): void {
+    if (busy) return;
+    setFieldError(null);
+    if (mobileShopName.trim() === "") {
+      setFieldError(t.provider.invalidName);
+      return;
+    }
+    if (!isValidTowPlate(mobileShopPlate)) {
+      setFieldError(t.provider.invalidPlate);
+      return;
+    }
+    if (mobileShopLicense.trim() === "") {
+      setFieldError(t.provider.invalidLicense);
+      return;
+    }
+    if (!mobileShopPoint) {
+      setFieldError(t.provider.invalidLocation);
+      return;
+    }
+    const draft: MobileShopDraft = {
+      name: mobileShopName.trim(),
+      plate: normalizeTowPlate(mobileShopPlate),
+      vehicleType: mobileShopType,
+      licenseNumber: mobileShopLicense.trim(),
+      lat: mobileShopPoint.lat,
+      lng: mobileShopPoint.lng,
+      ...(mobileShopPoint.label ? {label: mobileShopPoint.label} : {}),
+    };
+    const next = nextStep("mobileShop");
+    if (next) {
+      setMobileShopDraft(draft);
+      setStep(next);
+      return;
+    }
+    finish(null, null, draft);
   }
   function onContinueTow(): void {
     if (busy) return;
@@ -167,12 +236,20 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
       setFieldError(t.provider.invalidLocation);
       return;
     }
-    finish(shopDraft, {name: towName.trim(), plate, vehicleType: towType, width, lat: towPoint.lat, lng: towPoint.lng});
+    finish(shopDraft, {name: towName.trim(), plate, vehicleType: towType, width, lat: towPoint.lat, lng: towPoint.lng}, mobileShopDraft);
   }
   function onBack(): void {
     if (busy) return;
     setFieldError(null);
-    setStep(step === "tow" && showShopStep ? "shop" : "roles");
+    if (step === "tow") {
+      setStep(showShopStep ? "shop" : showMobileShopStep ? "mobileShop" : "roles");
+      return;
+    }
+    if (step === "shop") {
+      setStep(showMobileShopStep ? "mobileShop" : "roles");
+      return;
+    }
+    setStep("roles");
   }
   const errorLines = (
     <>
@@ -205,9 +282,9 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
                 <RoleIcon name={ROLE_ICONS.rider} active theme={theme} />
                 <Text style={{color: "#fff"}}>{t.roles.rider} — {t.roles.riderHint}</Text>
               </View>
-              <Pressable disabled={busy} onPress={() => setVolunteer((v) => !v)} style={[styles.option, {borderColor: theme.primary}, volunteer && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: volunteer}}>
-                <RoleIcon name={ROLE_ICONS.volunteer} active={volunteer} theme={theme} />
-                <Text style={{color: volunteer ? "#fff" : theme.text}}>{t.roles.volunteer} — {t.roles.volunteerHint}</Text>
+              <Pressable disabled={busy || mobileShopRegistered} onPress={() => setMobileShopOpen((v) => { if (v) setMobileShopDraft(null); return !v; })} style={[styles.option, {borderColor: theme.primary}, (mobileShopOpen || hasMobileShop) && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: mobileShopOpen || hasMobileShop}}>
+                <RoleIcon name={ROLE_ICONS.mobileShop} active={mobileShopOpen || hasMobileShop} theme={theme} />
+                <Text style={{color: mobileShopOpen || hasMobileShop ? "#fff" : theme.text}}>{t.roles.mobileShop} — {mobileShopRegistered ? t.provider.registered : t.roles.mobileShopHint}</Text>
               </Pressable>
               {hasShop ? (
                 <View style={[styles.option, {borderColor: theme.primary, backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: true, disabled: true}}>
@@ -236,6 +313,33 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
               <Text style={styles.primaryText}>{t.roles.done}</Text>
             </Pressable>
             <Pressable disabled={busy} onPress={onSkip}><Text style={[styles.skip, {color: theme.primary}]}>{t.roles.skip}</Text></Pressable>
+          </>
+        ) : null}
+        {step === "mobileShop" ? (
+          <>
+            {stepHeader}
+            <Text style={[styles.title, {color: theme.text}]}>{t.provider.addMobileShop}</Text>
+            {errorLines}
+            <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <View style={styles.subForm}>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={mobileShopName} onChangeText={setMobileShopName} placeholder={t.provider.name} placeholderTextColor={theme.muted} />
+                <View style={styles.row}>
+                  {(["BIKE", "CAR"] as const).map((kind) => (
+                    <Pressable key={kind} disabled={busy} onPress={() => setMobileShopType(kind)} style={[styles.chip, {borderColor: theme.primary}, mobileShopType === kind && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: mobileShopType === kind}} accessibilityLabel={t.vehicle.types[kind]}>
+                      <Text style={{color: mobileShopType === kind ? "#fff" : theme.text}}>{t.vehicle.types[kind]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={mobileShopPlate} onChangeText={setMobileShopPlate} placeholder={t.tow.platePlaceholder} placeholderTextColor={theme.muted} autoCapitalize="characters" />
+                <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={mobileShopLicense} onChangeText={setMobileShopLicense} placeholder={t.provider.licenseNumber} placeholderTextColor={theme.muted} />
+                <Pressable disabled={busy} onPress={() => setMobileShopSearch(true)} style={[styles.input, {borderColor: theme.border}]} accessibilityRole="button" accessibilityLabel={t.provider.shopAddress}>
+                  <Text style={{color: mobileShopPoint ? theme.text : theme.muted}} numberOfLines={1}>{mobileShopPoint ? (mobileShopPoint.label ?? formatPoint(mobileShopPoint.lat, mobileShopPoint.lng)) : t.provider.addressUnset}</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Pressable disabled={busy} onPress={onContinueMobileShop} style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]}>
+              <Text style={styles.primaryText}>{nextStep("mobileShop") ? t.roles.done : t.roles.finish}</Text>
+            </Pressable>
           </>
         ) : null}
         {step === "shop" ? (
@@ -298,6 +402,31 @@ export default function OnboardingScreen({t, lang, token, busy, error, selectedS
           </>
         ) : null}
       </ScrollView>
+      <Overlay visible={mobileShopSearch} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setMobileShopSearch(false)}>
+        <PlaceSearchScreen
+          t={t}
+          token={token ?? undefined}
+          lang={lang}
+          title={t.provider.shopAddress}
+          placeholder={t.provider.shopAddress}
+          onPick={onPickMobileShopPlace}
+          onPickOnMap={() => {
+            setMobileShopSearch(false);
+            setMobileShopMap(true);
+          }}
+          onClose={() => setMobileShopSearch(false)}
+        />
+      </Overlay>
+      <Overlay visible={mobileShopMap} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setMobileShopMap(false)}>
+        <MapPickOverlay
+          t={t}
+          lang={lang}
+          title={t.provider.shopAddress}
+          initial={mobileShopPoint}
+          onPick={onConfirmMobileShopMap}
+          onClose={() => setMobileShopMap(false)}
+        />
+      </Overlay>
       <Overlay visible={shopSearch} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setShopSearch(false)}>
         <PlaceSearchScreen
           t={t}

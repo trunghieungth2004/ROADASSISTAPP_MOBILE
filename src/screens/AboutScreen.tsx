@@ -15,7 +15,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import UpdateDialog from "../components/UpdateDialog";
 import {fetchLatestRelease, installedVersion, isAutoCheckEnabled, isNewer, setAutoCheckEnabled, skipRelease, type AppRelease} from "../services/appUpdate";
 import {config} from "../config";
-import {GITHUB_URL, REPO_SLUG} from "../services/appUpdate";
+import {GITHUB_URL} from "../services/appUpdate";
 
 export default function AboutScreen() {
   const {t} = useStrings();

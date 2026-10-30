@@ -55,7 +55,7 @@ async function press(node: ReactTestInstance | undefined): Promise<void> {
   });
 }
 
-async function mount(props?: {selectedServices?: string[]; registered?: {shop: boolean; tow: boolean}}) {
+async function mount(props?: {selectedServices?: string[]; registered?: {shop: boolean; tow: boolean; mobileShop?: boolean}}) {
   const onFinish = jest.fn();
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
@@ -73,7 +73,24 @@ test("roles continue with no new selections finishes immediately", async () => {
   const {renderer, onFinish} = await mount();
   try {
     await press(pressableWith(renderer, en.roles.done));
-    expect(onFinish).toHaveBeenCalledWith(["RIDER"], null, null);
+    expect(onFinish).toHaveBeenCalledWith(["RIDER"], null, null, null);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("selecting the mobile shop continues into its step and validates inline", async () => {
+  const {renderer, onFinish} = await mount();
+  try {
+    await press(pressableWith(renderer, en.roles.mobileShopHint));
+    await press(pressableWith(renderer, en.roles.done));
+    let text = shown(renderer);
+    expect(text).toContain(en.provider.addMobileShop);
+    expect(text).toContain(en.provider.addressUnset);
+    await press(pressableWith(renderer, en.roles.finish));
+    text = shown(renderer);
+    expect(text).toContain(en.provider.invalidName);
+    expect(onFinish).not.toHaveBeenCalled();
   } finally {
     renderer.unmount();
   }
@@ -125,7 +142,7 @@ test("registered providers show as locked and are not re-routed", async () => {
     const text = shown(renderer);
     expect(text).toContain(en.provider.registered);
     await press(pressableWith(renderer, en.roles.done));
-    expect(onFinish).toHaveBeenCalledWith(["RIDER"], null, null);
+    expect(onFinish).toHaveBeenCalledWith(["RIDER"], null, null, null);
   } finally {
     renderer.unmount();
   }

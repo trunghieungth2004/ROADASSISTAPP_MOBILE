@@ -286,7 +286,7 @@ export default function HazardScreen() {
         )}
       </View>
       {activeError ? (
-        <Snack message={activeError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={clearActiveError} />
+        <Snack message={activeError} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={clearActiveError} />
       ) : (
         <Snack message={snack} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setSnack(null)} />
       )}

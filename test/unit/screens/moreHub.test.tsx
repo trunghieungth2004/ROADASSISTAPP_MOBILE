@@ -11,7 +11,7 @@ jest.mock("../../../src/context/AuthContext", () => ({
 
 jest.mock("../../../src/context/ProfileContext", () => ({
   useProfile: () => ({
-    user: {id: "u1", role: "2", services: ["RIDER", "VOLUNTEER", "VOLUNTEER"]},
+    user: {id: "u1", role: "2", services: ["RIDER", "MOBILE_SHOP", "MOBILE_SHOP"]},
     refresh: async () => null,
     markOnboarded: async () => undefined,
   }),
@@ -115,23 +115,6 @@ test("hub no longer hosts permissions, providers, or saved places", async () => 
     expect(all).not.toContain(en.route.savedPlaces);
     expect(all).not.toContain(en.more.diagnostics);
     expect(all).toContain(en.more.signOut);
-  } finally {
-    renderer.unmount();
-  }
-});
-
-test("duty toggles sit between the profile header and settings", async () => {
-  const renderer = await mount();
-  try {
-    const all = textsUnder(renderer.root);
-    const profileAt = all.indexOf("—");
-    const dutyAt = all.indexOf(en.more.volTitle);
-    const settingsAt = all.indexOf(en.more.settings);
-    expect(dutyAt).toBeGreaterThan(-1);
-    expect(profileAt).toBeGreaterThan(-1);
-    expect(settingsAt).toBeGreaterThan(-1);
-    expect(dutyAt).toBeGreaterThan(profileAt);
-    expect(dutyAt).toBeLessThan(settingsAt);
   } finally {
     renderer.unmount();
   }

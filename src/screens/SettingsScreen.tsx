@@ -4,7 +4,6 @@ import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {setVolunteerAvailability, updateUserServices} from "../api/users";
 import {missingKinds} from "./more/providerUi";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -16,7 +15,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import {createProvider, myProviders, type Provider} from "../api/providers";
 import {getNotificationPrefs, updateNotificationPrefs, type NotificationPrefs} from "../api/notifications";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
-import type {ShopDraft, TowDraft} from "./OnboardingScreen";
+import type {MobileShopDraft, ShopDraft, TowDraft} from "./OnboardingScreen";
 import OnboardingScreen from "./OnboardingScreen";
 import Overlay from "../components/overlay/Overlay";
 import {useThemeMode} from "../context/ThemeContext";
@@ -24,7 +23,7 @@ import {toMessage} from "../api/client";
 
 export default function SettingsScreen() {
   const {t, lang, toggle} = useStrings();
-  const {token, uid} = useAuth();
+  const {token} = useAuth();
   const {user, refresh, markOnboarded} = useProfile();
   const {mode, toggle: toggleTheme} = useThemeMode();
   const scheme = mode;
@@ -35,9 +34,6 @@ export default function SettingsScreen() {
   const [servicesOpen, setServicesOpen] = useState(false);
   const [servicesBusy, setServicesBusy] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
-  const [volBusy, setVolBusy] = useState(false);
-  const [volError, setVolError] = useState<string | null>(null);
-  const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
@@ -85,22 +81,8 @@ export default function SettingsScreen() {
       setPrefsBusy(false);
     }
   }
-  async function onVolunteerOption(patch: {volunteerRadiusKm?: number; capability?: string}): Promise<void> {
-    if (!token || volBusy) return;
-    setVolBusy(true);
-    setVolError(null);
-    try {
-      await setVolunteerAvailability({available: true, ...patch}, token);
-      await refresh();
-      setNotice(t.more.saved);
-    } catch (err) {
-      setVolError(toMessage(err));
-    } finally {
-      setVolBusy(false);
-    }
-  }
   const services = user?.services ?? [];
-  async function onServicesFinish(selected: string[], shop: ShopDraft | null, tow: TowDraft | null) {
+  async function onServicesFinish(selected: string[], shop: ShopDraft | null, tow: TowDraft | null, mobileShop: MobileShopDraft | null) {
     setServicesBusy(true); setServicesError(null);
     try {
       if (shop && shop.name.trim() === "") throw new Error(t.provider.invalidName);
@@ -108,14 +90,22 @@ export default function SettingsScreen() {
         if (tow.name.trim() === "") throw new Error(t.provider.invalidName);
         if (validateTowDraft({plate: tow.plate, vehicleType: tow.vehicleType, width: tow.width})) throw new Error(t.tow.invalid);
       }
+      if (mobileShop) {
+        if (mobileShop.name.trim() === "") throw new Error(t.provider.invalidName);
+        if (mobileShop.licenseNumber.trim() === "") throw new Error(t.provider.invalidLicense);
+      }
       const held = user?.services ?? [];
       for (const service of selected) {
         if (!held.includes(service)) await markOnboarded(service);
       }
-      if (token && uid && held.includes("VOLUNTEER") && !selected.includes("VOLUNTEER")) {
-        await updateUserServices({targetUserId: uid, revoke: ["VOLUNTEER"]}, token);
-      }
       if (token) {
+        if (mobileShop) {
+          try {
+            await createProvider({kind: "MOBILE_SHOP", name: mobileShop.name.trim(), lat: mobileShop.lat, lng: mobileShop.lng, ...(mobileShop.label ? {label: mobileShop.label} : {}), plate: normalizeTowPlate(mobileShop.plate), vehicleType: mobileShop.vehicleType, licenseNumber: mobileShop.licenseNumber.trim()}, token);
+          } catch (err) {
+            throw new Error(`${t.provider.createMobileShopFailed} ${toMessage(err)}`);
+          }
+        }
         if (shop) {
           try {
             await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {}), ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {})}, token);
@@ -200,49 +190,16 @@ export default function SettingsScreen() {
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
         </View>
-        {isVolunteer && user?.volunteerAvailable ? (
-          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-            <View style={styles.optionBlock}>
-              <Text style={[styles.optionLabel, {color: theme.text}]}>{t.more.volRadius}</Text>
-              <View style={styles.optionRow}>
-                {[2, 5, 10, 15].map((km) => {
-                  const current = user?.volunteerRadiusKm ?? 5;
-                  const selected = current === km;
-                  return (
-                    <Pressable key={km} style={[styles.optChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]} disabled={volBusy} onPress={() => void onVolunteerOption({volunteerRadiusKm: km})} accessibilityRole="button">
-                      <Text style={[styles.optText, {color: selected ? theme.primary : theme.text}]}>{km}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <View style={styles.optionBlock}>
-              <Text style={[styles.optionLabel, {color: theme.text}]}>{t.more.volCapability}</Text>
-              <View style={styles.optionRow}>
-                {[{id: "SOLO_BIKE", label: t.more.volSoloBike}, {id: "CAR", label: t.more.volCar}].map((c) => {
-                  const selected = (user?.capability ?? "SOLO_BIKE") === c.id;
-                  return (
-                    <Pressable key={c.id} style={[styles.optChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]} disabled={volBusy} onPress={() => void onVolunteerOption({capability: c.id})} accessibilityRole="button">
-                      <Text style={[styles.optText, {color: selected ? theme.primary : theme.text}]}>{c.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-        ) : null}
         <Overlay visible={servicesOpen} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setServicesOpen(false)}>
           {servicesOpen ? (
-            <OnboardingScreen t={t} lang={lang} token={token} busy={servicesBusy} error={servicesError} selectedServices={services} registered={{shop: !missing.shop, tow: !missing.tow}} onFinish={(selected, shop, tow) => void onServicesFinish(selected, shop, tow)} onSkip={() => void onServicesSkip()} />
+            <OnboardingScreen t={t} lang={lang} token={token} busy={servicesBusy} error={servicesError} selectedServices={services} registered={{shop: !missing.shop, tow: !missing.tow, mobileShop: !missing.mobileShop}} onFinish={(selected, shop, tow, mobileShop) => void onServicesFinish(selected, shop, tow, mobileShop)} onSkip={() => void onServicesSkip()} />
           ) : null}
         </Overlay>
       </ScrollView>
-      {volError ? (
-        <Snack message={volError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setVolError(null)} />
-      ) : providerError ? (
-        <Snack message={providerError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
+      {providerError ? (
+        <Snack message={providerError} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setProviderError(null)} />
       ) : prefsError ? (
-        <Snack message={prefsError} severity="error" sticky bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setPrefsError(null)} />
+        <Snack message={prefsError} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setPrefsError(null)} />
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}

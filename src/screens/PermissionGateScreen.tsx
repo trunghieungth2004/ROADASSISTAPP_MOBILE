@@ -103,7 +103,7 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
           <Text style={styles.doneText}>{t.more.gateDone}</Text>
         </Pressable>
       </ScrollView>
-      <Snack message={grantError} severity="error" sticky bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={onHideGrantError} />
+      <Snack message={grantError} severity="error" bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={onHideGrantError} />
     </View>
   );
 }

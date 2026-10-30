@@ -11,7 +11,7 @@ jest.mock("../../../src/context/AuthContext", () => ({
 }));
 
 const mockProfile = {
-  user: {id: "u1", role: "2", services: ["RIDER"] as string[], volunteerAvailable: false},
+  user: {id: "u1", role: "2", services: ["RIDER"] as string[]},
   refresh: async () => null,
   markOnboarded: async () => undefined,
 };
@@ -64,9 +64,7 @@ jest.mock("../../../src/api/providers", () => {
 
 jest.mock("../../../src/api/users", () => ({
   markOnboarded: async () => undefined,
-  setVolunteerAvailability: async () => ({updated: 1, available: true}),
   updateUserServices: async () => ({updated: 1}),
-  volunteerHeartbeat: async () => ({beat: 1}),
 }));
 
 const metrics: Metrics = {
@@ -76,6 +74,7 @@ const metrics: Metrics = {
 
 const TOW = {id: "tow1", kind: "TOW", name: "Haul", lat: 10.7, lng: 106.6, status: "ACTIVE", accepting: true, plate: "51H-12345"};
 const SHOP = {id: "shop1", kind: "SHOP", name: "Fix", lat: 10.7, lng: 106.6, status: "ACTIVE", accepting: true};
+const MOBILE = {id: "mobile1", kind: "MOBILE_SHOP", name: "Mobile Fix", lat: 10.7, lng: 106.6, status: "ACTIVE", accepting: true, plate: "59X-12345"};
 
 async function flush(times = 8): Promise<void> {
   for (let i = 0; i < times; i++) {
@@ -116,7 +115,7 @@ beforeEach(() => {
   mockChanged.mockClear();
   mockNotice.mockClear();
   mockError.mockClear();
-  mockProfile.user = {id: "u1", role: "2", services: ["RIDER"], volunteerAvailable: false};
+  mockProfile.user = {id: "u1", role: "2", services: ["RIDER"]};
 });
 
 test("renders nothing without roles or providers", async () => {
@@ -186,18 +185,17 @@ test("switching tow duty on pings location and marks the beat", async () => {
   }
 });
 
-test("volunteer row toggles through its pressable", async () => {
-  mockProfile.user = {id: "u1", role: "2", services: ["RIDER", "VOLUNTEER"], volunteerAvailable: false};
-  const renderer = await mount();
+test("mobile shop duty row toggles through its pressable", async () => {
+  const renderer = await mount([MOBILE]);
   try {
-    const row = rowFor(renderer, en.more.volTitle);
+    const row = rowFor(renderer, en.more.dutyMobileShop);
     expect(row).toBeDefined();
     await act(async () => {
       await row?.props.onPress();
       await flush();
     });
-    expect(lastBeat("volunteer")).not.toBeNull();
-    expect(mockNotice).toHaveBeenCalledWith(en.more.saved);
+    expect(mockUpdateProvider).toHaveBeenCalledWith({providerId: "mobile1", accepting: false}, "tok");
+    expect(mockChanged).toHaveBeenCalled();
   } finally {
     renderer.unmount();
   }

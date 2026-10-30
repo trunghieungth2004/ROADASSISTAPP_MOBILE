@@ -57,7 +57,7 @@ test("role picker reflects already-chosen services and registered providers", ()
         t={en}
         lang="en"
         token={null}
-        selectedServices={["RIDER", "VOLUNTEER"]}
+        selectedServices={["RIDER", "MOBILE_SHOP"]}
         registered={{shop: true, tow: true}}
         onFinish={() => undefined}
         onSkip={() => undefined}

@@ -1,7 +1,7 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create, type ReactTestInstance} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {Pressable, Text} from "react-native";import SettingsScreen from "../../../src/screens/SettingsScreen";
+import {Text} from "react-native";import SettingsScreen from "../../../src/screens/SettingsScreen";
 import OnboardingScreen from "../../../src/screens/OnboardingScreen";
 import {en} from "../../../src/i18n/en";
 
@@ -11,7 +11,7 @@ jest.mock("../../../src/context/AuthContext", () => ({
 
 jest.mock("../../../src/context/ProfileContext", () => ({
   useProfile: () => ({
-    user: {id: "u1", role: "2", services: ["RIDER", "VOLUNTEER"]},
+    user: {id: "u1", role: "2", services: ["RIDER", "MOBILE_SHOP"]},
     refresh: async () => null,
     markOnboarded: async () => undefined,
   }),
@@ -68,7 +68,7 @@ test("role picker stays unmounted until services opens", async () => {
   });
   const pickers = renderer.root.findAllByType(OnboardingScreen);
   expect(pickers.length).toBe(1);
-  expect(pickers[0].props.selectedServices).toEqual(["RIDER", "VOLUNTEER"]);
+  expect(pickers[0].props.selectedServices).toEqual(["RIDER", "MOBILE_SHOP"]);
   renderer.unmount();
 });
 

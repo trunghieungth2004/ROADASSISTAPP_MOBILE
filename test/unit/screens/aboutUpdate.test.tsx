@@ -1,7 +1,7 @@
 import {expect, jest, test, beforeEach, afterEach} from "@jest/globals";
 import {act, create, type ReactTestInstance} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {Platform, Pressable, Text} from "react-native";
+import {Platform, Text} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AboutScreen from "../../../src/screens/AboutScreen";
 import {en} from "../../../src/i18n/en";

@@ -3,13 +3,11 @@ import {Pressable, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect} from "@react-navigation/native";
-import {setVolunteerAvailability, volunteerHeartbeat} from "../api/users";
 import {pingProviderLocation, updateProvider, type Provider} from "../api/providers";
 import {capturePosition, lastBeat, markBeat} from "../services/locationBeats";
 import {switchEnabled} from "./more/providerUi";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
-import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
 import {darkTheme, lightTheme} from "../theme";
@@ -24,53 +22,41 @@ type Props = {
 export default function DutySection({providers, onProvidersChanged, onNotice, onError}: Props) {
   const {t} = useStrings();
   const {token} = useAuth();
-  const {user, refresh} = useProfile();
   const {mode} = useThemeMode();
   const theme = mode === "dark" ? darkTheme : lightTheme;
-  const [volBusy, setVolBusy] = useState(false);
   const [providerBusy, setProviderBusy] = useState(false);
   const [tick, setTick] = useState(0);
   useFocusEffect(useCallback(() => {
     setTick((n) => n + 1);
   }, []));
-  const isVolunteer = (user?.services ?? []).includes("VOLUNTEER");
-  const volunteerOn = user?.volunteerAvailable === true;
   const towDuty = providers.filter((p) => p.kind === "TOW");
   const shopDuty = providers.filter((p) => p.kind === "SHOP");
   const mobileDuty = providers.filter((p) => p.kind === "MOBILE_SHOP");
   const towOn = towDuty.some((p) => p.accepting !== false);
   const shopOn = shopDuty.some((p) => p.accepting !== false);
   const mobileOn = mobileDuty.some((p) => p.accepting !== false);
+  const statusHint = (list: Provider[], off: string): string => {
+    if (list.some((p) => p.status === "PENDING")) return t.more.dutyPending;
+    if (list.some((p) => p.status === "DENIED")) return t.more.dutyDenied;
+    if (list.some((p) => p.suspended === true)) return t.more.dutySuspended;
+    return off;
+  };
   void tick;
   const towBeat = lastBeat("tower");
   const towFresh = towBeat !== null && Date.now() - towBeat < 15 * 60 * 1000;
-  async function onVolunteerToggle(next: boolean): Promise<void> {
-    if (!token || volBusy) return;
-    setVolBusy(true);
-    try {
-      await setVolunteerAvailability({available: next}, token);
-      await refresh();
-      if (next && token) {
-        const pos = await capturePosition();
-        if (pos) {
-          await volunteerHeartbeat(pos.lat, pos.lng, token);
-          markBeat("volunteer");
-        }
-      }
-      onNotice(t.more.saved);
-    } catch (err) {
-      onError(toMessage(err));
-    } finally {
-      setVolBusy(false);
-    }
-  }
   async function onDutyToggle(kind: "TOW" | "SHOP" | "MOBILE_SHOP", next: boolean): Promise<void> {
     if (!token || providerBusy) return;
     setProviderBusy(true);
     try {
       const targets = providers.filter((p) => p.kind === kind && switchEnabled(p, false));
       if (targets.length === 0) {
-        onNotice(kind === "TOW" ? t.more.dutyTowOff : kind === "MOBILE_SHOP" ? t.more.dutyMobileShopOff : t.more.dutyShopOff);
+        const list = providers.filter((p) => p.kind === kind);
+        onNotice(statusHint(
+          list,
+          kind === "TOW" ? t.more.dutyTowOff :
+            kind === "MOBILE_SHOP" ? t.more.dutyMobileShopOff :
+              t.more.dutyShopOff,
+        ));
         return;
       }
       for (const target of targets) {
@@ -92,54 +78,39 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
       setProviderBusy(false);
     }
   }
-  if (!isVolunteer && towDuty.length === 0 && shopDuty.length === 0 && mobileDuty.length === 0) return null;
+  if (towDuty.length === 0 && shopDuty.length === 0 && mobileDuty.length === 0) return null;
   return (
     <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-      {isVolunteer ? (
-        <Pressable style={styles.listRow} onPress={() => void onVolunteerToggle(!volunteerOn)} accessibilityRole="switch" accessibilityState={{checked: volunteerOn}} accessibilityLabel={t.more.volTitle}>
-          <MaterialIcons name="volunteer-activism" size={20} color={theme.primary} />
-          <View style={styles.permText}>
-            <Text style={[styles.listText, {color: theme.text}]}>{t.more.volTitle}</Text>
-          </View>
-          <View style={[styles.permPill, {backgroundColor: volunteerOn ? theme.primary : theme.divider}]}>
-            <Text style={styles.permPillText}>{volunteerOn ? t.more.permOn : t.more.permOff}</Text>
-          </View>
-          <View pointerEvents="none">
-            <Switch value={volunteerOn} onValueChange={(v) => void onVolunteerToggle(v)} disabled={volBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" />
-          </View>
-        </Pressable>
-      ) : null}
-      {isVolunteer && towDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
       {towDuty.length > 0 ? (
         <Pressable style={styles.listRow} onPress={() => void onDutyToggle("TOW", !towOn)} accessibilityRole="switch" accessibilityState={{checked: towOn}} accessibilityLabel={t.more.dutyTow}>
           <MaterialIcons name="local-shipping" size={20} color={theme.primary} />
           <View style={styles.permText}>
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.dutyTow}</Text>
-            <Text style={[styles.permHint, {color: theme.muted}]}>{!towOn ? t.more.dutyTowOff : towFresh ? t.more.dutyTowOn : t.more.dutyWaiting}</Text>
+            <Text style={[styles.permHint, {color: theme.muted}]}>{!towOn ? statusHint(towDuty, t.more.dutyTowOff) : towFresh ? t.more.dutyTowOn : t.more.dutyWaiting}</Text>
           </View>
           <View style={[styles.permPill, {backgroundColor: towOn ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{towOn ? t.more.permOn : t.more.permOff}</Text></View>
           <View pointerEvents="none"><Switch value={towOn} onValueChange={(v) => void onDutyToggle("TOW", v)} disabled={providerBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View>
         </Pressable>
       ) : null}
-      {(isVolunteer || towDuty.length > 0) && mobileDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
+      {towDuty.length > 0 && mobileDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
       {mobileDuty.length > 0 ? (
         <Pressable style={styles.listRow} onPress={() => void onDutyToggle("MOBILE_SHOP", !mobileOn)} accessibilityRole="switch" accessibilityState={{checked: mobileOn}} accessibilityLabel={t.more.dutyMobileShop}>
           <MaterialIcons name="build" size={20} color={theme.primary} />
           <View style={styles.permText}>
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.dutyMobileShop}</Text>
-            <Text style={[styles.permHint, {color: theme.muted}]}>{mobileOn ? t.more.dutyMobileShopOn : t.more.dutyMobileShopOff}</Text>
+            <Text style={[styles.permHint, {color: theme.muted}]}>{mobileOn ? t.more.dutyMobileShopOn : statusHint(mobileDuty, t.more.dutyMobileShopOff)}</Text>
           </View>
           <View style={[styles.permPill, {backgroundColor: mobileOn ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{mobileOn ? t.more.permOn : t.more.permOff}</Text></View>
           <View pointerEvents="none"><Switch value={mobileOn} onValueChange={(v) => void onDutyToggle("MOBILE_SHOP", v)} disabled={providerBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View>
         </Pressable>
       ) : null}
-      {(isVolunteer || towDuty.length > 0 || mobileDuty.length > 0) && shopDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
+      {(towDuty.length > 0 || mobileDuty.length > 0) && shopDuty.length > 0 ? <View style={[styles.divider, {backgroundColor: theme.divider}]} /> : null}
       {shopDuty.length > 0 ? (
         <Pressable style={styles.listRow} onPress={() => void onDutyToggle("SHOP", !shopOn)} accessibilityRole="switch" accessibilityState={{checked: shopOn}} accessibilityLabel={t.more.dutyShop}>
           <MaterialIcons name="storefront" size={20} color={theme.primary} />
           <View style={styles.permText}>
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.dutyShop}</Text>
-            <Text style={[styles.permHint, {color: theme.muted}]}>{shopOn ? t.more.dutyShopOn : t.more.dutyShopOff}</Text>
+            <Text style={[styles.permHint, {color: theme.muted}]}>{shopOn ? t.more.dutyShopOn : statusHint(shopDuty, t.more.dutyShopOff)}</Text>
           </View>
           <View style={[styles.permPill, {backgroundColor: shopOn ? theme.primary : theme.divider}]}><Text style={styles.permPillText}>{shopOn ? t.more.permOn : t.more.permOff}</Text></View>
           <View pointerEvents="none"><Switch value={shopOn} onValueChange={(v) => void onDutyToggle("SHOP", v)} disabled={providerBusy} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View>

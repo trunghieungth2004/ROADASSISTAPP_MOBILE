@@ -23,10 +23,14 @@ export function AuthProvider({children}: {children: ReactNode}) {
     void readSession().then((saved) => { setSession(saved); setLoaded(true); });
     const unsub = onIdTokenChanged(auth, async (user) => {
       if (!user) { setSession(null); clearApiCache(); await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined); return; }
-      const token = await user.getIdToken();
-      const next = {uid: user.uid, token};
-      setSession(next);
-      await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next)).catch(() => undefined);
+      try {
+        const token = await user.getIdToken();
+        const next = {uid: user.uid, token};
+        setSession(next);
+        await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next)).catch(() => undefined);
+      } catch {
+        void 0;
+      }
     });
     return unsub;
   }, []);
@@ -46,11 +50,15 @@ export function AuthProvider({children}: {children: ReactNode}) {
   const refreshToken = useCallback(async (): Promise<string | null> => {
     const user = auth.currentUser;
     if (!user) return null;
-    const token = await user.getIdToken(true);
-    clearApiCache();
-    clearInflight();
-    await signIn(user.uid, token);
-    return token;
+    try {
+      const token = await user.getIdToken(true);
+      clearApiCache();
+      clearInflight();
+      await signIn(user.uid, token);
+      return token;
+    } catch {
+      return null;
+    }
   }, [signIn]);
   useEffect(() => {
     setTokenRefresher(refreshToken);

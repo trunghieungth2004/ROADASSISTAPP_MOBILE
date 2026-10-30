@@ -96,7 +96,7 @@ export default function LoginScreen() {
         </Pressable>
       </ScrollView>
       </KeyboardAvoidingView>
-      <Snack message={error} severity="error" sticky bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={() => setError(null)} />
+      <Snack message={error} severity="error" bottom={insets.bottom + SNACK_GAP} dangerColor={theme.danger} onHide={() => setError(null)} />
     </ScreenContainer>
   );
 }

@@ -26,8 +26,11 @@ export function LanguageProvider({children}: {children: ReactNode}) {
   })}), [lang]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
+const fallbackLanguage: LanguageState = {
+  lang: "en",
+  t: en,
+  toggle: () => undefined,
+};
 export function useStrings() {
-  const ctx = useContext(LanguageContext);
-  if (!ctx) throw new Error("LanguageProvider missing");
-  return ctx;
+  return useContext(LanguageContext) ?? fallbackLanguage;
 }

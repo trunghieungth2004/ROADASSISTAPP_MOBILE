@@ -45,7 +45,7 @@ test("concurrent refreshes resolve to the latest bundle", async () => {
   let resolveSlow!: (v: MeBundle) => void;
   mockedFetch
     .mockImplementationOnce(() => new Promise((resolve) => { resolveSlow = resolve; }))
-    .mockImplementationOnce(() => Promise.resolve({...BASE, user: {...BASE.user, services: ["RIDER", "VOLUNTEER"]}}));
+    .mockImplementationOnce(() => Promise.resolve({...BASE, user: {...BASE.user, services: ["RIDER", "MOBILE_SHOP"]}}));
   await act(async () => {
     const slow = latest()?.refresh() ?? Promise.resolve(null);
     const fast = latest()?.refresh() ?? Promise.resolve(null);
@@ -53,7 +53,7 @@ test("concurrent refreshes resolve to the latest bundle", async () => {
     await Promise.all([slow, fast]);
   });
   expect(mockedFetch).toHaveBeenCalledTimes(2);
-  expect(latest()?.bundle).toEqual({...BASE, user: {...BASE.user, services: ["RIDER", "VOLUNTEER"]}});
+  expect(latest()?.bundle).toEqual({...BASE, user: {...BASE.user, services: ["RIDER", "MOBILE_SHOP"]}});
   renderer.unmount();
   mockedFetch.mockReset();
 });
