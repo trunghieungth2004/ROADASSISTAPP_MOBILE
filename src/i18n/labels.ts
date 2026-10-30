@@ -1,4 +1,4 @@
-import type { Strings } from "./index";
+import type {Strings} from "./index";
 
 function pick(map: Record<string, string>, value: string): string {
   return map[value] ?? value;
