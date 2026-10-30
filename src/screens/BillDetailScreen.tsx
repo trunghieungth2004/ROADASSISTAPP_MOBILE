@@ -16,22 +16,7 @@ import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
-import {
-  billDateLabel,
-  billItemCount,
-  billItemLabel,
-  billItemStatusColor,
-  billItemStatusLabel,
-  billPayeeLabel,
-  billStatusColor,
-  billStatusLabel,
-  billTitle,
-  itemNetPayout,
-  itemPayoutStatus,
-  payeeSummary,
-  payoutStatusColor,
-  payoutStatusLabel,
-} from "./bills/billLabels";
+import {billDateLabel, billItemCount, billItemLabel, billItemStatusColor, billItemStatusLabel, billPayeeLabel, billStatusColor, billStatusLabel, billTitle, itemNetPayout, itemPayoutStatus, payeeSummary, payoutStatusColor, payoutStatusLabel} from "./bills/billLabels";
 
 type BillParams = {
   ticketId?: string;

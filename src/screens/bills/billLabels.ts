@@ -78,6 +78,7 @@ export function billStatusColor(status: string, theme: AppTheme): string {
 }
 
 export function billItemLabel(item: BillItem, t: Strings): string {
+  if (item.ticketType === "SOS") return t.assist.mobileCallOut;
   return item.kind === "TOW_FARE" ? t.bills.towFare : t.bills.repair;
 }
 
@@ -108,6 +109,7 @@ export function billDateLabel(createdAt: string | null): string {
 }
 
 export function billTitle(bill: Bill, t: Strings): string {
+  if (bill.ticketType === "SOS") return t.assist.mobileCallOut;
   return bill.ticketType === "TOW" ? t.bills.journey : t.bills.visit;
 }
 

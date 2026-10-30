@@ -4,17 +4,7 @@ import {AppText as Text} from "../../components/ui/AppText";
 import type {Bill} from "../../api/bills";
 import type {Strings} from "../../i18n/en";
 import {onColor, type AppTheme} from "../../theme";
-import {
-  billDateLabel,
-  billItemCount,
-  billPayeeLabel,
-  billStatusColor,
-  billStatusLabel,
-  billTitle,
-  payeeSummary,
-  payoutStatusColor,
-  payoutStatusLabel,
-} from "./billLabels";
+import {billDateLabel, billItemCount, billPayeeLabel, billStatusColor, billStatusLabel, billTitle, payeeSummary, payoutStatusColor, payoutStatusLabel} from "./billLabels";
 
 type Props = {
   bill: Bill;
