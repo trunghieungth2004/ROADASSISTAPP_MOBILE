@@ -20,16 +20,73 @@ turn on "require CI pass" branch protection when ready.
 ## Release builds (`.github/workflows/release.yml`)
 
 On `v*` tags (or manual dispatch): gates, git-crypt unlock, Firebase config
-check, version stamping, signed release APK, GitHub Release with generated
-notes. Branching stays trunk-based: short branches → PR → squash onto `main`,
-release = tag. No `develop` branch.
+check, version stamping, signed release APK, curated release notes, and a
+GitHub Release. Branching stays trunk-based: short branches → PR → squash onto
+`main`, release = tag. No `develop` branch.
+
+Manual dispatch builds and uploads an artifact but does not publish a release;
+only a tag push publishes.
+
+### Changelog and release notes
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
+newest version first, grouped into Added / Changed / Removed / Fixed /
+Security, written for users rather than copied from `git log`.
+
+Before tagging:
+
+1. Move the `Unreleased` entries into a `## [x.y.z] - YYYY-MM-DD` section.
+2. Check the notes extract cleanly:
+
+```bash
+yarn release:notes v0.2.0 --check
+```
+
+The release workflow runs the same script, writes `release-notes.md`, and
+publishes that section as the release body. `generate_release_notes: true`
+appends GitHub's automatic full-changelog link. Do not rely on GitHub's
+automatic notes alone: this project pushes commits directly to `main`, so
+GitHub has no merged-PR titles or labels to categorise.
+
+### GitHub "Latest" semantics
+
+The in-app updater calls:
+
+```text
+GET https://api.github.com/repos/trunghieungth2004/ROADASSISTAPP_MOBILE/releases/latest
+```
+
+GitHub defines that endpoint as the most recent **non-draft, non-prerelease**
+release sorted by `created_at` — the commit date, not the publish date. A
+release published later can therefore fail to become Latest if its commit is
+older. The workflow sets `make_latest: true` explicitly so the intended
+release becomes Latest regardless of that ambiguity.
+
+Rules:
+
+- Drafts and pre-releases can never be Latest.
+- Publish releases in version order.
+- If publishing an older/backport release, do not leave it as a normal full
+  release; mark it `make_latest: false` or publish it as a pre-release.
+- To move Latest back to an earlier release:
+
+```bash
+gh release edit v0.1.2 --latest
+```
 
 ### Cutting a release
 
 ```bash
 node -p "require('./app.json').expo.version"   # read current
-# bump expo.version in app.json, commit
-git tag v0.2.0 && git push origin main v0.2.0
+# bump expo.version in app.json
+# bump version in package.json and package-lock.json
+# add the matching section to CHANGELOG.md
+yarn release:notes v0.2.0 --check
+git add app.json package.json package-lock.json CHANGELOG.md
+git commit -m "MOBILE: release 0.2.0"
+git push origin main
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The workflow asserts the tag equals `v<app.json version>` and stamps
@@ -38,17 +95,28 @@ accepted as upgrades). The APK is named `roadassist-<tag>.apk` — that name
 is a contract: the in-app updater locates the download by it, so renaming
 breaks updates without a compile error anywhere.
 
-### Planned updater rollout
+### Current rollout
 
-The installed build is `v0.1.1`, and the in-app updater cannot replace it
-reliably, so the rollout is staged:
+`v0.1.2` is the current published build. `v0.2.0` is the next release and the
+first one to use curated release notes plus explicit Latest marking. Install
+it over `v0.1.2` with the same signing key to verify the in-app updater path.
 
-1. Bump `expo.version` to `0.1.2`, tag `v0.1.2`, and distribute that APK as a
-   manual install (uninstall `v0.1.1` first where signatures differ).
-2. After `v0.1.2` is installed on the test devices, bump to `0.1.3`, tag it,
-   and use it to verify the in-app updater path.
+### Verify a published release
 
-Until that approval, `app.json` stays at `0.1.1` and no tag is cut.
+```bash
+gh release view v0.2.0 \
+  -R trunghieungth2004/ROADASSISTAPP_MOBILE \
+  --json tagName,isLatest,assets
+
+curl -sS \
+  -H 'Accept: application/vnd.github+json' \
+  https://api.github.com/repos/trunghieungth2004/ROADASSISTAPP_MOBILE/releases/latest \
+  | jq -r '.tag_name'
+```
+
+Then download the APK, confirm `versionName`/`versionCode` with
+`aapt dump badging`, install it on a physical Android device, and open the app
+to confirm the updater offers the new version.
 
 | Secret | Source | Notes |
 |---|---|---|
@@ -58,9 +126,9 @@ Until that approval, `app.json` stays at `0.1.1` and no tag is cut.
 
 ### Creating the upload keystore (once, ever)
 
-No release keystore exists yet, so generate one — and back it up, because
-losing it means the app's signing identity is gone for good (updates would
-require an uninstall):
+If the upload keystore does not exist yet, generate one — and back it up,
+because losing it means the app's signing identity is gone for good (updates
+would require an uninstall):
 
 ```bash
 keytool -genkeypair -v -keystore ~/roadassist-release.keystore \

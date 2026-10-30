@@ -107,12 +107,19 @@ jobs:
       - run: |
           TAG="${GITHUB_REF_NAME:-manual}"
           cp android/app/build/outputs/apk/release/app-release.apk "roadassist-${TAG}.apk"
+      - name: Build release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" release-notes.md
       - uses: actions/upload-artifact@v4
         with:
           name: roadassist-apk
           path: roadassist-*.apk
       - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          name: RoadAssist ${{ github.ref_name }}
+          body_path: release-notes.md
           files: roadassist-*.apk
+          fail_on_unmatched_files: true
           generate_release_notes: true
+          make_latest: true

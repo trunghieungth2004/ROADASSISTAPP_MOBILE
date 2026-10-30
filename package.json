@@ -2,7 +2,7 @@
   "name": "roadassistapp-mobile",
   "description": "RoadAssist mobile app (React Native / Expo) \u2014 1:1 of web FE.",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/roboto": "^0.4.3",
@@ -64,6 +64,7 @@
     "ios": "yarn typecheck && yarn test && expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint --ext .ts,.tsx src test App.tsx index.ts"
+    "lint": "eslint --ext .ts,.tsx src test App.tsx index.ts",
+    "release:notes": "node scripts/release-notes.mjs"
   }
 }

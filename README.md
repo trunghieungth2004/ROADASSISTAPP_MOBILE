@@ -47,6 +47,12 @@ cannot run this app (native modules: MapLibre, notifications, audio, tasks).
 permissions, GPS, voice, push) happens on a physical Android device —
 emulators without Play Services cannot test FCM. No comments in `src`.
 
+## Releases
+
+Release notes live in `CHANGELOG.md`; the tag/build/verification checklist is
+in `documentation/RELEASE.md`. Android builds are published as GitHub Releases
+and the in-app updater reads the repository's Latest release.
+
 ## Backend
 
 `../ROADASSISTAPP_BE` — Cloud Functions API, Valhalla routing, Cloud Tasks
