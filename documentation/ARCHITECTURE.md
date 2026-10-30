@@ -87,9 +87,9 @@ on one-point lines.
 
 Routing never blocks on a missing vehicle: `RouteCard` shows a centred
 inline `route.vehicleHint` row whenever no vehicle is active (tap opens the
-vehicle picker). The BE stays permissive — with no width/type in the request
-it runs scooter costing and skips the narrow-alley width probe — so the hint
-is the only signal that width checks are off.
+vehicle picker). The BE stays permissive — with no vehicle type in the
+request it runs scooter costing — so the hint only signals that the default
+routing profile is being used.
 
 Pick-on-map uses the same fullscreen `MapPickOverlay` as every other search
 surface: the search closes, the overlay opens with the field's current point
@@ -156,17 +156,19 @@ One map, one top-anchored card, three mutually exclusive sections switched by a
 segmented control (`AssistSectionTabs`, tab semantics): `Request` (icon-only
 type buttons — the `MECHANIC` button expands shop browse inline: map-icon
 pins + name search; `SOS`/`TOW` open a ticket dialog with note field,
-drop-off picker for tow, and Send; nothing preselected). Filing while holding
-a live ticket of the same type answers `409` with the live ticket's id — the
-dialog names it once and offers Change drop-off (when the live ticket is a
-destination-less tow, opening the retarget picker on it) or File anyway
-(resubmits forced); cross-type filings skip the dialog entirely) and `Records`
-(unified in/out list, see below). The type row ends in a compact vehicle
-button (glyph only) opening the shared picker: neutral border when set,
-danger dot when the fleet exists but nothing is active, dashed border + plus
-when there is no vehicle at all (`vehicleButtonState`, mirrored on Route's
-compact button). The dialog replaces the old inline note + request button:
-one extra tap that ends pocket-dial dispatches.
+drop-off picker for tow, and Send; nothing preselected). `SOS`, `TOW`, and
+`MECHANIC` require an active vehicle: submitting without one opens the shared
+picker instead of calling the API. Filing while the active vehicle already has
+a non-terminal ticket answers `409` with `reason: "VEHICLE_BUSY"` — the dialog
+names the live ticket and offers View ticket / Keep request, plus Change
+drop-off when the live ticket is a destination-less tow. There is no
+file-anyway override. `Records` follows (unified in/out list, see below). The
+type row ends in a compact vehicle button (glyph only) opening the shared
+picker: neutral border when set, danger dot when the fleet exists but nothing
+is active, dashed border + plus when there is no vehicle at all
+(`vehicleButtonState`, mirrored on Route's compact button). The dialog replaces
+the old inline note + request button: one extra tap that ends pocket-dial
+dispatches.
 Car riders see no `MECHANIC` button — `MECHANIC` / `WALK_IN` are bike-only
 server-side, so it would be a dead end. Sections live in
 `src/screens/assist/` (`RequestSection`, `TicketSheet`, `ShopsSection`,
@@ -186,12 +188,10 @@ sweep, so the sheet closes with a notice instead of an error.
 Sections are Request, Tow, and Records in one segmented control: Request files
 SOS/repair jobs and browses shops, Tow files tow tickets (destination via the
 shared place search, shop or free point) and boards nearby tow jobs for
-active towers and car-capable volunteers on duty (both may legally accept a
-TOW — the board matches the BE accept rules; board accepts resolve the
-caller's own ACTIVE tower as `shopId`, volunteers send none and take the
-volunteer path; record accepts follow the same resolution, and shop-only
-viewers see no Accept at all — just the flow hint (tower claims first) —
-since they can never take a tow),
+active towers on duty (the board matches the BE accept rules; board and
+record accepts resolve the caller's own ACTIVE tower as `shopId`, and
+shop-only viewers see no Accept at all — just the flow hint (tower claims
+first) — since they can never take a tow),
 Records merges everything. An accepted tow pins a live job view: map layers
 (green tower-dot pin, pickup pin, drop-off pin, leg-aware straight connector —
 tower→pickup while matched, tower→shop once arrived — camera fit on open)
@@ -256,9 +256,10 @@ reviews preview opening a scrollable all-reviews dialog (quarter-screen
 minimum height, same `RatingRow` rows), rating
 line (count always shown), an icon row (walk /
 navigate / report, words kept as accessibility labels), and **I'm here** as
-the primary action — visible only within 200 m GPS (`IM_HERE_RADIUS_M`,
-`null` otherwise). Distance, minutes, and the closed warning live on the map
-pill, never repeated in the sheet.
+the primary action — visible only within 200 m GPS (`IM_HERE_RADIUS_M`) and
+only while the shop is on duty; off-duty shops hide the action and show an
+off-duty hint instead. Distance, minutes, and the closed warning live on the
+map pill, never repeated in the sheet.
 `I'm here` posts a `WALK_IN` ticket and jumps to Records. Navigating to a shop
 stamps the nav session with that shop (`checkIn`), so the navigator shows its
 own arrival **I'm here** card (200 m-gated on live position) that files the
@@ -311,8 +312,7 @@ only; the server `409` stays the real guard.
 
 Records merges both sides of every ticket into a single newest-first list fed
 by `POST /dispatch/feed`, which stamps each row server-side
-(`direction: "in" | "out"` plus `otherParty` names — shop, tower, volunteer handle,
-or rider display name; shop parties additionally carry `label`, `openNow`,
+(`direction: "in" | "out"` plus `otherParty` names — shop, tower, or rider display name; shop parties additionally carry `label`, `openNow`,
 `ratingAvg`, and `ratingCount` when the provider record holds them, resolved
 through `assignedShopId`, then the addressed `providerId` — the tow drop-off
 shop is never the counterparty, so a pending tow reads Unassigned with its
@@ -322,15 +322,17 @@ Rows are two lines: type + status pill (per-status
 color via `statusPillColor`), counterparty + relative date. The filter row
 carries All/In/Out plus role-aware kind toggles (shop/tow icons, always-on
 rider icon) pinned right: rows resolve to a business kind through assignment,
-then ticket type, with kind-less rows on the rider toggle; each row leads
-with its role glyph (storefront, tow-truck, person) ahead of the direction
-arrow, drawn from the same mapping as the filters. Chips render
+then ticket type, with kind-less rows on the rider toggle. TOW rows always
+lead with the tow-truck service glyph; other rows use the role mapping
+(storefront, build, person) ahead of the direction arrow. The filter chips
+keep the business-kind mapping, so an inbound TOW to a shop stays under the
+SHOP chip while its row shows the tow-truck. Chips render
 only for businesses the user actually operates (rider chip always). No inline
 actions, and opening a row no longer touches map selection — the sheet is
 the only detail UI. Tapping a row opens `RecordDetailSheet` (bottom sheet,
 same language as shop details): type-only title with the status as a header
 pill, then the counterparty hero (direction chip, name, role caption —
-repair shop / tow operator / volunteer / rider — relative age), a bordered
+repair shop / tow operator / rider — relative age), a bordered
 place container (labeled Pickup on tow, SOS and mechanic tickets, Start point
 on walk-in, with a reverse-geocoded label over the coordinates), the shop card when the party is
 a shop (name title, address, stars, phone with the open-status pill —
@@ -362,9 +364,9 @@ The walk-in Decline renders only on walk-in tickets — tow rows never offer
 it, so a destination shop sees exactly one decline affordance (Decline
 drop-off).
 On pending unclaimed TOWs the Accept action is hidden from viewers who
-can neither attach a tower nor take the volunteer path (shop-only viewers),
-with a hint line in the body explaining the flow (tower claims first — shops
-can't accept tow jobs) standing in for the missing button. Towers whose own
+cannot attach a tower (shop-only viewers), with a hint line in the body
+explaining the flow (tower claims first — shops can't accept tow jobs)
+standing in for the missing button. Towers whose own
 vehicle isn't accepting (off duty or mid-job) get the same hidden treatment
 with an off-duty hint instead — the server would refuse the accept anyway.
 Declining closes the sheet on success (errors keep it open for retry) —
@@ -406,10 +408,9 @@ only — tapping them never opens anything; the sheet is the sole ticket UI.
 Operator lifecycle runs inside the sheet: Accept (pending) → Send quote
 (`WorkSheet`, amount required) → rider Approve (`6`) → Work done
 (`WorkSheet`, work type + invoice, no amounts) → Mark ready (`7`), with
-Decline + reason as the pending off-ramp; volunteers (SOS) keep the direct
+Decline + reason as the pending off-ramp; SOS mobile shops keep the direct
 Start work at arrival. Work states, the work sheet, and quotes are
-shop-ticket only — volunteer-held and tower-held tickets never see those
-controls (the server 403s them regardless; the client gates on the ticket
+shop-ticket only — tower-held tickets never see those controls (the server 403s them regardless; the client gates on the ticket
 touching one of your own SHOPs, so dual-role accounts see the workbench only
 on their shop jobs).
 The workbench is one binding quote. The send-quote action opens its own
@@ -453,20 +454,19 @@ non-scrolling with the submit in the footer.
 
 ## Services & roles
 
-Licenses vs records: `users.services` holds only `RIDER`/`VOLUNTEER`
-(`PUT /users/onboard` self-serves those two; anything else is a `400`).
+Licenses vs records: `users.services` holds only `RIDER`
+(`PUT /users/onboard` self-serves it; anything else is a `400`).
 `SHOP`/`TOW` are provider records, never licenses, so the More badge row
 derives them from `myProviders` (`operatedKinds`, `DENIED` excluded) beside
-the license chips. Un-checking Volunteer revokes via
-`PUT /users/services` (self may only drop its own `VOLUNTEER`; the rider
-license is irrevocable and admins keep the full grant/revoke path).
+the license chips. Service licenses are admin-managed via
+`PUT /users/services`; the rider license is the base license.
 A `DENIED` record of either kind reads as missing, so re-applying stays
 possible from the Services screen.
 
 `OnboardingScreen` is a step wizard, not an inline form dump: the roles step
-picks licenses (Rider locked, Volunteer a toggle; a registered SHOP/TOW reads
-"Registered" and locked), then Continue walks only the newly picked SHOP and
-TOW setup steps in sequence — each with a back button, progress dots, and its
+picks the rider license (locked) and any provider roles; a registered SHOP/TOW
+reads "Registered" and locked, then Continue walks only the newly picked SHOP
+and TOW setup steps in sequence — each with a back button, progress dots, and its
 own inline validation — before the single `onFinish(services, shop, tow)`
 contract fires. Skip stays on the roles step. Both call sites (Tabs' sign-up
 gate, Settings' services sheet) get the same wizard, and services already
@@ -537,8 +537,8 @@ iOS renders nothing — sideload doesn't exist there.
 
 Mihon-shaped: `MoreScreen` is a hub, not a settings dump. It keeps identity
 (avatar, name, licence/role/provider badges, points/reports stats), then a
-Duty card with one switch row per held role (volunteer / tow / shop) right
-under the profile header, then a Bills row and the rows that push `Settings`
+Duty card with one switch row per held role (tow / shop) right under the
+profile header, then a Bills row and the rows that push `Settings`
 and `About`, then sign out. No accordions — every destination is a pushed
 screen (six stack registrations beside `Diagnostics`: Settings, About,
 Permissions, Providers, Bills, BillDetail).
@@ -547,30 +547,27 @@ Permissions, Providers, Bills, BillDetail).
 language, then pushed `Permissions` (notifications / camera / photo library /
 background location / battery, moved wholesale) and `Providers` (Vehicle-pattern header with
 per-missing-kind register buttons on top, per-row switches + edit below,
-create/edit dialogs moved with it). Volunteer radius/capability chips stay
-in Settings as switch-less options, shown while volunteer mode is on.
+create/edit dialogs moved with it).
 `AboutScreen` holds everything that *identifies the app*: name, version +
 build number, backend URL, check-for-updates + auto toggle (Android),
 diagnostics link, GitHub source link.
 
 Why split rather than one screen: the hub stays scannable on a phone, and
-"which server am I on" is a question you only ask while debugging. The
-volunteer location heartbeat lives on More (where its switch lives),
-gated on that screen's focus; tower beats stay on Assist.
+"which server am I on" is a question you only ask while debugging. Tower location beats stay on Assist.
 
 ## Duty rows (More, under the profile card)
 
 One row per held role, Mihon-style: title, consequence summary, switch.
-Volunteer keeps its existing card (mode + radius + capability). Tow duty
-drives every held tower's `accepting` at once and pings location on the way
-up so the tower is visible immediately, not at the next 5-minute beat. Shop
-duty reads Open/Closed and drives `accepting` — the server enforces it
+Tow duty drives every held tower's `accepting` at once and pings location on
+the way up so the tower is visible immediately, not at the next 5-minute beat. Shop
+duty reads Accepting walk-ins and drives `accepting` — the server enforces it
 inbound (walk-in filing rejected, shop pushes skipped), so off means off.
+Opening hours are advisory: the duty switch is the operational gate, so a shop
+on duty can accept after-hours walk-ins and tow drop-offs.
 The tow subtitle reports effective visibility from beat freshness ("waiting
 for location" on a cold start), because the switch alone can't promise what
 the radius can't see. Per-provider switches stay as the source of truth for
-multi-provider edge cases; the volunteer row's outer is a pressable so the
-switch is tappable, matching the appearance row. Registration and edit forms
+multi-provider edge cases. Registration and edit forms
 carry no fees and no duty switch — pricing lives in server-side platform
 config and duty lives in these rows; the server still accepts the legacy fee
 columns so older builds keep saving.
@@ -663,7 +660,7 @@ refreshed every 15 s while a live tow is on Assist. The server bills each
 started minute at the platform 15-minute rate, after a 10-minute grace and
 up to a 60-minute cap, only while the tower's fix sits within 200 m of the
 pin; the sheet falls back to the stored `towFare.waitingFee` when the
-summary is absent. Volunteer rescues never show the block.
+summary is absent. SOS mobile-shop visits never show the block.
 
 ### Declined marking in search
 
