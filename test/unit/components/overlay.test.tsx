@@ -1,4 +1,4 @@
-import {expect, jest, test} from "@jest/globals";
+import {expect, test} from "@jest/globals";
 import {create, type ReactTestRenderer} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import {Modal, ScrollView, Text, ActivityIndicator} from "react-native";
@@ -149,6 +149,84 @@ test("footer renders one button per action with tones", () => {
   const labels = rendered.root.findAllByType(Text).map((n) => n.props.children);
   expect(labels).toContain("Remove");
   expect(labels).toContain("Cancel");
+  rendered.unmount();
+});
+
+test("footer keeps secondary actions left of primary actions", () => {
+  const rendered = mount(
+    <Overlay
+      visible
+      variant="dialog"
+      title="t"
+      closeLabel={en.common.close}
+      onClose={() => undefined}
+      actions={[
+        {label: "Chat", group: "secondary", iconOnly: true, onPress: () => undefined},
+        {label: "Accept", tone: "primary", onPress: () => undefined},
+      ]}
+    >
+      <Text>body</Text>
+    </Overlay>,
+  );
+  const labels = rendered.root
+    .findAll((n) => typeof n.props?.accessibilityLabel === "string")
+    .map((n) => n.props.accessibilityLabel as string);
+  expect(labels.indexOf("Chat")).toBeLessThan(labels.indexOf("Accept"));
+  rendered.unmount();
+});
+
+test("confirm layout renders cancel once and keeps confirm on the right", () => {
+  const rendered = mount(
+    <Overlay
+      visible
+      variant="dialog"
+      title="t"
+      closeLabel={en.common.cancel}
+      onClose={() => undefined}
+      actionLayout="confirm"
+      actions={[
+        {label: "Delete", tone: "danger", onPress: () => undefined},
+        {label: "Cancel", tone: "neutral", outline: true, group: "secondary", onPress: () => undefined},
+      ]}
+    >
+      <Text>body</Text>
+    </Overlay>,
+  );
+  const cancels = rendered.root.findAllByType(Text).filter((n) => n.props?.children === "Cancel");
+  expect(cancels.length).toBe(1);
+  const labels = rendered.root
+    .findAll((n) => typeof n.props?.accessibilityLabel === "string")
+    .map((n) => n.props.accessibilityLabel as string);
+  expect(labels.indexOf("Cancel")).toBeLessThan(labels.indexOf("Delete"));
+  rendered.unmount();
+});
+
+test("ticket layout renders a secondary rail and a primary row", () => {
+  const rendered = mount(
+    <Overlay
+      visible
+      variant="dialog"
+      title="t"
+      closeLabel={en.common.cancel}
+      onClose={() => undefined}
+      actionLayout="ticket"
+      actions={[
+        {label: "Chat", group: "secondary", iconOnly: true, onPress: () => undefined},
+        {label: "Can't fix", group: "secondary", onPress: () => undefined},
+        {label: "Fix complete", tone: "primary", onPress: () => undefined},
+      ]}
+    >
+      <Text>body</Text>
+    </Overlay>,
+  );
+  const labels = rendered.root
+    .findAll((n) => typeof n.props?.accessibilityLabel === "string")
+    .map((n) => n.props.accessibilityLabel as string);
+  expect(labels).toContain("Chat");
+  expect(labels).toContain("Can't fix");
+  expect(labels).toContain("Fix complete");
+  const cancel = rendered.root.findAllByType(Text).filter((n) => n.props?.children === en.common.cancel);
+  expect(cancel.length).toBe(0);
   rendered.unmount();
 });
 

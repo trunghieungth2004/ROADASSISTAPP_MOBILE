@@ -1,4 +1,4 @@
-import {Image, Pressable, StyleSheet, View} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
@@ -6,8 +6,9 @@ import type {Flag} from "../../api/flags";
 import {flagActions, formatUntil, joinMeta} from "../../screens/hazards/flagActions";
 import {darkTheme, lightTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
-import {usePhotoUrls} from "../../services/photos";
+import {resolvePhotoUrl} from "../../services/photos";
 import {usePhotoViewer} from "../ui/PhotoViewer";
+import PhotoThumb from "../ui/PhotoThumb";
 
 type Props = {
   t: Strings;
@@ -19,13 +20,17 @@ type Props = {
 export default function FlagDetailSheet({t, flag, isOwn, onChat}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
-  const photos = usePhotoUrls(flag?.photoUrls);
   const photoViewer = usePhotoViewer(t.common.cancel);
   if (!flag) return null;
-  const photoPaths = flag.photoUrls ?? [];
+  const photoPaths = (flag.photoUrls ?? []).filter((path) => typeof path === "string" && path !== "");
   const showLocked = flagActions(flag.status, isOwn).includes("locked");
   const until = formatUntil(flag.ttlExpiresAtMs, Date.now(), t.flag);
   const meta = joinMeta([flag.reporterHandle ? t.flag.reportedBy.replace("{h}", flag.reporterHandle) : null, until]);
+  const openPhoto = (path: string): void => {
+    void resolvePhotoUrl(path).then((uri) => {
+      if (uri !== "") photoViewer.open(uri);
+    });
+  };
   return (
     <View style={styles.body}>
       {showLocked ? <Text style={[styles.lockedNote, {color: theme.muted}]}>{t.flag.lockedNote}</Text> : null}
@@ -38,18 +43,17 @@ export default function FlagDetailSheet({t, flag, isOwn, onChat}: Props) {
           </Pressable>
         ) : null}
       </View>
-      {photos.length > 0 ? (
-        <View style={styles.photoRow}>
-          {photos.map((uri, index) => (
-            <Pressable key={`${index}-${uri}`} onPress={() => photoViewer.open(uri)} accessibilityRole="button" accessibilityLabel={`${t.flag.photos} ${index + 1}`}>
-              <Image source={{uri}} style={styles.thumb} />
-            </Pressable>
-          ))}
-        </View>
-      ) : photoPaths.length > 0 ? (
+      {photoPaths.length > 0 ? (
         <View style={styles.photoRow}>
           {photoPaths.map((path, index) => (
-            <View key={`pending-${index}-${path}`} style={[styles.thumb, {backgroundColor: theme.border}]} />
+            <PhotoThumb
+              key={`${index}-${path}`}
+              path={path}
+              theme={theme}
+              style={styles.thumb}
+              accessibilityLabel={`${t.flag.photos} ${index + 1}`}
+              onPress={openPhoto}
+            />
           ))}
         </View>
       ) : null}

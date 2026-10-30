@@ -2,7 +2,7 @@ import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import SavedPlacesSheet from "../../../src/components/place-search/SavedPlacesSheet";
-import {lightTheme} from "../../../src/theme";
+
 import {en} from "../../../src/i18n/en";
 
 const metrics: Metrics = {

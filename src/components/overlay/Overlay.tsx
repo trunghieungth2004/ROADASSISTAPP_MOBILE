@@ -7,6 +7,7 @@ import {AppText as Text} from "../ui/AppText";
 import {darkTheme, lightTheme} from "../../theme";
 
 export type OverlayVariant = "fullScreen" | "dialog" | "sheet";
+export type OverlayActionLayout = "primary" | "confirm" | "ticket";
 
 export type OverlayActionTone = "primary" | "neutral" | "danger";
 
@@ -17,6 +18,9 @@ export type OverlayAction = {
   outline?: boolean;
   busy?: boolean;
   disabled?: boolean;
+  icon?: ReactNode;
+  iconOnly?: boolean;
+  group?: "secondary" | "primary";
 };
 
 type Props = {
@@ -28,6 +32,7 @@ type Props = {
   closeLabel: string;
   onClose: () => void;
   actions?: OverlayAction[];
+  actionLayout?: OverlayActionLayout;
   scrollable?: boolean;
   children: ReactNode;
 };
@@ -65,36 +70,66 @@ function Header({title, leading, right, trailing}: {title?: string; leading?: Re
   );
 }
 
-function Footer({actions}: {actions: OverlayAction[]}) {
+function Footer({actions, layout}: {actions: OverlayAction[]; layout: OverlayActionLayout}) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const secondary = actions.filter((action) => action.group === "secondary" || (action.iconOnly === true && action.group !== "primary"));
+  const primary = actions.filter((action) => !secondary.includes(action));
+  const renderAction = (action: OverlayAction) => {
+    const tone = action.tone ?? "primary";
+    const filled = !action.outline;
+    const toneColor = tone === "danger" ? theme.danger : tone === "primary" ? theme.primary : theme.text;
+    const borderColor = tone === "danger" ? theme.danger : tone === "primary" ? theme.primary : theme.border;
+    const textColor = filled ? "#fff" : toneColor;
+    const off = action.busy === true || action.disabled === true;
+    return (
+      <Pressable
+        key={action.label}
+        style={[action.iconOnly ? styles.iconBtn : styles.actionBtn, filled ? {backgroundColor: toneColor} : {borderColor, borderWidth: 1, backgroundColor: "transparent"}, off && styles.disabled]}
+        disabled={off}
+        onPress={() => dismissAnd(action.onPress)}
+        accessibilityRole="button"
+        accessibilityLabel={action.label}
+      >
+        {action.busy === true ? <ActivityIndicator color={textColor} /> :
+          action.iconOnly === true && action.icon !== undefined ? action.icon :
+            <Text style={[styles.actionText, {color: textColor}]}>{action.label}</Text>}
+      </Pressable>
+    );
+  };
+  if (layout === "ticket") {
+    return (
+      <View style={styles.ticketFooter}>
+        {secondary.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ticketRail}>
+            {secondary.map(renderAction)}
+          </ScrollView>
+        ) : null}
+        {primary.length > 0 ? (
+          <View style={[styles.ticketPrimaryRow, primary.length === 1 && styles.fullRow]}>
+            {primary.map(renderAction)}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+  if (layout === "confirm") {
+    return (
+      <View style={styles.confirmRow}>
+        {secondary.map(renderAction)}
+        {primary.map(renderAction)}
+      </View>
+    );
+  }
   return (
-    <View style={styles.actionRow}>
-      {actions.map((action) => {
-        const tone = action.tone ?? "primary";
-        const filled = !action.outline;
-        const toneColor = tone === "danger" ? theme.danger : tone === "primary" ? theme.primary : theme.text;
-        const borderColor = tone === "danger" ? theme.danger : tone === "primary" ? theme.primary : theme.border;
-        const textColor = filled ? "#fff" : toneColor;
-        const off = action.busy === true || action.disabled === true;
-        return (
-          <Pressable
-            key={action.label}
-            style={[styles.actionBtn, filled ? {backgroundColor: toneColor} : {borderColor, borderWidth: 1, backgroundColor: "transparent"}, off && styles.disabled]}
-            disabled={off}
-            onPress={() => dismissAnd(action.onPress)}
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-          >
-            {action.busy === true ? <ActivityIndicator color={textColor} /> : <Text style={[styles.actionText, {color: textColor}]}>{action.label}</Text>}
-          </Pressable>
-        );
-      })}
+    <View style={styles.primaryStack}>
+      {secondary.length > 0 ? <View style={styles.secondaryRow}>{secondary.map(renderAction)}</View> : null}
+      {primary.map(renderAction)}
     </View>
   );
 }
 
-export default function Overlay({visible, variant, title, leading, right, closeLabel, onClose, actions, scrollable, children}: Props) {
+export default function Overlay({visible, variant, title, leading, right, closeLabel, onClose, actions, actionLayout = "primary", scrollable, children}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -128,7 +163,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
             <View style={styles.handle} />
             <Header title={title} leading={leading} right={right} trailing={<DismissButton closeLabel={closeLabel} onClose={onClose} />} />
             {body}
-            {footed ? <Footer actions={actions} /> : null}
+            {footed ? <Footer actions={actions} layout={actionLayout} /> : null}
           </View>
         </View>
       </Modal>
@@ -147,15 +182,17 @@ export default function Overlay({visible, variant, title, leading, right, closeL
           <View style={[styles.dialog, !scrolls && styles.dialogFree, {backgroundColor: theme.paper}]}>
             <Header title={title} leading={leading} right={right} />
             {body}
-            {footed ? <Footer actions={actions} /> : null}
-            <Pressable
-              style={[styles.cancelRow, {borderColor: theme.border}]}
-              onPress={() => dismissAnd(onClose)}
-              accessibilityRole="button"
-              accessibilityLabel={closeLabel}
-            >
-              <Text style={[styles.actionText, {color: theme.text}]}>{closeLabel}</Text>
-            </Pressable>
+            {footed ? <Footer actions={actions} layout={actionLayout} /> : null}
+            {actionLayout === "primary" ? (
+              <Pressable
+                style={[styles.cancelRow, {borderColor: theme.border}]}
+                onPress={() => dismissAnd(onClose)}
+                accessibilityRole="button"
+                accessibilityLabel={closeLabel}
+              >
+                <Text style={[styles.actionText, {color: theme.text}]}>{closeLabel}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -177,8 +214,16 @@ const styles = StyleSheet.create({
   closeBtn: {width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center"},
   body: {flexShrink: 1},
   staticBody: {width: "100%"},
-  actionRow: {flexDirection: "row", gap: 8},
-  actionBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
+  actionRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  primaryStack: {gap: 8},
+  confirmRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  ticketFooter: {gap: 8},
+  ticketRail: {flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 4},
+  ticketPrimaryRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  fullRow: {width: "100%"},
+  secondaryRow: {flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap"},
+  actionBtn: {flexGrow: 1, borderRadius: 8, padding: 10, alignItems: "center", minWidth: 96},
+  iconBtn: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
   actionText: {fontWeight: "700"},
   cancelRow: {borderWidth: 1, borderRadius: 8, padding: 10, alignItems: "center"},
   disabled: {opacity: 0.6},
