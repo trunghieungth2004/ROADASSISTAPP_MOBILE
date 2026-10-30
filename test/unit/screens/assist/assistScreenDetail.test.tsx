@@ -923,4 +923,3 @@ test("shop side rates the rider under its own label", async () => {
     teardown(renderer);
   }
 });
-

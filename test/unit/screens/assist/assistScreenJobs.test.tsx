@@ -761,4 +761,3 @@ test("shop-held ticket keeps the shop workbench", async () => {
     teardown(renderer);
   }
 });
-

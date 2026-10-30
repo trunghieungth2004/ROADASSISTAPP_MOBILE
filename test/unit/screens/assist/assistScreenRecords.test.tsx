@@ -684,4 +684,3 @@ test("tow nearby overlay cycles past two kilometres up to the twenty roof", asyn
     teardown(renderer);
   }
 });
-

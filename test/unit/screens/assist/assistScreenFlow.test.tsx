@@ -921,4 +921,3 @@ test("a failed photo upload blocks the SOS until the rider retries or sends with
     teardown(renderer);
   }
 });
-
