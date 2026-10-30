@@ -1,6 +1,6 @@
 {
   "name": "roadassistapp-mobile",
-  "description": "RoadAssist mobile app (React Native / Expo) — 1:1 of web FE.",
+  "description": "RoadAssist mobile app (React Native / Expo) \u2014 1:1 of web FE.",
   "license": "MIT",
   "version": "0.1.0",
   "main": "index.ts",
@@ -47,6 +47,9 @@
     "@types/node": "^26.6.3",
     "@types/react": "~19.2.2",
     "@types/react-test-renderer": "^19.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.0",
+    "@typescript-eslint/parser": "^8.46.0",
+    "eslint": "^8.57.1",
     "jest": "^30.5.2",
     "jest-expo": "^57.0.5",
     "react-test-renderer": "^19.3.0",
@@ -60,6 +63,7 @@
     "android": "yarn typecheck && yarn test && expo run:android",
     "ios": "yarn typecheck && yarn test && expo run:ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx src test App.tsx index.ts"
   }
 }
