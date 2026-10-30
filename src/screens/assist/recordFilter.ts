@@ -4,7 +4,7 @@ export type RecordFilter = "ALL" | "IN" | "OUT";
 
 export const RECORD_FILTERS: RecordFilter[] = ["ALL", "IN", "OUT"];
 
-export type BusinessKind = "SHOP" | "TOW";
+export type BusinessKind = "SHOP" | "TOW" | "MOBILE_SHOP";
 
 export function directionOf(ticket: Pick<FeedTicket, "direction">): FeedDirection {
   return ticket.direction;
@@ -43,6 +43,7 @@ export function businessKindOf(ticket: FeedTicket, shopKinds: Map<string, Busine
 export function roleIconName(kind: BusinessKind | null): {set: "material" | "community"; name: string} {
   if (kind === "SHOP") return {set: "material", name: "storefront"};
   if (kind === "TOW") return {set: "community", name: "tow-truck"};
+  if (kind === "MOBILE_SHOP") return {set: "material", name: "build"};
   return {set: "material", name: "person"};
 }
 
@@ -53,12 +54,14 @@ export function filterByKind(
   showRider: boolean,
   shopKinds: Map<string, BusinessKind>,
   preferShopForInbound = false,
+  showMobileShop = true,
 ): FeedTicket[] {
-  if (showShop && showTow && showRider) return [...tickets];
+  if (showShop && showTow && showRider && showMobileShop) return [...tickets];
   return tickets.filter((t) => {
     const kind = businessKindOf(t, shopKinds, preferShopForInbound && t.direction === "in");
     if (kind === "SHOP") return showShop;
     if (kind === "TOW") return showTow;
+    if (kind === "MOBILE_SHOP") return showMobileShop;
     return showRider;
   });
 }

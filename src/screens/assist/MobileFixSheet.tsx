@@ -45,7 +45,7 @@ export default function MobileFixSheet({
     <Overlay
       visible
       variant="dialog"
-      title={`${t.assist.mobileFixTitle} · ${ticketLabel}`}
+      title={`${t.assist.fixComplete} · ${ticketLabel}`}
       closeLabel={t.common.cancel}
       onClose={onClose}
       scrollable={false}

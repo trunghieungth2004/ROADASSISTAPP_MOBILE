@@ -1,10 +1,12 @@
 import * as Location from "expo-location";
 import {createTicket} from "../../api/dispatch";
+import {normalizeVehicleType} from "../../api/vehicles";
 import {getFix} from "../../services/geo";
 
 export async function checkInAtShop(args: {
   providerId: string;
   token: string;
+  vehicleId?: string;
   vehicleType?: string;
   vehicleWidth?: number;
   deniedMessage: string;
@@ -18,7 +20,8 @@ export async function checkInAtShop(args: {
       lat: point.lat,
       lng: point.lng,
       providerId: args.providerId,
-      vehicleType: args.vehicleType,
+      vehicleId: args.vehicleId,
+      vehicleType: normalizeVehicleType(args.vehicleType) ?? undefined,
       vehicleWidth: args.vehicleWidth,
     },
     args.token,

@@ -5,7 +5,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
-import {RIDER_DISPUTE_REASONS} from "../../api/dispatch";
+import {PROVIDER_DISPUTE_REASONS, RIDER_DISPUTE_REASONS} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
 import {isPhotoPermissionError, pickPhotos, takePhoto, type PhotoSource} from "../../services/photos";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
@@ -13,6 +13,8 @@ import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 type Props = {
   t: Strings;
   ticketLabel: string;
+  ticketType: string;
+  viewer: "RIDER" | "PROVIDER";
   busy: boolean;
   error: string | null;
   onSubmit: (reason: string, note: string, photoUri: string | null) => void;
@@ -25,10 +27,18 @@ export function disputeReasonLabel(reason: string, t: Strings): string {
   if (reason === "NO_SHOW") return t.dispute.reasonNoShow;
   if (reason === "RUDE") return t.dispute.reasonRude;
   if (reason === "WRONG_ROUTE") return t.dispute.reasonWrongRoute;
+  if (reason === "UNSAFE") return t.dispute.reasonUnsafe;
+  if (reason === "FIX_NOT_DONE") return t.dispute.reasonFixNotDone;
+  if (reason === "POOR_QUALITY") return t.dispute.reasonPoorQuality;
+  if (reason === "UNFIXABLE_DISAGREE") return t.dispute.reasonUnfixableDisagree;
+  if (reason === "RIDER_NO_SHOW") return t.dispute.reasonRiderNoShow;
+  if (reason === "RIDER_UNREACHABLE") return t.dispute.reasonRiderUnreachable;
+  if (reason === "RIDER_REFUSED_PAYMENT") return t.dispute.reasonRiderRefusedPayment;
+  if (reason === "RIDER_ABUSIVE") return t.dispute.reasonRiderAbusive;
   return t.dispute.reasonOther;
 }
 
-export default function DisputeSheet({t, ticketLabel, busy, error, onSubmit, onClose}: Props) {
+export default function DisputeSheet({t, ticketLabel, ticketType, viewer, busy, error, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
@@ -37,6 +47,14 @@ export default function DisputeSheet({t, ticketLabel, busy, error, onSubmit, onC
   const [photoBusy, setPhotoBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const photoViewer = usePhotoViewer(t.common.cancel);
+  const reasons = viewer === "PROVIDER" ?
+    [...PROVIDER_DISPUTE_REASONS] :
+    RIDER_DISPUTE_REASONS.filter((reason) => {
+      if (ticketType === "TOW") {
+        return reason !== "FIX_NOT_DONE" && reason !== "POOR_QUALITY" && reason !== "UNFIXABLE_DISAGREE";
+      }
+      return reason !== "WRONG_ROUTE";
+    });
   async function onAddPhoto(from: PhotoSource): Promise<void> {
     if (photoBusy || photo !== null) return;
     setPhotoBusy(true);
@@ -65,12 +83,13 @@ export default function DisputeSheet({t, ticketLabel, busy, error, onSubmit, onC
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={[{label: t.dispute.submit, tone: "primary", busy, onPress: onSend}]}
+      scrollable={false}
     >
       <View style={styles.body}>
         {error ? <Text style={[styles.hint, {color: theme.danger}]}>{error}</Text> : null}
         {localError ? <Text style={[styles.hint, {color: theme.danger}]}>{localError}</Text> : null}
         <View style={styles.chipRow}>
-          {RIDER_DISPUTE_REASONS.map((r) => (
+          {reasons.map((r) => (
             <Pressable key={r} onPress={() => setReason(r)} style={[styles.chipBtn, {borderColor: theme.primary}, reason === r && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{checked: reason === r}} accessibilityLabel={disputeReasonLabel(r, t)}>
               <Text style={{color: reason === r ? "#fff" : theme.text}}>{disputeReasonLabel(r, t)}</Text>
             </Pressable>

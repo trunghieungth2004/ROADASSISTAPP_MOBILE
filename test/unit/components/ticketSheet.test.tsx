@@ -109,3 +109,30 @@ test("the photo list is bounded and the add strip hides at the cap", async () =>
     });
   }
 });
+
+test("a photo upload failure offers retry or sending without photos", async () => {
+  const onRetryPhotos = jest.fn();
+  const onSubmitWithoutPhotos = jest.fn();
+  const {renderer} = await render({
+    photos: ["file://a.jpg"],
+    photoError: en.photos.uploadFailed,
+    onRetryPhotos,
+    onSubmitWithoutPhotos,
+  });
+  try {
+    expect(renderer.root.findAll((n) => n.props?.children === en.photos.uploadFailed).length).toBeGreaterThan(0);
+    expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.request && typeof n.props?.onPress === "function")).toHaveLength(0);
+    const retry = renderer.root.find((n) => n.props?.accessibilityLabel === en.common.retry && typeof n.props?.onPress === "function");
+    const send = renderer.root.find((n) => n.props?.accessibilityLabel === en.photos.sendWithout && typeof n.props?.onPress === "function");
+    await act(async () => {
+      retry.props.onPress();
+      send.props.onPress();
+    });
+    expect(onRetryPhotos).toHaveBeenCalledWith();
+    expect(onSubmitWithoutPhotos).toHaveBeenCalledWith();
+  } finally {
+    await act(async () => {
+      renderer.unmount();
+    });
+  }
+});

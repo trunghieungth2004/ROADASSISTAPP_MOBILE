@@ -2,13 +2,14 @@ import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import RecordDetailSheet from "../../../../src/screens/assist/RecordDetailSheet";
-import {usePhotoUrls} from "../../../../src/services/photos";
+import {usePhotoUrl} from "../../../../src/services/photos";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 import type {FeedTicket} from "../../../../src/api/dispatch";
 
 jest.mock("../../../../src/services/photos", () => ({
-  usePhotoUrls: jest.fn(() => [] as string[]),
+  usePhotoUrl: jest.fn(() => ""),
+  resolvePhotoUrl: jest.fn(async () => ""),
 }));
 
 const metrics: Metrics = {
@@ -18,7 +19,7 @@ const metrics: Metrics = {
 
 type Props = React.ComponentProps<typeof RecordDetailSheet>;
 
-const mockedUsePhotoUrls = jest.mocked(usePhotoUrls);
+const mockedUsePhotoUrl = jest.mocked(usePhotoUrl);
 
 function ticket(overrides?: Partial<FeedTicket>): FeedTicket {
   return {
@@ -69,7 +70,6 @@ async function render(overrides?: Partial<Props>) {
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
           ownTowId={null}
-          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}
@@ -103,11 +103,11 @@ function placeholders(renderer: ReturnType<typeof create>) {
 }
 
 test("stays hidden without permission and skips downloads", async () => {
-  mockedUsePhotoUrls.mockImplementation(() => []);
+  mockedUsePhotoUrl.mockImplementation(() => "");
   const renderer = await render({showRequestPhotos: false});
   try {
     expect(texts(renderer)).not.toContain(en.assist.photos);
-    expect(mockedUsePhotoUrls).toHaveBeenCalledWith(null);
+    expect(mockedUsePhotoUrl).not.toHaveBeenCalled();
     expect(placeholders(renderer)).toHaveLength(0);
   } finally {
     await act(async () => {
@@ -117,7 +117,7 @@ test("stays hidden without permission and skips downloads", async () => {
 });
 
 test("shows placeholder tiles while ticket photos resolve", async () => {
-  mockedUsePhotoUrls.mockImplementation(() => []);
+  mockedUsePhotoUrl.mockImplementation(() => "");
   const renderer = await render();
   try {
     expect(texts(renderer)).toContain(en.assist.photos);
@@ -131,12 +131,68 @@ test("shows placeholder tiles while ticket photos resolve", async () => {
 });
 
 test("renders resolved ticket photos", async () => {
-  mockedUsePhotoUrls.mockImplementation((paths) => (Array.isArray(paths) && paths.length > 0 ? ["file://r1.jpg", "file://r2.jpg"] : []));
+  mockedUsePhotoUrl.mockImplementation((path) => path?.endsWith("1.jpg") ? "file://r1.jpg" : "file://r2.jpg");
   const renderer = await render();
   try {
     expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://r1.jpg").length).toBeGreaterThan(0);
     expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://r2.jpg").length).toBeGreaterThan(0);
     expect(placeholders(renderer)).toHaveLength(0);
+  } finally {
+    await act(async () => {
+      renderer.unmount();
+    });
+  }
+});
+
+test("shows the unfixable reason and evidence for an SOS", async () => {
+  mockedUsePhotoUrl.mockImplementation((path) => path?.includes("evidence") ? "file://evidence.jpg" : "");
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      direction: "out",
+      mobileCallOutFee: 50000,
+      unfixable: {
+        reason: "NO_PARTS",
+        photoUrls: ["dispatch/t1/evidence.jpg"],
+        by: "op1",
+        at: "2026-01-01T00:00:00.000Z",
+      },
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.unfixableNoParts);
+    expect(texts(renderer)).toContain(en.assist.unfixablePhotos);
+    expect(texts(renderer)).toContain(en.assist.mobileCallOut);
+    expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://evidence.jpg").length).toBeGreaterThan(0);
+  } finally {
+    await act(async () => {
+      renderer.unmount();
+    });
+  }
+});
+
+test("shows the no-charge copy when the call-out was waived", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      direction: "out",
+      mobileCallOutFee: 0,
+      mobileCallOutWaived: true,
+      unfixable: {
+        reason: "SAFETY",
+        photoUrls: [],
+        by: "op1",
+        at: "2026-01-01T00:00:00.000Z",
+      },
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.unfixableWaived);
+    expect(texts(renderer)).toContain(en.assist.mobileCallOutWaived);
+    expect(texts(renderer)).not.toContain(en.assist.mobileCallOutOnly);
   } finally {
     await act(async () => {
       renderer.unmount();

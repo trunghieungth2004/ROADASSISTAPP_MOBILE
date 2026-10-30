@@ -6,9 +6,9 @@ import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 import type {FeedTicket} from "../../api/dispatch";
 import StatusRow from "../../components/ui/StatusRow";
-import {timeAgoLabel} from "../hazards/hazardFilter";
-import {statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel} from "./ticketLabels";
-import {RECORD_FILTERS, businessKindOf, filterByKind, filterRecords, roleIconName, type BusinessKind, type RecordFilter} from "./recordFilter";
+
+
+import {RECORD_FILTERS, businessKindOf, filterByKind, filterRecords, type BusinessKind, type RecordFilter} from "./recordFilter";
 import TicketRow from "./TicketRow";
 
 type Props = {
@@ -17,6 +17,7 @@ type Props = {
   tickets: FeedTicket[];
   loading: boolean;
   shopKinds: Map<string, BusinessKind>;
+  simple?: boolean;
   onOpen: (ticket: FeedTicket) => void;
 };
 
@@ -33,16 +34,17 @@ function partyName(ticket: FeedTicket, t: Strings): string {
   return t.assist.unassigned;
 }
 
-export default function RecordsSection({t, theme, tickets, loading, shopKinds, onOpen}: Props) {
+export default function RecordsSection({t, theme, tickets, loading, shopKinds, simple = false, onOpen}: Props) {
   const [filter, setFilter] = useState<RecordFilter>("ALL");
   const [showShop, setShowShop] = useState(true);
   const [showTow, setShowTow] = useState(true);
   const [showRider, setShowRider] = useState(true);
+  const [showMobileShop, setShowMobileShop] = useState(true);
   const operated = new Set(shopKinds.values());
-  const visible = filterByKind(filterRecords(tickets, filter), showShop, showTow, showRider, shopKinds, true);
+  const visible = simple ? tickets : filterByKind(filterRecords(tickets, filter), showShop, showTow, showRider, shopKinds, true, showMobileShop);
   return (
     <View style={styles.wrap}>
-      <View style={styles.filterRow}>
+      {simple ? null : <View style={styles.filterRow}>
         <View style={styles.filterGroup}>
         {RECORD_FILTERS.map((f) => {
           const selected = filter === f;
@@ -64,11 +66,16 @@ export default function RecordsSection({t, theme, tickets, loading, shopKinds, o
             <MaterialCommunityIcons name="tow-truck" size={18} color={showTow ? "#fff" : theme.primary} />
           </Pressable>
         ) : null}
+        {operated.has("MOBILE_SHOP") ? (
+          <Pressable onPress={() => setShowMobileShop((v) => !v)} style={[styles.iconChip, {borderColor: theme.primary}, showMobileShop && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{selected: showMobileShop}} accessibilityLabel={t.roles.mobileShop}>
+            <MaterialIcons name="build" size={18} color={showMobileShop ? "#fff" : theme.primary} />
+          </Pressable>
+        ) : null}
           <Pressable onPress={() => setShowRider((v) => !v)} style={[styles.iconChip, {borderColor: theme.primary}, showRider && {backgroundColor: theme.primary}]} accessibilityRole="button" accessibilityState={{selected: showRider}} accessibilityLabel={t.assist.filterRider}>
             <MaterialIcons name="person" size={18} color={showRider ? "#fff" : theme.primary} />
           </Pressable>
         </View>
-      </View>
+      </View>}
       {loading && tickets.length === 0 ? (
         <StatusRow theme={theme} text={t.common.loading} />
       ) : visible.length === 0 ? (

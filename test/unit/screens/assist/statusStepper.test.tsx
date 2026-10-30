@@ -17,11 +17,11 @@ function shownLabels(renderer: ReturnType<typeof create>): (string | undefined)[
   return renderer.root.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string);
 }
 
-test("walk-in shows five stages with accepted at matched", async () => {
+test("walk-in shows shop stages with accepted and at shop", async () => {
   const renderer = await render("WALK_IN", "6");
   try {
     const labels = shownLabels(renderer);
-    for (const label of [en.assist.statusPending, en.assist.statusAccepted, en.assist.statusInProgress, en.assist.statusReady, en.assist.statusResolved]) {
+    for (const label of [en.assist.statusPending, en.assist.statusAccepted, en.assist.statusInShop, en.assist.statusInProgress, en.assist.statusReady, en.assist.statusResolved]) {
       expect(labels).toContain(label);
     }
     expect(labels).not.toContain(en.assist.statusArrived);

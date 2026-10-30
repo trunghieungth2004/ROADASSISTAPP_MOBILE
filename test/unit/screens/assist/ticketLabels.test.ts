@@ -24,8 +24,9 @@ test("new statuses resolve to translated labels", () => {
   expect(statusTone("1")).toBe("active");
   expect(statusTone("6")).toBe("active");
   expect(statusTone("9")).toBe("active");
-  expect(statusStages("WALK_IN")).toEqual(["1", "2", "9", "6", "7", "4"]);
-  expect(statusStages("SOS")).toEqual(["1", "2", "3", "4"]);
+  expect(statusStages("WALK_IN")).toEqual(["1", "2", "10", "9", "6", "7", "4"]);
+  expect(statusStages("MECHANIC")).toEqual(["1", "2", "3", "9", "6", "7", "4"]);
+  expect(statusStages("SOS")).toEqual(["1", "2", "3", "7", "4"]);
   expect(stageLabel("WALK_IN", "2", en)).toBe(en.assist.statusAccepted);
   expect(stageLabel("SOS", "2", en)).toBe(en.assist.statusMatched);
   expect(declineReasonLabel("FULL", en)).toBe(en.assist.declineFull);

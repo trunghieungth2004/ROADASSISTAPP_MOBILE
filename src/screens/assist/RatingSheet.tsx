@@ -2,7 +2,7 @@ import {useState} from "react";
 import {Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
-import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
+import {AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";

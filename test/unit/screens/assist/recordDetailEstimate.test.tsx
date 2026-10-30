@@ -63,7 +63,6 @@ async function render(overrides?: Partial<Props>) {
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
           ownTowId={null}
-          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}

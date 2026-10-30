@@ -26,6 +26,9 @@ type Props = {
   onAddPhotos?: () => void;
   onRemovePhoto?: (index: number) => void;
   destError?: string | null;
+  photoError?: string | null;
+  onRetryPhotos?: () => void;
+  onSubmitWithoutPhotos?: () => void;
 };
 
 function titleOf(ticketType: TicketType, t: Strings): string {
@@ -34,10 +37,16 @@ function titleOf(ticketType: TicketType, t: Strings): string {
   return t.assist.sos;
 }
 
-export default function TicketSheet({t, theme, ticketType, note, onNote, towDest, busy, onSubmit, onClose, description, onDescription, photos, photosBusy, onAddPhotos, onRemovePhoto, destError}: Props) {
+export default function TicketSheet({t, theme, ticketType, note, onNote, towDest, busy, onSubmit, onClose, description, onDescription, photos, photosBusy, onAddPhotos, onRemovePhoto, destError, photoError, onRetryPhotos, onSubmitWithoutPhotos}: Props) {
   const showPhotos = photos !== undefined || onAddPhotos !== undefined;
   const list = photos ?? [];
   const photoViewer = usePhotoViewer(t.common.cancel);
+  const actions = photoError
+    ? [
+        {label: t.common.retry, tone: "primary" as const, busy, onPress: onRetryPhotos ?? onSubmit},
+        {label: t.photos.sendWithout, tone: "neutral" as const, outline: true, onPress: onSubmitWithoutPhotos ?? onSubmit},
+      ]
+    : [{label: t.assist.request, tone: "primary" as const, busy, onPress: onSubmit}];
   return (
     <Overlay
       visible
@@ -46,7 +55,7 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, towDest
       closeLabel={t.common.cancel}
       onClose={onClose}
       scrollable={false}
-      actions={[{label: t.assist.request, tone: "primary", busy, onPress: onSubmit}]}
+      actions={actions}
     >
       <View style={styles.body}>
         <TextInput
@@ -96,6 +105,7 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, towDest
             </ScrollView>
           </View>
         ) : null}
+        {photoError ? <Text style={[styles.error, {color: theme.danger}]}>{photoError}</Text> : null}
         {photoViewer.node}
       </View>
     </Overlay>

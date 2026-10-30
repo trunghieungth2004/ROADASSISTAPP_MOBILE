@@ -42,7 +42,6 @@ type Props = {
   destLabel: string | null;
   onOpenDestination: (() => void) | null;
   etaText: string | null;
-  dropoffEtaText: string | null;
   preview: JourneyPreview | null;
   busy: boolean;
 };
@@ -50,16 +49,17 @@ type Props = {
 function partyIconOf(party: Party): {set: "material" | "community"; name: string} {
   if (party.kind === "SHOP") return {set: "material", name: "storefront"};
   if (party.kind === "TOW") return {set: "community", name: "tow-truck"};
+  if (party.kind === "MOBILE_SHOP") return {set: "material", name: "build"};
   return {set: "material", name: "person"};
 }
 
-export default function JourneyCard({t, lang, theme, ticket, inbound, party, partyOnPress, placeHeader, destShop, destLat, destLng, destName, destLabel, onOpenDestination, etaText, dropoffEtaText, preview, busy}: Props) {
+export default function JourneyCard({t, lang, theme, ticket, inbound, party, partyOnPress, placeHeader, destShop, destLat, destLng, destName, destLabel, onOpenDestination, etaText, preview, busy}: Props) {
   const partyStateColor = party.openNow === true ? theme.primary : theme.danger;
   const destStateColor = destShop !== null && destShop.openNow === true ? theme.primary : theme.danger;
   const hasDropoff = destShop !== null || (destLat !== null && destLng !== null);
   const isWalkIn = ticket.ticketType === "WALK_IN";
   const walkInDropoff = isWalkIn && hasDropoff;
-  const walkInCustomer = walkInDropoff && party.kind !== "SHOP";
+  const walkInCustomer = walkInDropoff && party.kind !== "SHOP" && party.kind !== "MOBILE_SHOP";
   const twoColumns = !walkInDropoff && (hasDropoff || ticket.ticketType === "TOW");
   const icon = partyIconOf(party);
   const partyCard = (
@@ -88,8 +88,8 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
         ) : null}
         {partyOnPress !== null ? <MaterialIcons name="chevron-right" size={18} color={theme.muted} /> : null}
       </View>
-      {party.kind === "SHOP" && party.label !== null ? (
-        <Text style={[detailStyles.labelText, {color: theme.muted}]}>{party.label}</Text>
+      {party.kind === "SHOP" || party.kind === "MOBILE_SHOP" ? (
+        party.label !== null ? <Text style={[detailStyles.labelText, {color: theme.muted}]}>{party.label}</Text> : null
       ) : null}
       <Stars theme={theme} avg={party.ratingAvg} count={party.ratingCount} />
       {party.phone !== null ? <PhoneLink theme={theme} phone={party.phone} /> : null}
@@ -138,7 +138,6 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
           <Text style={[detailStyles.muted, {color: theme.muted}]}>{inbound ? t.assist.noDropOffAssigned : t.assist.noDropOff}</Text>
         </View>
       )}
-      {dropoffEtaText !== null ? <Text style={[detailStyles.muted, {color: theme.primary}]}>{dropoffEtaText}</Text> : null}
     </>
   );
   const pickupNode = (

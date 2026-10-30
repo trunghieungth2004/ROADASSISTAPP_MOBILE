@@ -63,7 +63,6 @@ async function render(overrides?: Partial<Props>) {
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
           ownTowId={null}
-          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={onDeclineDestination}
           onEditDestination={null}
@@ -100,11 +99,101 @@ test("registered destination shows the shop name and decline action", async () =
   try {
     expect(texts(renderer)).toContain("Fix Shop");
     expect(actionLabels(renderer)).toContain(en.assist.declineDestination);
+    expect(texts(renderer)).toContain(en.assist.declineDestination);
     const btn = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.declineDestination)[0];
     await act(async () => {
       await btn?.props.onPress?.();
     });
     expect(onDeclineDestination).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("mobile shop tow offer stays available when the shop is off duty", async () => {
+  const onOfferMobileTow = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      assignedShopId: "mobile1",
+      mobileTowAvailable: true,
+    }),
+    ownMobileShopId: "mobile1",
+    canOfferMobileTow: true,
+    mobileTowShopOff: true,
+    onOfferMobileTow,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.assist.offerTow);
+    expect(texts(renderer)).toContain(en.assist.offerTowShopOff);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("mobile shop tow offer shows no off-duty hint when the shop is on duty", async () => {
+  const onOfferMobileTow = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      assignedShopId: "mobile1",
+      mobileTowAvailable: true,
+    }),
+    ownMobileShopId: "mobile1",
+    canOfferMobileTow: true,
+    mobileTowShopOff: false,
+    onOfferMobileTow,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.assist.offerTow);
+    expect(texts(renderer)).not.toContain(en.assist.offerTowShopOff);
+  } finally {
+    renderer.unmount();
+  }
+});
+test("mobile shop requests a network tow when its TOW is off duty", async () => {
+  const onOfferMobileTow = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      assignedShopId: "mobile1",
+      mobileTowAvailable: true,
+      mobileTowMode: "NETWORK",
+      mobileTowState: "TOW_OFF_DUTY",
+    }),
+    ownMobileShopId: "mobile1",
+    canOfferMobileTow: true,
+    mobileTowShopOff: false,
+    onOfferMobileTow,
+  });
+  try {
+    expect(actionLabels(renderer)).toContain(en.assist.requestTow);
+    expect(texts(renderer)).toContain(en.assist.offerTowNetworkOffDuty);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("mobile shop sees the no-tow hint for a network request", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "15",
+      assignedShopId: "mobile1",
+      mobileTowAvailable: true,
+      mobileTowMode: "NETWORK",
+      mobileTowState: "NO_TOW",
+    }),
+    ownMobileShopId: "mobile1",
+    canOfferMobileTow: true,
+    mobileTowShopOff: false,
+    onOfferMobileTow: jest.fn(),
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.offerTowNetworkNoTow);
   } finally {
     renderer.unmount();
   }

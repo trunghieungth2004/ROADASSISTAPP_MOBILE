@@ -1,10 +1,11 @@
 import type {ReactNode} from "react";
-import {Image, Pressable, StyleSheet, View} from "react-native";
+import {StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../../components/ui/AppText";
 import type {Strings} from "../../../i18n/en";
 import type {AppTheme} from "../../../theme";
 import {CardHead, DetailCard, detailStyles} from "./parts";
+import PhotoThumb from "../../../components/ui/PhotoThumb";
 
 type Props = {
   t: Strings;
@@ -14,13 +15,13 @@ type Props = {
   workType: string | null;
   showRequestPhotos: boolean;
   requestPaths: string[];
-  requestUrls: string[];
-  evidenceUrls: string[];
+  evidencePaths: string[];
+  unfixablePaths?: string[];
   right?: ReactNode;
-  onOpenPhoto: (uri: string) => void;
+  onOpenPhoto: (path: string) => void;
 };
 
-export default function NotesPhotosCard({t, theme, note, description, workType, showRequestPhotos, requestPaths, requestUrls, evidenceUrls, right, onOpenPhoto}: Props) {
+export default function NotesPhotosCard({t, theme, note, description, workType, showRequestPhotos, requestPaths, evidencePaths, unfixablePaths = [], right, onOpenPhoto}: Props) {
   const showRequest = showRequestPhotos && requestPaths.length > 0;
   return (
     <DetailCard theme={theme}>
@@ -42,26 +43,49 @@ export default function NotesPhotosCard({t, theme, note, description, workType, 
         <>
           <Text style={[styles.subLabel, {color: theme.muted}]}>{t.assist.photos}</Text>
           <View style={detailStyles.photoRow}>
-            {requestUrls.length > 0 ? (
-              requestUrls.map((uri, i) => (
-                <Pressable key={`${i}-${uri}`} onPress={() => onOpenPhoto(uri)} accessibilityRole="button" accessibilityLabel={`${t.assist.photos} ${i + 1}`}>
-                  <Image source={{uri}} style={detailStyles.thumb} />
-                </Pressable>
-              ))
-            ) : (
-              requestPaths.map((path, i) => <View key={`pending-${i}-${path}`} style={[detailStyles.thumb, {backgroundColor: theme.border}]} />)
-            )}
+            {requestPaths.map((path, i) => (
+              <PhotoThumb
+                key={`${i}-${path}`}
+                path={path}
+                theme={theme}
+                style={detailStyles.thumb}
+                accessibilityLabel={`${t.assist.photos} ${i + 1}`}
+                onPress={onOpenPhoto}
+              />
+            ))}
           </View>
         </>
       ) : null}
-      {evidenceUrls.length > 0 ? (
+      {evidencePaths.length > 0 ? (
+        <>
+          <Text style={[styles.subLabel, {color: theme.muted}]}>{t.assist.photos}</Text>
+          <View style={detailStyles.photoRow}>
+            {evidencePaths.map((path, i) => (
+              <PhotoThumb
+                key={`${i}-${path}`}
+                path={path}
+                theme={theme}
+                style={detailStyles.thumb}
+                accessibilityLabel={`${t.assist.photos} ${i + 1}`}
+                onPress={onOpenPhoto}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+      {unfixablePaths.length > 0 ? (
         <>
           <Text style={[styles.subLabel, {color: theme.muted}]}>{t.assist.unfixablePhotos}</Text>
           <View style={detailStyles.photoRow}>
-            {evidenceUrls.map((uri, i) => (
-              <Pressable key={`${i}-${uri}`} onPress={() => onOpenPhoto(uri)} accessibilityRole="button" accessibilityLabel={`${t.assist.unfixablePhotos} ${i + 1}`}>
-                <Image source={{uri}} style={detailStyles.thumb} />
-              </Pressable>
+            {unfixablePaths.map((path, i) => (
+              <PhotoThumb
+                key={`${i}-${path}`}
+                path={path}
+                theme={theme}
+                style={detailStyles.thumb}
+                accessibilityLabel={`${t.assist.unfixablePhotos} ${i + 1}`}
+                onPress={onOpenPhoto}
+              />
             ))}
           </View>
         </>

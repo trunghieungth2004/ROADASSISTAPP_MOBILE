@@ -61,7 +61,6 @@ async function render(overrides?: Partial<Props>) {
           onRateRider={() => undefined}
           ownShopIds={new Set(["shop-1"])}
           ownTowId={null}
-          hasVolunteer={false}
           showRequestPhotos
           onDeclineDestination={() => undefined}
           onEditDestination={null}
@@ -138,9 +137,9 @@ test("a re-matched tow drops the banner and keeps one action entry", async () =>
 });
 
 test("shop decline banner carries the only dispute entry", async () => {
-  const {renderer} = await render({ticket: ticket({status: "2", towLegs: [{toShopId: "shop-9"}]})});
+  const {renderer} = await render({ticket: ticket({status: "2", destinationDecline: {shopId: "shop-9", reasonCode: "SHOP_FULL", by: "op1", at: "2026-01-01T00:00:00.000Z"}, towLegs: [{toShopId: "shop-9"}]})});
   try {
-    expect(texts(renderer)).toContain(en.assist.shopDeclineMid);
+    expect(texts(renderer).some((text) => text.startsWith(en.assist.shopDeclineMid))).toBe(true);
     expect(disputeCount(renderer)).toBe(1);
   } finally {
     renderer.unmount();

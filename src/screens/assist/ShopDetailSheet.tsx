@@ -36,11 +36,13 @@ export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const preview = reviews !== null ? reviews.slice(0, 2) : null;
   const {height} = useWindowDimensions();
+  const offDuty = shop.accepting === false || shop.status !== "ACTIVE" || shop.suspended === true;
   return (
     <Overlay
       visible
       variant="sheet"
       title={shop.name}
+      leading={<MaterialIcons name={shop.kind === "TOW" ? "local-shipping" : shop.kind === "MOBILE_SHOP" ? "build" : "storefront"} size={20} color={theme.primary} />}
       right={
         <View style={styles.headPills}>
           <View style={[styles.statusPill, {backgroundColor: openColor}]}>
@@ -54,7 +56,7 @@ export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={[
-        ...(onImHere ? [{label: t.assist.imHere, tone: "primary" as const, busy: imHereBusy, onPress: onImHere}] : []),
+        ...(onImHere && !offDuty ? [{label: t.assist.imHere, tone: "primary" as const, busy: imHereBusy, onPress: onImHere}] : []),
       ]}
     >
       <View style={styles.body}>
@@ -69,6 +71,12 @@ export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy
             <MaterialIcons name="flag" size={22} color={theme.danger} />
           </Pressable>
         </View>
+        {offDuty ? (
+          <View style={[styles.offDuty, {borderColor: theme.border}]}>
+            <MaterialIcons name="info-outline" size={16} color={theme.muted} />
+            <Text style={[styles.coords, {color: theme.muted}]}>{t.assist.shopOffDuty}</Text>
+          </View>
+        ) : null}
         {count > 0 || jobs !== null ? (
           <View style={[styles.metaRow, styles.spread]}>
             {jobs !== null ? (
@@ -118,6 +126,7 @@ const styles = StyleSheet.create({
   body: {gap: 8, width: "100%"},
   iconRow: {flexDirection: "row", gap: 12, justifyContent: "center", paddingVertical: 4},
   iconBtn: {width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center"},
+  offDuty: {flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 8, padding: 8},
   metaRow: {flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap"},
   spread: {justifyContent: "space-between", flexWrap: "nowrap"},
   headPills: {flexDirection: "row", alignItems: "center", gap: 6},

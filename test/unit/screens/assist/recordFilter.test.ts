@@ -24,12 +24,14 @@ test("filter keeps server order without re-sorting", () => {
 });
 
 test("business kind resolves through assignment, then type", () => {
-  const kinds = new Map([["shop9", "SHOP"], ["tow7", "TOW"]] as [string, "SHOP" | "TOW"][]);
+  const kinds = new Map([["shop9", "SHOP"], ["tow7", "TOW"], ["mobile1", "MOBILE_SHOP"]] as [string, "SHOP" | "TOW" | "MOBILE_SHOP"][]);
   const assigned = {id: "a", userId: "u", ticketType: "SOS", lat: 0, lng: 0, status: "1", direction: "in", assignedShopId: "shop9"} as never;
+  const mobileAssigned = {id: "g", userId: "u", ticketType: "SOS", lat: 0, lng: 0, status: "2", direction: "in", assignedShopId: "mobile1"} as never;
   const addressed = {id: "b", userId: "u", ticketType: "WALK_IN", lat: 0, lng: 0, status: "1", direction: "out", providerId: "tow7"} as never;
   const typed = {id: "c", userId: "u", ticketType: "TOW", lat: 0, lng: 0, status: "1", direction: "out"} as never;
   const plain = {id: "d", userId: "u", ticketType: "SOS", lat: 0, lng: 0, status: "1", direction: "out"} as never;
   expect(businessKindOf(assigned, kinds)).toBe("SHOP");
+  expect(businessKindOf(mobileAssigned, kinds)).toBe("MOBILE_SHOP");
   expect(businessKindOf(addressed, kinds)).toBe("TOW");
   expect(businessKindOf(typed, kinds)).toBe("TOW");
   expect(businessKindOf(plain, kinds)).toBeNull();
@@ -45,11 +47,15 @@ test("business kind resolves through assignment, then type", () => {
 });
 
 test("rider chip gates kind-less rows", () => {
-  const kinds = new Map<string, "SHOP" | "TOW">();
+  const kinds = new Map<string, "SHOP" | "TOW" | "MOBILE_SHOP">();
   const shop = {id: "a", userId: "u", ticketType: "WALK_IN", lat: 0, lng: 0, status: "1", direction: "in"} as never;
+  const mobile = {id: "c", userId: "u", ticketType: "SOS", lat: 0, lng: 0, status: "2", direction: "in", assignedShopId: "mobile1"} as never;
+  const mobileKinds = new Map([["mobile1", "MOBILE_SHOP"]] as [string, "MOBILE_SHOP"][]);
   const plain = {id: "b", userId: "u", ticketType: "SOS", lat: 0, lng: 0, status: "1", direction: "out"} as never;
   expect(filterByKind([shop, plain], true, true, false, kinds).map((t) => t.id)).toEqual(["a"]);
+  expect(filterByKind([mobile], true, true, true, mobileKinds, false, false)).toEqual([]);
   expect(roleIconName("SHOP")).toEqual({set: "material", name: "storefront"});
   expect(roleIconName("TOW")).toEqual({set: "community", name: "tow-truck"});
+  expect(roleIconName("MOBILE_SHOP")).toEqual({set: "material", name: "build"});
   expect(roleIconName(null)).toEqual({set: "material", name: "person"});
 });

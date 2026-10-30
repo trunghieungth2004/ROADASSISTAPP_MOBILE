@@ -48,8 +48,29 @@ export function statusStages(ticketType: string): string[] {
     return [
       DISPATCH_STATUS.PENDING,
       DISPATCH_STATUS.MATCHED,
+      DISPATCH_STATUS.IN_SHOP,
       DISPATCH_STATUS.QUOTED,
       DISPATCH_STATUS.IN_PROGRESS,
+      DISPATCH_STATUS.READY,
+      DISPATCH_STATUS.RESOLVED,
+    ];
+  }
+  if (ticketType === "MECHANIC") {
+    return [
+      DISPATCH_STATUS.PENDING,
+      DISPATCH_STATUS.MATCHED,
+      DISPATCH_STATUS.ARRIVED,
+      DISPATCH_STATUS.QUOTED,
+      DISPATCH_STATUS.IN_PROGRESS,
+      DISPATCH_STATUS.READY,
+      DISPATCH_STATUS.RESOLVED,
+    ];
+  }
+  if (ticketType === "SOS") {
+    return [
+      DISPATCH_STATUS.PENDING,
+      DISPATCH_STATUS.MATCHED,
+      DISPATCH_STATUS.ARRIVED,
       DISPATCH_STATUS.READY,
       DISPATCH_STATUS.RESOLVED,
     ];
@@ -65,6 +86,13 @@ export function statusStages(ticketType: string): string[] {
 export function stageLabel(ticketType: string, status: string, t: Strings): string {
   if (ticketType === "WALK_IN" && status === DISPATCH_STATUS.MATCHED) return t.assist.statusAccepted;
   return ticketStatusLabel(status, t);
+}
+
+export function unfixableReasonLabel(reason: string, t: Strings): string {
+  if (reason === "NO_PARTS") return t.assist.unfixableNoParts;
+  if (reason === "BEYOND_REPAIR") return t.assist.unfixableBeyondRepair;
+  if (reason === "SAFETY") return t.assist.unfixableSafety;
+  return t.assist.unfixableOther;
 }
 
 export function declineReasonLabel(reason: string, t: Strings): string {

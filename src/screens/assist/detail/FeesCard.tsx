@@ -3,7 +3,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../../components/ui/AppText";
 import type {Strings} from "../../../i18n/en";
 import {onColor, type AppTheme} from "../../../theme";
-import {DISPATCH_STATUS, type FeedTicket} from "../../../api/dispatch";
+import {DISPATCH_STATUS, isUnfixableStatus, type FeedTicket} from "../../../api/dispatch";
 import {paymentMethodLabel, paymentStatusLabel} from "../../../api/payments";
 import type {Bill} from "../../../api/bills";
 import {billStatusColor, billStatusLabel} from "../../bills/billLabels";
@@ -43,22 +43,35 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
   const towCeiling = towHasFare && typeof towFare.ceiling === "number" ? towFare.ceiling : null;
   const shopQuote = typeof ticket.shopQuotedAmount === "number" ? ticket.shopQuotedAmount : null;
   const finalAmount = typeof ticket.finalAmount === "number" ? ticket.finalAmount : null;
+  const callOutWaived = ticket.ticketType === "SOS" &&
+    isUnfixableStatus(ticket.status) &&
+    (ticket.mobileCallOutWaived === true || ticket.mobileCallOutFee === 0);
+  const callOut = ticket.ticketType === "SOS" && isUnfixableStatus(ticket.status) ?
+    (callOutWaived ? 0 :
+      typeof ticket.mobileCallOutFee === "number" ? ticket.mobileCallOutFee : 50000) :
+    null;
   const waitingExtra = waitingFee !== null && waitingFee > 0 ? waitingFee : 0;
   const isTow = ticket.ticketType === "TOW";
   let total: {label: string; amount: number} | null = null;
   if (bill !== null) total = {label: t.bills.total, amount: bill.total};
+  else if (callOut !== null && callOut > 0) total = {label: t.bills.total, amount: callOut};
   else if (towFinal !== null) total = {label: t.bills.total, amount: towFinal + waitingExtra};
   else if (shopQuote !== null) total = {label: t.bills.total, amount: shopQuote + (isTow ? waitingExtra : 0)};
   else if (finalAmount !== null) total = {label: t.bills.total, amount: finalAmount + (isTow ? waitingExtra : 0)};
   else if (estimateAmount !== null) total = {label: t.assist.estimatedTotal, amount: estimateAmount + (isTow ? waitingExtra : 0)};
-  const hasBillable = towHasFare || shopQuote !== null || finalAmount !== null || bill !== null;
+  const hasBillable = towHasFare || shopQuote !== null || finalAmount !== null || callOut !== null || bill !== null;
   const towResolved = !isTow || ticket.status === DISPATCH_STATUS.RESOLVED;
   const hasShopBill = bill !== null && bill.items.some((item) => item.kind !== "TOW_FARE");
-  const billLink = onOpenBill !== null && (isTow || ticket.ticketType === "WALK_IN" || ticket.ticketType === "MECHANIC") && (ticket.direction === "out" || hasBillable) && (towResolved || hasShopBill);
+  const billLink = onOpenBill !== null &&
+    (isTow || ticket.ticketType === "WALK_IN" || ticket.ticketType === "MECHANIC" ||
+      (callOut !== null && callOut > 0)) &&
+    (ticket.direction === "out" || hasBillable) &&
+    (towResolved || hasShopBill || (callOut !== null && callOut > 0));
   const billPillColor = bill !== null ? billStatusColor(bill.status, theme) : theme.primary;
   const payColor = payStatus === "CONFIRMED" ? theme.success : payStatus === "HELD" || payStatus === "PENDING" ? "#d97706" : payStatus === "REFUNDED" || payStatus === "PARTIAL" ? "#8b5cf6" : theme.primary;
-  const showFinalActions = ticket.direction === "out" && payable && finalAmount !== null;
-  if (!towHasFare && shopQuote === null && finalAmount === null && estimateAmount === null && !showWaiting && payMethod === null && bill === null && !billLink) return null;
+  const showFinalActions = ticket.direction === "out" && payable &&
+    finalAmount !== null && callOut === null;
+  if (!towHasFare && shopQuote === null && finalAmount === null && callOut === null && estimateAmount === null && !showWaiting && payMethod === null && bill === null && !billLink) return null;
   return (
     <DetailCard theme={theme}>
       <CardHead
@@ -106,7 +119,10 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
         <View style={[detailStyles.divider, {backgroundColor: theme.divider}]} />
       ) : null}
       {shopQuote !== null ? <FeeRow theme={theme} label={t.assist.quote} value={vnd(shopQuote)} /> : null}
-      {finalAmount !== null ? <FeeRow theme={theme} label={t.assist.finalTitle} value={vnd(finalAmount)} /> : null}
+      {callOut !== null && callOut > 0 ? <FeeRow theme={theme} label={t.assist.mobileCallOut} value={vnd(callOut)} /> : null}
+      {callOut !== null && callOut > 0 ? <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.mobileCallOutOnly}</Text> : null}
+      {callOutWaived ? <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.mobileCallOutWaived}</Text> : null}
+      {finalAmount !== null && callOut === null ? <FeeRow theme={theme} label={t.assist.finalTitle} value={vnd(finalAmount)} /> : null}
       {showWaiting ? (
         <View style={styles.waitRow}>
           <MaterialIcons name="schedule" size={15} color="#f59e0b" />
