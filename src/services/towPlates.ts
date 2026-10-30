@@ -16,7 +16,7 @@ export function parseTowWidth(raw: string): number | null {
 
 export type TowDraftError = "plate" | "type" | "width" | null;
 
-export const TOW_TYPES = ["CAR", "VAN", "TRUCK"] as const;
+export const TOW_TYPES = ["CAR"] as const;
 
 export type TowVehicleKind = (typeof TOW_TYPES)[number];
 

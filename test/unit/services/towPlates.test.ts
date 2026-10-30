@@ -22,8 +22,8 @@ test("parses tow widths inside the backend bounds", () => {
 });
 
 test("validates a tow draft field by field", () => {
-  expect(validateTowDraft({plate: "30A12345", vehicleType: "VAN", width: "2"})).toBeNull();
-  expect(validateTowDraft({plate: "bad", vehicleType: "VAN", width: "2"})).toBe("plate");
+  expect(validateTowDraft({plate: "30A12345", vehicleType: "CAR", width: "2"})).toBeNull();
+  expect(validateTowDraft({plate: "bad", vehicleType: "CAR", width: "2"})).toBe("plate");
   expect(validateTowDraft({plate: "30A12345", vehicleType: "BIKE", width: "2"})).toBe("type");
-  expect(validateTowDraft({plate: "30A12345", vehicleType: "VAN", width: "x"})).toBe("width");
+  expect(validateTowDraft({plate: "30A12345", vehicleType: "CAR", width: "x"})).toBe("width");
 });
