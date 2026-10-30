@@ -1,3 +1,5 @@
+import {File} from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import {getApps} from "firebase/app";
 import {getDownloadURL, getStorage, ref, uploadBytes} from "firebase/storage";
@@ -11,8 +13,29 @@ export const PHOTO_PERMISSION_ERROR = "photo-permission";
 
 export type PhotoSource = "camera" | "library";
 
+const PHOTO_MAX_BYTES = 800 * 1024;
+const PHOTO_MAX_DIMENSION = 1080;
+const PHOTO_QUALITY = 0.65;
+const THUMB_DIMENSION = 256;
+const THUMB_QUALITY = 0.6;
+const PHOTO_COMPRESS_CONCURRENCY = 2;
+
 export function isPhotoPermissionError(err: unknown): boolean {
   return err instanceof Error && err.message === PHOTO_PERMISSION_ERROR;
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({length: Math.min(Math.max(1, limit), items.length)}, async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= items.length) return;
+      out[index] = await run(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 export async function pickPhotos(max: number, existing: number): Promise<string[]> {
@@ -28,16 +51,13 @@ export async function pickPhotos(max: number, existing: number): Promise<string[
   });
   if (result.canceled) return [];
   const uris = result.assets.map((a) => a.uri).filter((u) => typeof u === "string" && u !== "");
-  const out: string[] = [];
-  for (const uri of uris.slice(0, room)) {
+  return mapWithConcurrency(uris.slice(0, room), PHOTO_COMPRESS_CONCURRENCY, async (uri) => {
     try {
-      const compressed = await compressPhoto(uri);
-      out.push(compressed);
+      return await compressPhoto(uri);
     } catch {
-      out.push(uri);
+      return uri;
     }
-  }
-  return out;
+  });
 }
 
 export async function takePhoto(): Promise<string[]> {
@@ -57,14 +77,76 @@ export async function takePhoto(): Promise<string[]> {
   }
 }
 
+async function fileSize(uri: string): Promise<number | null> {
+  try {
+    const file = new File(uri);
+    if (typeof file.size === "number") return file.size;
+  } catch {
+  }
+  try {
+    return (await blobFrom(uri)).size;
+  } catch {
+    return null;
+  }
+}
+
+async function blobFrom(uri: string): Promise<Blob> {
+  try {
+    const res = await fetch(uri);
+    return await res.blob();
+  } catch (err) {
+    console.warn("[photos] blob read failed", uri, err);
+    throw err;
+  }
+}
+
 async function compressPhoto(uri: string): Promise<string> {
   try {
-    const manipulator = await import("expo-image-manipulator");
-    const done = await manipulator.manipulateAsync(uri, [{resize: {width: 1280}}], {compress: 0.7, format: manipulator.SaveFormat.JPEG});
+    let done = await ImageManipulator.manipulateAsync(
+      uri,
+      [{resize: {width: PHOTO_MAX_DIMENSION}}],
+      {compress: PHOTO_QUALITY, format: ImageManipulator.SaveFormat.JPEG},
+    );
+    let size = await fileSize(done.uri);
+    if (size !== null && size > PHOTO_MAX_BYTES) {
+      done = await ImageManipulator.manipulateAsync(
+        done.uri,
+        [{resize: {width: 900}}],
+        {compress: 0.5, format: ImageManipulator.SaveFormat.JPEG},
+      );
+      size = await fileSize(done.uri);
+    }
+    if (size !== null && size > PHOTO_MAX_BYTES) {
+      done = await ImageManipulator.manipulateAsync(
+        done.uri,
+        [{resize: {width: 720}}],
+        {compress: 0.4, format: ImageManipulator.SaveFormat.JPEG},
+      );
+    }
     return done.uri;
   } catch {
     return uri;
   }
+}
+
+async function compressThumb(uri: string): Promise<string | null> {
+  try {
+    const done = await ImageManipulator.manipulateAsync(
+      uri,
+      [{resize: {width: THUMB_DIMENSION}}],
+      {compress: THUMB_QUALITY, format: ImageManipulator.SaveFormat.JPEG},
+    );
+    return done.uri;
+  } catch {
+    return null;
+  }
+}
+
+export function thumbPathFor(path: string): string {
+  const slash = path.lastIndexOf("/");
+  const dot = path.lastIndexOf(".");
+  if (dot > slash) return `${path.slice(0, dot)}-thumb${path.slice(dot)}`;
+  return `${path}-thumb`;
 }
 
 async function uploadToDirectory(directory: string, uris: string[]): Promise<string[]> {
@@ -75,10 +157,23 @@ async function uploadToDirectory(directory: string, uris: string[]): Promise<str
   const stamp = Date.now();
   return Promise.all(
     limited.map(async (uri, i) => {
-      const res = await fetch(uri);
-      const blob = await res.blob();
       const path = `${directory}/${stamp}-${i}.jpg`;
-      await uploadBytes(ref(storage, path), blob, {contentType: "image/jpeg"});
+      const thumbPath = thumbPathFor(path);
+      const fullBlob = await blobFrom(uri);
+      if (fullBlob.size === 0) {
+        throw new Error("photo-empty");
+      }
+      if (fullBlob.size > PHOTO_MAX_BYTES) {
+        throw new Error(`photo-too-large-${fullBlob.size}`);
+      }
+      const thumbBlob = compressThumb(uri)
+        .then((thumbUri) => thumbUri === null ? null : blobFrom(thumbUri))
+        .catch(() => null);
+      const fullUpload = uploadBytes(ref(storage, path), fullBlob, {contentType: "image/jpeg"});
+      const thumbUpload = thumbBlob
+        .then((thumb) => thumb === null ? undefined : uploadBytes(ref(storage, thumbPath), thumb, {contentType: "image/jpeg"}))
+        .catch(() => undefined);
+      await Promise.all([fullUpload, thumbUpload]);
       return path;
     }),
   );
@@ -98,11 +193,15 @@ type UrlStore = {
 };
 
 const URL_CACHE_KEY = "photo-url-cache/v1";
+const URL_CACHE_MAX = 300;
+const URL_CACHE_WRITE_MS = 750;
 
 const urlCache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string>>();
+const thumbMisses = new Set<string>();
 let cacheLoaded = false;
 let cacheLoading: Promise<void> | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function storageModule(): Promise<UrlStore | null> {
   try {
@@ -110,6 +209,14 @@ async function storageModule(): Promise<UrlStore | null> {
     return mod.default;
   } catch {
     return null;
+  }
+}
+
+function trimUrlCache(): void {
+  while (urlCache.size > URL_CACHE_MAX) {
+    const first = urlCache.keys().next().value;
+    if (typeof first !== "string") break;
+    urlCache.delete(first);
   }
 }
 
@@ -132,24 +239,31 @@ function loadUrlCache(): Promise<void> {
         } catch {
         }
       }
+      trimUrlCache();
       cacheLoaded = true;
     })();
   }
   return cacheLoading;
 }
 
-function persistUrlCache(): void {
-  void (async () => {
-    const store = await storageModule();
-    if (!store) return;
-    try {
-      await store.setItem(URL_CACHE_KEY, JSON.stringify(Object.fromEntries(urlCache)));
-    } catch {
-    }
-  })();
+async function writeUrlCache(): Promise<void> {
+  const store = await storageModule();
+  if (!store) return;
+  try {
+    await store.setItem(URL_CACHE_KEY, JSON.stringify(Object.fromEntries(urlCache)));
+  } catch {
+  }
 }
 
-export async function resolvePhotoUrl(path: string): Promise<string> {
+function persistUrlCache(): void {
+  if (persistTimer !== null) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void writeUrlCache();
+  }, URL_CACHE_WRITE_MS);
+}
+
+async function resolveStorageUrl(path: string): Promise<string> {
   if (/^https?:\/\//.test(path)) return path;
   const cached = urlCache.get(path);
   if (cached !== undefined) return cached;
@@ -164,6 +278,7 @@ export async function resolvePhotoUrl(path: string): Promise<string> {
     try {
       const url = await getDownloadURL(ref(getStorage(apps[0]), path));
       urlCache.set(path, url);
+      trimUrlCache();
       persistUrlCache();
       return url;
     } catch {
@@ -176,38 +291,67 @@ export async function resolvePhotoUrl(path: string): Promise<string> {
   return request;
 }
 
+export async function resolvePhotoUrl(path: string, options?: {thumb?: boolean}): Promise<string> {
+  if (/^https?:\/\//.test(path)) return path;
+  if (options?.thumb === true && !thumbMisses.has(path)) {
+    const thumbUrl = await resolveStorageUrl(thumbPathFor(path));
+    if (thumbUrl !== "") return thumbUrl;
+    thumbMisses.add(path);
+  }
+  return resolveStorageUrl(path);
+}
+
 const PREFETCH_PHOTOS_MAX = 8;
 const prefetchedBytes = new Set<string>();
 
 export function prefetchFlagPhotos(groups: string[][]): void {
-  const paths: string[] = [];
   const firstPerFlag: string[] = [];
   for (const group of groups) {
-    let first: string | null = null;
-    for (const path of group) {
-      if (typeof path !== "string" || path === "") continue;
-      paths.push(path);
-      if (first === null) first = path;
+    const first = group.find((path) => typeof path === "string" && path !== "");
+    if (first !== undefined) firstPerFlag.push(first);
+  }
+  const unique = [...new Set(firstPerFlag)].slice(0, PREFETCH_PHOTOS_MAX);
+  if (unique.length === 0) return;
+  const run = (): void => {
+    for (const path of unique) {
+      void resolvePhotoUrl(path, {thumb: true}).then((url) => {
+        if (url === "" || prefetchedBytes.has(url)) return;
+        prefetchedBytes.add(url);
+        try {
+          if (typeof Image.prefetch === "function") void Image.prefetch(url);
+        } catch {
+        }
+      });
     }
-    if (first !== null) firstPerFlag.push(first);
-  }
-  if (paths.length === 0) return;
-  for (const path of paths) void resolvePhotoUrl(path);
-  for (const path of firstPerFlag.slice(0, PREFETCH_PHOTOS_MAX)) {
-    void resolvePhotoUrl(path).then((url) => {
-      if (url === "" || prefetchedBytes.has(url)) return;
-      prefetchedBytes.add(url);
-      try {
-        if (typeof Image.prefetch === "function") void Image.prefetch(url);
-      } catch {
-      }
-    });
-  }
+  };
+  setTimeout(run, 0);
 }
 
-export function usePhotoUrls(paths?: string[] | null): string[] {
+export function usePhotoUrl(path: string | null | undefined, options?: {thumb?: boolean}): string {
+  const thumb = options?.thumb === true;
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let alive = true;
+    if (typeof path !== "string" || path === "") {
+      setUrl("");
+      return () => {
+        alive = false;
+      };
+    }
+    void resolvePhotoUrl(path, {thumb}).then((next) => {
+      if (alive) setUrl(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path, thumb]);
+  return url;
+}
+
+export function usePhotoUrls(paths?: string[] | null, options?: {thumb?: boolean}): string[] {
+  const thumb = options?.thumb === true;
   const list = Array.isArray(paths) ? paths.filter((p): p is string => typeof p === "string" && p !== "") : [];
-  const key = list.join("|");
+  const key = `${thumb ? "thumb" : "full"}:${list.join("|")}`;
   const [urls, setUrls] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
@@ -217,7 +361,7 @@ export function usePhotoUrls(paths?: string[] | null): string[] {
         alive = false;
       };
     }
-    Promise.all(list.map((p) => resolvePhotoUrl(p)))
+    Promise.all(list.map((p) => resolvePhotoUrl(p, {thumb})))
       .then((resolved) => {
         if (alive) setUrls(resolved.filter((u) => u !== ""));
       })

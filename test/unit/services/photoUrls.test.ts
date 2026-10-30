@@ -1,4 +1,4 @@
-import {expect, jest, test} from "@jest/globals";
+import {beforeEach, expect, jest, test} from "@jest/globals";
 
 jest.mock("firebase/app", () => ({getApps: () => [{}]}));
 
@@ -19,7 +19,32 @@ jest.mock("../../../src/services/permissions", () => ({
 }));
 
 import {getDownloadURL} from "firebase/storage";
-import {resolvePhotoUrl} from "../../../src/services/photos";
+import {resolvePhotoUrl, thumbPathFor} from "../../../src/services/photos";
+
+const download = getDownloadURL as jest.MockedFunction<typeof getDownloadURL>;
+const pathOf = (storageRef: unknown): string => (storageRef as {path: string}).path;
+
+beforeEach(() => {
+  download.mockReset();
+  download.mockImplementation(async (storageRef) => `https://cdn.test/${pathOf(storageRef)}`);
+});
+
+test("thumbnail paths keep the file extension", () => {
+  expect(thumbPathFor("flags/u1/a.jpg")).toBe("flags/u1/a-thumb.jpg");
+  expect(thumbPathFor("flags/u1/no-extension")).toBe("flags/u1/no-extension-thumb");
+});
+
+test("thumbnail resolution prefers the thumbnail image", async () => {
+  await expect(resolvePhotoUrl("flags/u1/full.jpg", {thumb: true})).resolves.toBe("https://cdn.test/flags/u1/full-thumb.jpg");
+});
+
+test("thumbnail resolution falls back to the full image", async () => {
+  download.mockImplementation(async (storageRef) => {
+    if (pathOf(storageRef).endsWith("-thumb.jpg")) throw new Error("missing");
+    return `https://cdn.test/${pathOf(storageRef)}`;
+  });
+  await expect(resolvePhotoUrl("flags/u1/missing.jpg", {thumb: true})).resolves.toBe("https://cdn.test/flags/u1/missing.jpg");
+});
 
 test("concurrent resolvePhotoUrl calls share a single download-url request", async () => {
   const download = getDownloadURL as jest.MockedFunction<typeof getDownloadURL>;
