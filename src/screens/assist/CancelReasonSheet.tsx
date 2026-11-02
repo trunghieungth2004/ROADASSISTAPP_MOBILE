@@ -6,10 +6,12 @@ import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
+import TicketStatusPill from "./TicketStatusPill";
 
 type Props = {
   t: Strings;
   title: string;
+  status: string;
   reasons: readonly string[];
   labelFor: (reason: string, t: Strings) => string;
   busy: boolean;
@@ -18,7 +20,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function CancelReasonSheet({t, title, reasons, labelFor, busy, error, onSubmit, onClose}: Props) {
+export default function CancelReasonSheet({t, title, status, reasons, labelFor, busy, error, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function CancelReasonSheet({t, title, reasons, labelFor, busy, er
       visible
       variant="dialog"
       title={title}
+      right={<TicketStatusPill t={t} theme={theme} status={status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={[{label: t.assist.cancelReasonSubmit, tone: "danger", busy, onPress: submit}]}

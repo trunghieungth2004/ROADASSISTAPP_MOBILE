@@ -10,7 +10,7 @@ import {useStrings} from "../../context/LanguageContext";
 import {fetchMeBundle, type MeVehicle} from "../../api/users";
 import {darkTheme, lightTheme} from "../../theme";
 import {useAppMode} from "../../context/ThemeContext";
-import type {Provider} from "../../api/providers";
+import {providerPricingLimits, type Provider, type ProviderPricingLimits} from "../../api/providers";
 import type {Strings} from "../../i18n/en";
 
 type Props = {
@@ -26,11 +26,23 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
   const {lang} = useStrings();
   const {token: authToken} = useAuth();
   const [vehicles, setVehicles] = useState<MeVehicle[]>([]);
+  const [pricingLimits, setPricingLimits] = useState<ProviderPricingLimits | null>(null);
   useEffect(() => {
     if (!token) return;
+    let active = true;
     void fetchMeBundle(token)
-      .then((bundle) => setVehicles(bundle.vehicles))
+      .then((bundle) => {
+        if (active) setVehicles(bundle.vehicles);
+      })
       .catch(() => undefined);
+    void providerPricingLimits(token)
+      .then((limits) => {
+        if (active) setPricingLimits(limits);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, [token]);
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
@@ -49,7 +61,7 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
       onClose={onClose}
       actions={[{label: t.common.save, tone: "primary", busy: draft.busy, onPress: () => void save()}]}
     >
-      <ProviderFormSheet t={t} draft={draft} />
+      <ProviderFormSheet t={t} draft={draft} pricingLimits={pricingLimits} />
       <Overlay visible={draft.shopSearch} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => draft.setShopSearch(false)}>
         <PlaceSearchScreen
           t={t}

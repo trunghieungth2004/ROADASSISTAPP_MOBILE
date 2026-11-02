@@ -126,11 +126,13 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
         </>
       ) : destLat !== null && destLng !== null ? (
         <View style={[detailStyles.inset, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-          <View style={detailStyles.insetHead}>
-            <MaterialIcons name={destName !== null ? "storefront" : "flag"} size={15} color={theme.primary} />
-            <Text style={[detailStyles.name, {flex: 1, color: theme.text}]}>{destName ?? destLabel ?? t.assist.dropOffPoint}</Text>
-          </View>
-          <Text style={[detailStyles.muted, {color: theme.muted}]}>{`${destLat.toFixed(5)}, ${destLng.toFixed(5)}`}</Text>
+          <PlaceLine
+            theme={theme}
+            lat={destLat}
+            lng={destLng}
+            lang={lang}
+            address={destName ?? destLabel}
+          />
         </View>
       ) : (
         <View style={[detailStyles.inset, styles.emptyDropoff, {borderColor: theme.border, backgroundColor: theme.paper}]}>

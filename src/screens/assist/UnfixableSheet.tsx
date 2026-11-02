@@ -6,6 +6,7 @@ import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
+import TicketStatusPill from "./TicketStatusPill";
 import {isPhotoPermissionError, pickPhotos, takePhoto, TICKET_PHOTO_MAX, type PhotoSource} from "../../services/photos";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 import {unfixableReasonLabel} from "./ticketLabels";
@@ -17,6 +18,7 @@ export type UnfixableReason = (typeof UNFIXABLE_REASONS)[number];
 type Props = {
   t: Strings;
   ticketLabel: string;
+  status: string;
   busy: boolean;
   error: string | null;
   callOutWaived?: boolean;
@@ -24,7 +26,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function UnfixableSheet({t, ticketLabel, busy, error, callOutWaived = false, onSubmit, onClose}: Props) {
+export default function UnfixableSheet({t, ticketLabel, status, busy, error, callOutWaived = false, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export default function UnfixableSheet({t, ticketLabel, busy, error, callOutWaiv
       visible
       variant="dialog"
       title={`${t.assist.unfixableAction} · ${ticketLabel}`}
+      right={<TicketStatusPill t={t} theme={theme} status={status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}
       scrollable={false}

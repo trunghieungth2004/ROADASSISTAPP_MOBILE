@@ -62,3 +62,44 @@ test("terminal ticket chat is read-only", async () => {
     });
   }
 });
+
+test("quote decision system events are localized", async () => {
+  jest.mocked(chatApi.chatMessages).mockResolvedValue([
+    {id: "m1", senderUid: "system", senderName: null, text: "Quote sent", photoUrls: [], kind: "SYSTEM", event: "QUOTE_SENT", createdAt: "2026-01-01T00:01:00.000Z"},
+    {id: "m2", senderUid: "system", senderName: null, text: "Quote approved", photoUrls: [], kind: "SYSTEM", event: "QUOTE_APPROVED", createdAt: "2026-01-01T00:02:00.000Z"},
+    {id: "m3", senderUid: "system", senderName: null, text: "Fix declined", photoUrls: [], kind: "SYSTEM", event: "MOBILE_FIX_DECLINED", createdAt: "2026-01-01T00:03:00.000Z"},
+  ] as never);
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <ChatSheet
+          t={en}
+          token="token"
+          uid="u1"
+          scope="TICKET"
+          refId="t1"
+          title="Quote"
+          ticketType="WALK_IN"
+          status="9"
+          otherName="Fix Shop"
+          onClose={() => undefined}
+        />
+      </SafeAreaProvider>,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+  if (!renderer) throw new Error("render failed");
+  try {
+    const texts = renderer.root
+      .findAll((n) => typeof n.props?.children === "string")
+      .map((n) => n.props.children as string);
+    expect(texts).toContain(en.assist.quoteSent);
+    expect(texts).toContain(en.assist.quoteApproved);
+    expect(texts).toContain(en.assist.fixQuoteDeclined);
+  } finally {
+    await act(async () => {
+      renderer?.unmount();
+    });
+  }
+});

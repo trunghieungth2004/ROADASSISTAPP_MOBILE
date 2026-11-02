@@ -26,6 +26,10 @@ module.exports = {
       rules: {"max-lines": "off", "max-lines-per-function": "off", "complexity": "off", "@typescript-eslint/no-unused-expressions": "off"},
     },
     {
+      files: ["src/i18n/en.ts", "src/i18n/vi.ts"],
+      rules: {"max-lines": "off"},
+    },
+    {
       files: ["src/screens/AssistScreen.tsx", "src/screens/RouteScreen.tsx", "src/screens/NavigationScreen.tsx", "src/screens/assist/RecordDetailSheet.tsx", "src/screens/navigation/useNavTracking.ts", "src/api/dispatch.ts", "src/screens/OnboardingScreen.tsx", "src/screens/assist/useAssistController.tsx", "src/screens/route/useRouteController.tsx", "src/screens/assist/detail/FeesCard.tsx", "src/screens/assist/detail/JourneyCard.tsx", "src/screens/assist/recordActions.ts"],
       rules: {"max-lines": "off", "max-lines-per-function": "off", "complexity": "off", "@typescript-eslint/no-unused-expressions": "off"},
     },

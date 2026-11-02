@@ -8,6 +8,10 @@ test("ticket titles use translated labels", () => {
   expect(ticketTitle({ticketType: "SOS", status: "4"}, en)).toBe("SOS · Resolved");
 });
 
+test("return tows use their own type label", () => {
+  expect(ticketTitle({ticketType: "TOW", status: "2", towKind: "RETURN"}, en)).toBe("Return tow · Matched");
+});
+
 test("unknown codes fall back without inventing copy", () => {
   expect(ticketTitle({ticketType: "WARP", status: "0"}, en)).toBe("WARP · Pending");
 });
@@ -26,7 +30,7 @@ test("new statuses resolve to translated labels", () => {
   expect(statusTone("9")).toBe("active");
   expect(statusStages("WALK_IN")).toEqual(["1", "2", "10", "9", "6", "7", "4"]);
   expect(statusStages("MECHANIC")).toEqual(["1", "2", "3", "9", "6", "7", "4"]);
-  expect(statusStages("SOS")).toEqual(["1", "2", "3", "7", "4"]);
+  expect(statusStages("SOS")).toEqual(["1", "2", "3", "9", "7", "4"]);
   expect(stageLabel("WALK_IN", "2", en)).toBe(en.assist.statusAccepted);
   expect(stageLabel("SOS", "2", en)).toBe(en.assist.statusMatched);
   expect(declineReasonLabel("FULL", en)).toBe(en.assist.declineFull);

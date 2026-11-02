@@ -75,6 +75,34 @@ test("quote mode groups the amount and submits the parsed integer", async () => 
   }
 });
 
+test("itemized quote computes the total from line items", async () => {
+  const {renderer, onSubmit} = await render();
+  try {
+    await act(async () => {
+      submitAction(renderer, en.provider.addItem)?.props.onPress();
+    });
+    const name = renderer.root.findAll((n) => n.props?.placeholder === en.provider.itemName && typeof n.props?.onChangeText === "function")[0];
+    const qty = renderer.root.findAll((n) => n.props?.placeholder === en.provider.qty && typeof n.props?.onChangeText === "function")[0];
+    const price = renderer.root.findAll((n) => n.props?.placeholder === en.provider.unitPrice && typeof n.props?.onChangeText === "function")[0];
+    await act(async () => {
+      name?.props.onChangeText("Brake pads");
+      qty?.props.onChangeText("2");
+      price?.props.onChangeText("120000");
+    });
+    await act(async () => {
+      submitAction(renderer, en.assist.sendQuote)?.props.onPress();
+    });
+    expect(onSubmit).toHaveBeenCalledWith({
+      workType: "",
+      amount: 240000,
+      invoiceRef: "",
+      items: [{name: "Brake pads", qty: 2, unitPrice: 120000}],
+    });
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("quote mode blocks submit without an amount", async () => {
   const {renderer, onSubmit} = await render();
   try {

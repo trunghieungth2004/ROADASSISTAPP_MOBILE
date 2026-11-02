@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Pressable, StyleSheet, View} from "react-native";
+import {Pressable, ScrollView, StyleSheet, useWindowDimensions, View} from "react-native";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -42,6 +42,8 @@ export default function RecordsSection({t, theme, tickets, loading, shopKinds, s
   const [showMobileShop, setShowMobileShop] = useState(true);
   const operated = new Set(shopKinds.values());
   const visible = simple ? tickets : filterByKind(filterRecords(tickets, filter), showShop, showTow, showRider, shopKinds, true, showMobileShop);
+  const {height} = useWindowDimensions();
+  const listHeight = Math.max(160, Math.min(300, Math.round(height * 0.3)));
   return (
     <View style={styles.wrap}>
       {simple ? null : <View style={styles.filterRow}>
@@ -76,28 +78,31 @@ export default function RecordsSection({t, theme, tickets, loading, shopKinds, s
           </Pressable>
         </View>
       </View>}
-      {loading && tickets.length === 0 ? (
-        <StatusRow theme={theme} text={t.common.loading} />
-      ) : visible.length === 0 ? (
-        <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.emptyRecords}</Text>
-      ) : (
-        visible.map((item) => (
-          <TicketRow
-            key={item.id}
-            t={t}
-            theme={theme}
-            ticket={item}
-            kind={businessKindOf(item, shopKinds, item.direction === "in")}
-            onPress={() => onOpen(item)}
-          />
-        ))
-      )}
+      <ScrollView style={{maxHeight: listHeight}} contentContainerStyle={styles.list} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+        {loading && tickets.length === 0 ? (
+          <StatusRow theme={theme} text={t.common.loading} />
+        ) : visible.length === 0 ? (
+          <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.emptyRecords}</Text>
+        ) : (
+          visible.map((item) => (
+            <TicketRow
+              key={item.id}
+              t={t}
+              theme={theme}
+              ticket={item}
+              kind={businessKindOf(item, shopKinds, item.direction === "in")}
+              onPress={() => onOpen(item)}
+            />
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {gap: 8},
+  list: {gap: 8},
   filterRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap"},
   filterGroup: {flexDirection: "row", alignItems: "center", gap: 8},
   filterChip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 14},

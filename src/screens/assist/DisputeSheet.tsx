@@ -7,6 +7,7 @@ import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import {PROVIDER_DISPUTE_REASONS, RIDER_DISPUTE_REASONS} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
+import TicketStatusPill from "./TicketStatusPill";
 import {isPhotoPermissionError, pickPhotos, takePhoto, type PhotoSource} from "../../services/photos";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 
@@ -14,6 +15,7 @@ type Props = {
   t: Strings;
   ticketLabel: string;
   ticketType: string;
+  status: string;
   viewer: "RIDER" | "PROVIDER";
   busy: boolean;
   error: string | null;
@@ -38,7 +40,7 @@ export function disputeReasonLabel(reason: string, t: Strings): string {
   return t.dispute.reasonOther;
 }
 
-export default function DisputeSheet({t, ticketLabel, ticketType, viewer, busy, error, onSubmit, onClose}: Props) {
+export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer, busy, error, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function DisputeSheet({t, ticketLabel, ticketType, viewer, busy, 
       visible
       variant="dialog"
       title={`${t.dispute.title} · ${ticketLabel}`}
+      right={<TicketStatusPill t={t} theme={theme} status={status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={[{label: t.dispute.submit, tone: "primary", busy, onPress: onSend}]}

@@ -71,6 +71,19 @@ export function operatedKinds(
   };
 }
 
+export function profileServiceKinds(
+  services: string[],
+  providers: {kind: string; status: string}[],
+): string[] {
+  const operated = operatedKinds(providers);
+  return [...new Set([
+    ...services.filter((service) => service !== "RIDER"),
+    ...(operated.shop ? ["SHOP"] : []),
+    ...(operated.tow ? ["TOW"] : []),
+    ...(operated.mobileShop ? ["MOBILE_SHOP"] : []),
+  ])];
+}
+
 export function providerRowSubtitle(provider: Provider, t: Strings): string {
   if (provider.kind === "TOW" && typeof provider.plate === "string") {
     return provider.plate;

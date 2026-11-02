@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {missingKinds, operatedKinds, providerPill, providerStatusLabel, switchEnabled} from "../../../../src/screens/more/providerUi";
+import {missingKinds, operatedKinds, profileServiceKinds, providerPill, providerStatusLabel, switchEnabled} from "../../../../src/screens/more/providerUi";
 import {en} from "../../../../src/i18n/en";
 
 test("status label prefers suspension over status", () => {
@@ -42,4 +42,16 @@ test("operated kinds ignore denied records", () => {
   expect(operatedKinds([{kind: "TOW", status: "PENDING"}])).toEqual({shop: false, tow: true, mobileShop: false});
   expect(operatedKinds([{kind: "TOW", status: "DENIED"}])).toEqual({shop: false, tow: false, mobileShop: false});
   expect(operatedKinds([{kind: "MOBILE_SHOP", status: "ACTIVE"}])).toEqual({shop: false, tow: false, mobileShop: true});
+});
+
+test("profileServiceKinds dedupes a service badge and an operated provider", () => {
+  expect(profileServiceKinds(
+    ["RIDER", "SHOP", "TOW"],
+    [
+      {kind: "SHOP", status: "ACTIVE"},
+      {kind: "TOW", status: "PENDING"},
+    ],
+  )).toEqual(["SHOP", "TOW"]);
+  expect(profileServiceKinds(["RIDER"], [{kind: "MOBILE_SHOP", status: "ACTIVE"}]))
+    .toEqual(["MOBILE_SHOP"]);
 });

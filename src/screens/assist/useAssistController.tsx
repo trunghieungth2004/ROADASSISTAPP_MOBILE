@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {AppState, BackHandler, Keyboard} from "react-native";
+import {Alert, AppState, BackHandler, Keyboard} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 
 
@@ -9,7 +9,7 @@ import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/nat
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
 import {safeCameraCall, safeCameraReady} from "../../components/map/safeCamera";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveQuote, bustTicketCaches, cancelTicket, confirmCashReceipt, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fileDispute, getTicket, isTerminal, nearTickets, offerMobileShopTow, continueSos, refreshTowEta, refreshWaiting, reportUnfixable, respondMobileShopTow, respondReturnTow, sendEstimate, sendQuote, setMobileShopFix, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../../api/dispatch";
+import {acceptTicket, approveFinalQuote, approveEstimate, approveInvoice, approveMobileFix, approveQuote, cancelPayment, cancelTowerSearch, confirmTowReceived, declineMobileFix, declineQuote, markTowLoaded, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fetchTicketPayments, fileDispute, getTicket, isTerminal, nearTickets, offerMobileShopTow, continueSos, refreshTowEta, refreshWaiting, reportUnfixable, respondMobileShopTow, respondReturnTow, sendEstimate, sendQuote, setMobileShopFix, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../../api/dispatch";
 import {payeeBills} from "../../api/bills";
 import {normalizeVehicleType} from "../../api/vehicles";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, type Provider, type ProviderRating, type ReportReason} from "../../api/providers";
@@ -34,7 +34,7 @@ import {ensurePushConfigured, drainDispatchLaunch, subscribeDispatchPush} from "
 import {capturePosition, markBeat, useLocationBeat} from "../../services/locationBeats";
 import {getFix} from "../../services/geo";
 import {ticketStatusLabel} from "./ticketLabels";
-import {announcesShopPush, canSeeRequestPhotos} from "./recordActions";
+import {announcesShopPush, canSeeRequestPhotos, returnTowPending} from "./recordActions";
 import {vehicleClassOf} from "./vehicleClass";
 import {type AssistSection} from "./AssistSectionTabs";
 
@@ -43,6 +43,7 @@ import {type AssistSection} from "./AssistSectionTabs";
 
 
 import {fetchShopPlaces} from "../../components/place-search/shopMerge";
+import {reverseLabel} from "../../api/places";
 
 
 
@@ -77,6 +78,22 @@ import {walkMinutes} from "./walkShop";
 const ACTIVE_KEY = "roadassist.activeTicket";
 const WORKSPACE_KEY = "roadassist.assist.workspace";
 const TAB_KEY = "roadassist.assist.tab";
+
+type QuoteApprovalKind = "MOBILE_FIX" | "SHOP_QUOTE" | "FINAL_QUOTE";
+
+type PaymentChoice = {
+  ticket: FeedTicket;
+  kind: QuoteApprovalKind;
+  amount: number | null;
+  pendingSepay?: boolean;
+};
+
+type SePayCheckout = {
+  ticket: FeedTicket;
+  kind: QuoteApprovalKind;
+  url: string;
+  checkout: TicketPayment["checkout"];
+};
 
 export default function useAssistController() {
   const {t, lang} = useStrings();
@@ -115,7 +132,7 @@ export default function useAssistController() {
   const [unfixableFor, setUnfixableFor] = useState<FeedTicket | null>(null);
   const [unfixableBusy, setUnfixableBusy] = useState(false);
   const [unfixableError, setUnfixableError] = useState<string | null>(null);
-  const [cancelReasonFor, setCancelReasonFor] = useState<{ticket: FeedTicket; kind: "TOWER" | "SHOP"} | null>(null);
+  const [cancelReasonFor, setCancelReasonFor] = useState<{ticket: FeedTicket; kind: "TOWER" | "SHOP" | "QUOTE" | "FIX"} | null>(null);
   const [cancelReasonBusy, setCancelReasonBusy] = useState(false);
   const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
   const [workFor, setWorkFor] = useState<{ticket: FeedTicket; mode: WorkFormMode} | null>(null);
@@ -124,7 +141,6 @@ export default function useAssistController() {
   const [mobileFixError, setMobileFixError] = useState<string | null>(null);
   const [chatFor, setChatFor] = useState<FeedTicket | null>(null);
   const [chatArchiveFor, setChatArchiveFor] = useState<{ticket: FeedTicket; version: number} | null>(null);
-  const arrivedHintRef = useRef<Set<string>>(new Set());
   const [towOfferAcceptFor, setTowOfferAcceptFor] = useState<FeedTicket | null>(null);
   const [continuationFor, setContinuationFor] = useState<{ticket: FeedTicket; nextAttempt: number; callOutTotal: number} | null>(null);
   const [continuationBusy, setContinuationBusy] = useState(false);
@@ -132,6 +148,12 @@ export default function useAssistController() {
   const [workBusy, setWorkBusy] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
   const [payments, setPayments] = useState<Record<string, TicketPayment>>({});
+  const [paymentChoiceFor, setPaymentChoiceFor] = useState<PaymentChoice | null>(null);
+  const [paymentChoiceBusy, setPaymentChoiceBusy] = useState(false);
+  const [paymentChoiceError, setPaymentChoiceError] = useState<string | null>(null);
+  const [sepayCheckoutFor, setSepayCheckoutFor] = useState<SePayCheckout | null>(null);
+  const [sepayBusy, setSepayBusy] = useState(false);
+  const [sepayError, setSepayError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<Record<string, {waitingMinutes: number; waitingFee: number}>>({});
   const [dest, setDest] = useState<Place | null>(null);
   const [destShopId, setDestShopId] = useState<string | null>(null);
@@ -144,7 +166,7 @@ export default function useAssistController() {
   const [ticketRatings, setTicketRatings] = useState<Record<string, UserRating[]>>({});
   const [recBusy, setRecBusy] = useState(false);
   const [detailFor, setDetailFor] = useState<FeedTicket | null>(null);
-  const [detailContext, setDetailContext] = useState<"shop" | "tow">("shop");
+  const [detailContext, setDetailContext] = useState<"auto" | "shop" | "tow">("auto");
   const [boardDetail, setBoardDetail] = useState<FeedTicket | null>(null);
   const [editDestFor, setEditDestFor] = useState<FeedTicket | null>(null);
   const [duplicateFor, setDuplicateFor] = useState<{ticketId: string; reason?: string} | null>(null);
@@ -243,45 +265,40 @@ export default function useAssistController() {
   const activeEta = activeFeed !== null && activeFeed.ticketType === "TOW" && typeof activeFeed.etaPickupAt === "string" ?
     Math.round((Date.parse(activeFeed.etaPickupAt) - Date.now()) / 60000) :
     null;
-  function activeJobLine(): string {
-    if (activeFeed !== null && activeFeed.ticketType === "SOS") {
-      const status = ticketStatusLabel(activeFeed.status, t);
+  function activeJobPills(): string[] {
+    if (activeFeed === null) return [];
+    const distanceLabel = (meters: number): string => meters < 1000 ?
+      t.shop.radiusM.replace("{n}", String(meters)) :
+      t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1));
+    const etaLabel = (minutes: number): string =>
+      `~${t.shop.walkMinutesShort.replace("{n}", String(minutes))}`;
+    if (activeFeed.ticketType === "SOS") {
       const point = activeFeed.direction === "in" ?
         (gps !== null ? {lat: activeFeed.lat, lng: activeFeed.lng} : null) :
         (activeFeed.mobileShopFix && gps !== null ?
           {lat: activeFeed.mobileShopFix.lat, lng: activeFeed.mobileShopFix.lng} :
           null);
-      if (point !== null && gps !== null) {
-        const meters = Math.round(distBetween(gps, point));
-        const distance = meters < 1000 ?
-          t.shop.radiusM.replace("{n}", String(meters)) :
-          t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1));
-        return `${activeName} · ${distance} · ${status}`;
-      }
-      return `${activeName} · ${status}`;
+      return point !== null && gps !== null ?
+        [distanceLabel(Math.round(distBetween(gps, point)))] :
+        [];
     }
-    const dest = activeFeed !== null && activeFeed.ticketType === "TOW" ? towDestOf(activeFeed) : null;
-    if (activeFeed !== null && activeFeed.status === "3" && dest !== null && gps !== null) {
-      const meters = Math.round(distBetween(gps, dest));
-      const distance = meters < 1000 ? t.shop.radiusM.replace("{n}", String(meters)) : t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1));
+    const dest = activeFeed.ticketType === "TOW" ? towDestOf(activeFeed) : null;
+    if (activeFeed.status === "3" && dest !== null && gps !== null) {
+      const pills = [distanceLabel(Math.round(distBetween(gps, dest)))];
       const dropEta = typeof activeFeed.etaDropoffAt === "string" ?
         Math.round((Date.parse(activeFeed.etaDropoffAt) - Date.now()) / 60000) :
         null;
-      if (dropEta !== null && dropEta > 0) {
-        return `${activeName} · ${distance} · ~${t.shop.walkMinutesShort.replace("{n}", String(dropEta))}`;
-      }
-      return `${activeName} · ${distance}`;
+      if (dropEta !== null && dropEta > 0) pills.push(etaLabel(dropEta));
+      return pills;
     }
-    const towerMeters = activeFeed !== null && activeFeed.ticketType === "TOW" && activeFeed.towerFix !== null && typeof activeFeed.towerFix === "object" &&
+    const pills: string[] = [];
+    const towerMeters = activeFeed.ticketType === "TOW" && activeFeed.towerFix !== null && typeof activeFeed.towerFix === "object" &&
       typeof activeFeed.towerFix.lat === "number" && typeof activeFeed.towerFix.lng === "number" ?
       Math.round(distBetween(activeFeed.towerFix, {lat: activeFeed.lat, lng: activeFeed.lng})) :
       null;
-    const towerDistance = towerMeters === null ? null : towerMeters < 1000 ? t.shop.radiusM.replace("{n}", String(towerMeters)) : t.shop.radiusKm.replace("{n}", (towerMeters / 1000).toFixed(1));
-    if (activeEta !== null && activeEta > 0) {
-      const eta = `~${t.shop.walkMinutesShort.replace("{n}", String(activeEta))}`;
-      return towerDistance !== null ? `${activeName} · ${towerDistance} · ${eta}` : `${activeName} · ${eta}`;
-    }
-    return activeName;
+    if (towerMeters !== null) pills.push(distanceLabel(towerMeters));
+    if (activeEta !== null && activeEta > 0) pills.push(etaLabel(activeEta));
+    return pills;
   }
   const mobileShopFixPoint = activeFeed?.mobileShopFix &&
     typeof activeFeed.mobileShopFix.lat === "number" &&
@@ -485,18 +502,6 @@ export default function useAssistController() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cardH, setCardH] = useState(0);
-  useEffect(() => {
-    const ticket = activeFeed;
-    if (!ticket || ticket.direction !== "out" || ticket.status !== "2") return;
-    if (arrivedHintRef.current.has(ticket.id)) return;
-    const fix = ticket.ticketType === "SOS" ? ticket.mobileShopFix : ticket.towerFix;
-    if (!fix || typeof fix.lat !== "number" || typeof fix.lng !== "number") return;
-    const seenAt = typeof fix.at === "string" ? Date.parse(fix.at) : NaN;
-    if (Number.isNaN(seenAt) || Date.now() - seenAt > 15 * 60 * 1000) return;
-    if (distBetween(fix, {lat: ticket.lat, lng: ticket.lng}) > 200) return;
-    arrivedHintRef.current.add(ticket.id);
-    setNotice(t.assist.arrivedNearby);
-  }, [activeFeed, t.assist.arrivedNearby]);
   const vehicleClass = vehicleClassOf(activeVehicle?.type);
   const showShops = vehicleClass !== "CAR";
   const browsing = workspace === "rider" && section === "request" && ticketType === "MECHANIC" && showShops;
@@ -785,14 +790,18 @@ export default function useAssistController() {
   const fetchAssistShops = useCallback(async (q: string, filters?: {minRating?: number; sortBy?: "distance" | "rating"; ticketId?: string}) => {
     if (!token || !gps) return [];
     const towMode = shopSearchMode === "tow";
-    return fetchShopPlaces(q, token, gps, vehicleClass ?? undefined, towMode ? 20000 : undefined, towMode, {
+    const filterTicket = editDestFor ?? towOfferAcceptFor ?? null;
+    const filterClass = filterTicket ?
+      vehicleClassOf(filterTicket.vehicleType) :
+      vehicleClass;
+    return fetchShopPlaces(q, token, gps, filterClass ?? undefined, towMode ? 20000 : undefined, towMode, {
       sortBy: "distance",
       acceptingOnly: true,
       ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
       ...(filters?.sortBy ? {sortBy: filters.sortBy} : {}),
       ticketId: filters?.ticketId ?? editDestFor?.id ?? detailFor?.id ?? undefined,
     });
-  }, [token, gps, vehicleClass, shopSearchMode, editDestFor?.id, detailFor?.id]);
+  }, [token, gps, vehicleClass, shopSearchMode, editDestFor, towOfferAcceptFor, detailFor?.id]);
   async function currentPoint(): Promise<{lat: number; lng: number}> {
     const {status} = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") throw new Error(t.nav.locationDenied);
@@ -1169,7 +1178,7 @@ export default function useAssistController() {
           setContinuationError(null);
         }}
         onRespondMobileTow={(item, accept) => void onRespondMobileTow(item, accept)}
-        onRespondReturnTow={ticket.ticketType === "WALK_IN" && ticket.returnTowOffer?.status === "PENDING" && gps !== null && distBetween(gps, {lat: ticket.lat, lng: ticket.lng}) > 1000 ? (item, accept) => void onRespondReturnTow(item, accept) : null}
+        onRespondReturnTow={ticket.ticketType === "WALK_IN" && returnTowPending(ticket) && !cashBlocksReturnTow(ticket) && gps !== null && distBetween(gps, {lat: ticket.lat, lng: ticket.lng}) > 1000 ? (item, accept) => void onRespondReturnTow(item, accept) : null}
         onOpenQuote={(item) => { setWorkFor({ticket: item, mode: "quote"}); setWorkError(null); }}
         onOpenEstimate={(item) => {
           setEstimateFor(item);
@@ -1209,6 +1218,7 @@ export default function useAssistController() {
           return feed.find((entry) => entry.id === ids[0]) ?? null;
         })()}
         onOpenLinked={(item) => {
+          setDetailContext("auto");
           setDetailFor(item);
           if (item.status === "4") void onLoadRatings(item);
         }}
@@ -1226,6 +1236,12 @@ export default function useAssistController() {
         onApproveEstimate={(item) => void onApproveEstimate(item)}
         onDeclineEstimate={(item) => void onDeclineEstimate(item)}
         onApproveFinal={(item) => void onApproveFinal(item)}
+        onApproveInvoice={(item) => void onApproveInvoice(item)}
+        onApproveMobileFix={(item) => void onApproveMobileFix(item)}
+        onDeclineMobileFix={(item) => onDeclineMobileFix(item)}
+        onDeclineQuote={(item) => onDeclineQuote(item)}
+        onMarkTowLoaded={(item) => void onMarkTowLoaded(item)}
+        onConfirmTowReceived={(item) => void onConfirmTowReceived(item)}
         onConfirmCash={(item) => void onConfirmCash(item)}
         onOpenBill={(item) => openBill(item)}
         onOpenDispute={(item) => { setDisputeFor(item); setDisputeError(null); }}
@@ -1235,6 +1251,7 @@ export default function useAssistController() {
         waiting={waiting[ticket.id] ?? null}
         bill={billForTicket(ticket)}
         quoteFunded={fundedForApproval(ticket)}
+        quotePayMethod={paymentStateFor(ticket).method}
         onMarkUnfixable={(item) => { setUnfixableFor(item); setUnfixableError(null); }}
       />
     );
@@ -1246,12 +1263,16 @@ export default function useAssistController() {
     }
     void (async () => {
       try {
+        const filterTicket = editDestFor ?? towOfferAcceptFor ?? null;
+        const filterClass = filterTicket ?
+          vehicleClassOf(filterTicket.vehicleType) :
+          vehicleClass;
         const shops = await searchProviders(
           gps.lat,
           gps.lng,
           query.trim(),
           token,
-          {radiusMeters: 10000, ...(vehicleClass ? {vehicleClass} : {})},
+          {radiusMeters: 10000, ...(filterClass ? {vehicleClass: filterClass} : {})},
         );
         const shop = shops.find((s) => s.id === id) ?? null;
         if (!shop) {
@@ -1379,6 +1400,15 @@ export default function useAssistController() {
       setDuplicateFor({ticketId: live.id, reason: "VEHICLE_BUSY"});
       return;
     }
+    const liveSos = kind === "SOS" ? feed.find((ticket) =>
+      ticket.direction === "out" &&
+      ticket.ticketType === "SOS" &&
+      !isTerminal(ticket.status)) : null;
+    if (liveSos) {
+      setPendingTicket(null);
+      setDuplicateFor({ticketId: liveSos.id, reason: "SOS_BUSY"});
+      return;
+    }
     if (kind === "TOW" && !dest) {
       setTowDestError(t.assist.towNeedsDest);
       setError(t.assist.towNeedsDest);
@@ -1478,23 +1508,191 @@ export default function useAssistController() {
       setRecBusy(false);
     }
   }
-  async function onApproveFinal(ticket: FeedTicket): Promise<void> {
-    if (!token || recBusy) return;
-    if (!fundedForApproval(ticket)) {
-      setDetailFor(null);
-      navigation.navigate("BillDetail", {ticketId: ticket.id, payFirst: true});
-      return;
+  function approvalAmountFor(ticket: FeedTicket, kind: QuoteApprovalKind): number | null {
+    if (kind === "SHOP_QUOTE") {
+      return typeof ticket.shopQuotedAmount === "number" ? ticket.shopQuotedAmount : null;
     }
+    const final = typeof ticket.finalAmount === "number" ? ticket.finalAmount : null;
+    if (kind !== "MOBILE_FIX" || final === null) return final;
+    const callOut = ticket.mobileCallOutWaived === true ?
+      0 :
+      typeof ticket.mobileCallOutFee === "number" ? ticket.mobileCallOutFee : 50000;
+    const travel = typeof ticket.mobileTravelFee === "number" ? ticket.mobileTravelFee : 0;
+    const history = Array.isArray(ticket.mobileFeeHistory) ?
+      ticket.mobileFeeHistory.reduce((sum, entry) =>
+        sum + (typeof entry.callOutFee === "number" ? entry.callOutFee : 0) +
+        (typeof entry.travelFee === "number" ? entry.travelFee : 0), 0) :
+      0;
+    return final + callOut + travel + history;
+  }
+  async function approveQuoteNow(ticket: FeedTicket, kind: QuoteApprovalKind): Promise<void> {
+    if (!token || recBusy) return;
     setRecBusy(true);
     setError(null);
     try {
-      await approveFinalQuote(ticket.id, token);
+      if (kind === "MOBILE_FIX") await approveMobileFix(ticket.id, token);
+      else if (kind === "FINAL_QUOTE") await approveFinalQuote(ticket.id, token);
+      else await approveQuote(ticket.id, token);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
     } finally {
       setRecBusy(false);
     }
+  }
+  async function waitForSepayPayment(ticketId: string): Promise<TicketPayment | null> {
+    if (!token) return null;
+    let latest: TicketPayment | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const rows = await fetchTicketPayments(ticketId, token).catch(() => []);
+      latest = rows.find((row) => row.method === "SEPAY") ?? null;
+      if (latest !== null && (latest.status === "HELD" || latest.status === "CONFIRMED")) {
+        return latest;
+      }
+      if (attempt < 4) await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    }
+    return latest;
+  }
+  async function startSepay(ticket: FeedTicket, kind: QuoteApprovalKind): Promise<void> {
+    if (!token || paymentChoiceBusy) return;
+    setPaymentChoiceBusy(true);
+    setPaymentChoiceError(null);
+    try {
+      const created = await createPayment(ticket.id, "SEPAY", token);
+      setPayments((prev) => ({...prev, [ticket.id]: created}));
+      const url = created.checkoutUrl ?? null;
+      if (url === null) throw new Error(t.assist.sepayNoLink);
+      setPaymentChoiceFor(null);
+      setSepayError(null);
+      setSepayCheckoutFor({ticket, kind, url, checkout: created.checkout ?? null});
+    } catch (err) {
+      setPaymentChoiceError(toMessage(err));
+      setError(toMessage(err));
+    } finally {
+      setPaymentChoiceBusy(false);
+    }
+  }
+  async function startCash(ticket: FeedTicket, kind: QuoteApprovalKind): Promise<void> {
+    if (!token || paymentChoiceBusy) return;
+    setPaymentChoiceBusy(true);
+    setPaymentChoiceError(null);
+    try {
+      const created = await createPayment(ticket.id, "CASH", token);
+      setPayments((prev) => ({...prev, [ticket.id]: created}));
+      setPaymentChoiceFor(null);
+      await approveQuoteNow(ticket, kind);
+    } catch (err) {
+      setPaymentChoiceError(toMessage(err));
+      setError(toMessage(err));
+    } finally {
+      setPaymentChoiceBusy(false);
+    }
+  }
+  function beginQuoteApproval(ticket: FeedTicket, kind: QuoteApprovalKind): void {
+    if (!token || recBusy) return;
+    const {method, status} = paymentStateFor(ticket);
+    if ((method === "CASH" && (status === "PENDING" || status === "CONFIRMED")) ||
+      (method === "SEPAY" && (status === "HELD" || status === "CONFIRMED"))) {
+      void approveQuoteNow(ticket, kind);
+      return;
+    }
+    if (method === "SEPAY" && status === "PENDING") {
+      setPaymentChoiceError(null);
+      setPaymentChoiceFor({ticket, kind, amount: approvalAmountFor(ticket, kind), pendingSepay: true});
+      return;
+    }
+    setPaymentChoiceError(null);
+    setPaymentChoiceFor({ticket, kind, amount: approvalAmountFor(ticket, kind)});
+  }
+  function onPaymentChoice(method: "CASH" | "SEPAY"): void {
+    const choice = paymentChoiceFor;
+    if (choice === null) return;
+    if (method === "CASH") {
+      setPaymentChoiceFor(null);
+      void startCash(choice.ticket, choice.kind);
+      return;
+    }
+    void startSepay(choice.ticket, choice.kind);
+  }
+  function closePaymentChoice(): void {
+    if (paymentChoiceBusy) return;
+    setPaymentChoiceFor(null);
+    setPaymentChoiceError(null);
+  }
+  async function onSepaySuccess(): Promise<void> {
+    const active = sepayCheckoutFor;
+    if (active === null || !token) return;
+    setSepayBusy(true);
+    setSepayError(null);
+    try {
+      const payment = await waitForSepayPayment(active.ticket.id);
+      if (payment !== null) {
+        setPayments((prev) => ({...prev, [active.ticket.id]: payment}));
+      }
+      setSepayCheckoutFor(null);
+      if (payment !== null && (payment.status === "HELD" || payment.status === "CONFIRMED")) {
+        await approveQuoteNow(active.ticket, active.kind);
+        setNotice(t.assist.sepayApproved);
+      } else {
+        setNotice(t.assist.sepayPending);
+        await reloadAll();
+      }
+    } catch (err) {
+      setSepayCheckoutFor(null);
+      setError(toMessage(err));
+    } finally {
+      setSepayBusy(false);
+    }
+  }
+  function onSwitchToCash(): void {
+    const active = sepayCheckoutFor;
+    if (active === null) return;
+    Alert.alert(
+      t.assist.switchCashTitle,
+      t.assist.switchCashHint,
+      [
+        {text: t.common.cancel, style: "cancel"},
+        {
+          text: t.assist.cashInstead,
+          style: "destructive",
+          onPress: () => {
+            setSepayCheckoutFor(null);
+            void startCash(active.ticket, active.kind);
+          },
+        },
+      ],
+    );
+  }
+  async function onSepayCancel(): Promise<void> {
+    const active = sepayCheckoutFor;
+    if (active === null || !token) {
+      setSepayCheckoutFor(null);
+      return;
+    }
+    setSepayBusy(true);
+    setSepayError(null);
+    try {
+      await cancelPayment(active.ticket.id, token);
+      setSepayCheckoutFor(null);
+      setNotice(t.assist.sepayCancelled);
+      await reloadAll();
+    } catch (err) {
+      setSepayError(toMessage(err));
+    } finally {
+      setSepayBusy(false);
+    }
+  }
+  function onSepayFailure(): void {
+    setSepayCheckoutFor(null);
+    setError(t.assist.sepayFailed);
+  }
+  function closeSepayCheckout(): void {
+    if (sepayBusy) return;
+    setSepayCheckoutFor(null);
+    void reloadAll();
+  }
+  function onApproveFinal(ticket: FeedTicket): void {
+    beginQuoteApproval(ticket, "FINAL_QUOTE");
   }
   async function onConfirmCash(ticket: FeedTicket): Promise<void> {
     if (!token || recBusy) return;
@@ -1512,13 +1710,22 @@ export default function useAssistController() {
       setRecBusy(false);
     }
   }
-  function fundedForApproval(ticket: FeedTicket): boolean {
+  function paymentStateFor(ticket: FeedTicket): {method: string | null; status: string | null} {
     const live = payments[ticket.id] ?? null;
     const bill = billForTicket(ticket);
-    const billPayment = bill !== null ? (bill.items.find((item) => item.ticketId === ticket.id)?.payment ?? bill.items[0]?.payment ?? null) : null;
-    const method = typeof live?.method === "string" ? live.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : (typeof billPayment?.method === "string" ? billPayment.method : null);
-    const status = typeof live?.status === "string" ? live.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : (typeof billPayment?.status === "string" ? billPayment.status : null);
+    const billPayment = bill !== null ? (bill.items.find((item) => item.ticketId === ticket.id)?.payment ?? null) : null;
+    return {
+      method: typeof live?.method === "string" ? live.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : (typeof billPayment?.method === "string" ? billPayment.method : null),
+      status: typeof live?.status === "string" ? live.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : (typeof billPayment?.status === "string" ? billPayment.status : null),
+    };
+  }
+  function fundedForApproval(ticket: FeedTicket): boolean {
+    const {method, status} = paymentStateFor(ticket);
     return (method === "CASH" && (status === "PENDING" || status === "CONFIRMED")) || (method === "SEPAY" && (status === "HELD" || status === "CONFIRMED"));
+  }
+  function cashBlocksReturnTow(ticket: FeedTicket): boolean {
+    const {method, status} = paymentStateFor(ticket);
+    return method === "CASH" && (status === "PENDING" || status === "PARTIAL");
   }
   function openBill(ticket: FeedTicket): void {
     const payee = ticket.direction === "in" && billForTicket(ticket) !== null && payeeBillList.some((row) => row.ticketId === ticket.id || row.items.some((item) => item.ticketId === ticket.id));
@@ -1699,13 +1906,14 @@ export default function useAssistController() {
     setWorkError(null);
     try {
       if (workFor.mode === "quote") {
-        await sendQuote(workFor.ticket.id, value.amount as number, value.workType || undefined, token);
+        await sendQuote(workFor.ticket.id, value.amount as number, value.workType || undefined, token, value.items);
         setNotice(t.assist.quoteSent);
       } else {
         await updateWorkOrder({
           ticketId: workFor.ticket.id,
           ...(value.workType ? {workType: value.workType} : {}),
           ...(value.invoiceRef ? {invoiceRef: value.invoiceRef} : {}),
+          ...(value.items !== undefined ? {items: value.items} : {}),
         }, token);
         setNotice(t.provider.workSaved);
       }
@@ -1717,15 +1925,53 @@ export default function useAssistController() {
       setWorkBusy(false);
     }
   }
-  async function onSaveMobileFix(amount: number): Promise<void> {
+  function onApproveMobileFix(ticket: FeedTicket): void {
+    beginQuoteApproval(ticket, "MOBILE_FIX");
+  }
+  function onDeclineMobileFix(ticket: FeedTicket): void {
+    setCancelReasonError(null);
+    setCancelReasonFor({ticket, kind: "FIX"});
+  }
+  function onDeclineQuote(ticket: FeedTicket): void {
+    setCancelReasonError(null);
+    setCancelReasonFor({ticket, kind: "QUOTE"});
+  }
+  async function onMarkTowLoaded(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await markTowLoaded(ticket.id, token);
+      setNotice(t.assist.loadedNotice);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onConfirmTowReceived(ticket: FeedTicket): Promise<void> {
+    if (!token || recBusy) return;
+    setRecBusy(true);
+    setError(null);
+    try {
+      await confirmTowReceived(ticket.id, token);
+      setNotice(t.assist.receivedNotice);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setRecBusy(false);
+    }
+  }
+  async function onSaveMobileFix(amount: number, items?: Array<{name: string; qty: number; unitPrice: number}>): Promise<void> {
     if (!token || !mobileFixFor || mobileFixBusy) return;
     setMobileFixBusy(true);
     setMobileFixError(null);
     try {
-      await setMobileShopFix(mobileFixFor.id, amount, token);
-      await updateTicketStatus(mobileFixFor.id, "7", token);
+      await setMobileShopFix(mobileFixFor.id, amount, token, items);
       setMobileFixFor(null);
-      setNotice(t.provider.workSaved);
+      setNotice(t.assist.quoteSent);
       await reloadAll();
     } catch (err) {
       setMobileFixError(toMessage(err));
@@ -1854,7 +2100,8 @@ export default function useAssistController() {
     try {
       if (accept) {
         const point = await getFix();
-        await respondReturnTow(ticket.id, true, token, point);
+        const label = await reverseLabel(point.lat, point.lng, lang);
+        await respondReturnTow(ticket.id, true, token, {...point, label});
       } else {
         await respondReturnTow(ticket.id, false, token);
       }
@@ -1881,23 +2128,22 @@ export default function useAssistController() {
       setEstimateBusy(false);
     }
   }
-  async function onApproveQuote(ticket: FeedTicket): Promise<void> {
+  async function onApproveInvoice(ticket: FeedTicket): Promise<void> {
     if (!token || recBusy) return;
-    if (!fundedForApproval(ticket)) {
-      setDetailFor(null);
-      navigation.navigate("BillDetail", {ticketId: ticket.id, payFirst: true});
-      return;
-    }
     setRecBusy(true);
     setError(null);
     try {
-      await approveQuote(ticket.id, token);
+      await approveInvoice(ticket.id, token);
       await reloadAll();
     } catch (err) {
       setError(toMessage(err));
     } finally {
       setRecBusy(false);
     }
+  }
+
+  function onApproveQuote(ticket: FeedTicket): void {
+    beginQuoteApproval(ticket, "SHOP_QUOTE");
   }
   async function applyDestinationEdit(ticket: FeedTicket, place: Place): Promise<void> {
     if (!token || recBusy) return;
@@ -1934,14 +2180,21 @@ export default function useAssistController() {
     setCancelReasonError(null);
     try {
       if (cancelReasonFor.kind === "TOWER") {
-        await cancelTicket(cancelReasonFor.ticket.id, token, reason);
+        await cancelTowerSearch(cancelReasonFor.ticket.id, reason, token, gps?.lat, gps?.lng);
+      } else if (cancelReasonFor.kind === "QUOTE") {
+        await declineQuote(cancelReasonFor.ticket.id, reason, token);
+      } else if (cancelReasonFor.kind === "FIX") {
+        await declineMobileFix(cancelReasonFor.ticket.id, reason, token);
       } else {
         await declineDestination(cancelReasonFor.ticket.id, reason, token);
       }
       setCancelReasonFor(null);
       setDetailFor(null);
       closeBoardDetail();
-      setNotice(cancelReasonFor.kind === "TOWER" ? t.assist.cancelled : t.provider.declineSent);
+      setNotice(cancelReasonFor.kind === "TOWER" ? t.assist.cancelled :
+        cancelReasonFor.kind === "QUOTE" || cancelReasonFor.kind === "FIX" ?
+          t.assist.declineQuote :
+          t.provider.declineSent);
       await reloadAll();
     } catch (err) {
       setCancelReasonError(toMessage(err));
@@ -1976,6 +2229,9 @@ export default function useAssistController() {
     setError(null);
     try {
       await updateTicketStatus(ticket.id, status, token);
+      setDetailFor((prev) => prev && prev.id === ticket.id ? {...prev, status} : prev);
+      setBoardDetail((prev) => prev && prev.id === ticket.id ? {...prev, status} : prev);
+      setActive((prev) => prev && prev.id === ticket.id ? {...prev, status} : prev);
       await reloadAll();
       if (status === DISPATCH_STATUS.ARRIVED) setNotice(t.assist.arrivedNotice);
       if (status === DISPATCH_STATUS.RESOLVED) await refreshBills();
@@ -2045,5 +2301,5 @@ export default function useAssistController() {
       setLocateBusy(false);
     }
   }
-  return {activateVehicle, active, activeEta, activeFeed, activeId, activeIsOut, activeJobLine, activeName, activeVehicle, applyCenter, applyDestinationEdit, arrivedHintRef, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, payments, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, provider, providerLiveJob, providerOf, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef};
+  return {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, provider, providerLiveJob, providerOf, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef};
 }

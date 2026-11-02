@@ -80,8 +80,8 @@ tower switches to the tow tab with a notice instead of landing silently. The pay
 decline reason renders in the Records row even before the refetch lands.
 Sweep-cancelled walk-ins now push too (`CANCELLED` body), so an expired row
 announces itself instead of silently vanishing. Operator-audience pushes
-(quote approvals, rider cancels/arrivals/resolves with shop context, late pickups, destination
-edits/declines on assigned tows) fan out
+(quote approvals, rider cancels/resolves with shop context, rider receipt
+confirmation, late pickups, destination edits/declines on assigned tows) fan out
 through the same `ticketId`-keyed drain — the operator's Records reload on
 receipt with no client change, since the payload shape is unchanged
 (`ticketId`, `ticketType`, `status`) and only the server copy varies.

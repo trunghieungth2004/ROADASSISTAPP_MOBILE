@@ -9,6 +9,34 @@ import {DOW, buildOpenHours, parseOpenHours, validateWeek, type WeekHours} from 
 import {isValidTowPlate, normalizeTowPlate, parseTowWidth} from "../../services/towPlates";
 import {normalizeVehicleType} from "../../api/vehicles";
 
+function parseFee(raw: string): number | undefined | null {
+  const clean = raw.replace(/[^0-9]/g, "");
+  if (clean === "") return undefined;
+  const value = Number.parseInt(clean, 10);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function feePatch(
+  kind: "SHOP" | "TOW" | "MOBILE_SHOP",
+  fees: {
+    towBase?: number;
+    towPerKm?: number;
+    callOut?: number;
+    travelPerKm?: number;
+  },
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (kind === "TOW") {
+    if (fees.towBase !== undefined) out.towBaseFee = fees.towBase;
+    if (fees.towPerKm !== undefined) out.towPerKmFee = fees.towPerKm;
+  }
+  if (kind === "MOBILE_SHOP") {
+    if (fees.callOut !== undefined) out.callOutFee = fees.callOut;
+    if (fees.travelPerKm !== undefined) out.travelPerKmFee = fees.travelPerKm;
+  }
+  return out;
+}
+
 export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider: Provider | null, t: Strings, vehicles: MeVehicle[] = []) {
   const [name, setName] = useState(provider?.name ?? "");
   const [point, setPoint] = useState<{lat: number; lng: number; label?: string} | null>(
@@ -26,6 +54,10 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     Array.isArray(provider?.vehicleClasses) && provider.vehicleClasses.length > 0 ? [...provider.vehicleClasses] : ["SOLO_BIKE", "CAR"],
   );
   const [licenseNumber, setLicenseNumber] = useState(typeof provider?.licenseNumber === "string" ? provider.licenseNumber : "");
+  const [towBaseFee, setTowBaseFee] = useState(typeof provider?.towBaseFee === "number" ? String(provider.towBaseFee) : "");
+  const [towPerKmFee, setTowPerKmFee] = useState(typeof provider?.towPerKmFee === "number" ? String(provider.towPerKmFee) : "");
+  const [callOutFee, setCallOutFee] = useState(typeof provider?.callOutFee === "number" ? String(provider.callOutFee) : "");
+  const [travelPerKmFee, setTravelPerKmFee] = useState(typeof provider?.travelPerKmFee === "number" ? String(provider.travelPerKmFee) : "");
   const existingVehicles = vehicles.flatMap((vehicle) =>
     (vehicle.providerLinks ?? [])
       .filter((link) => {
@@ -140,6 +172,27 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
         return false;
       }
     }
+    const towBase = parseFee(towBaseFee);
+    const towPerKm = parseFee(towPerKmFee);
+    const callOut = parseFee(callOutFee);
+    const travelPerKm = parseFee(travelPerKmFee);
+    if ([towBase, towPerKm, callOut, travelPerKm].some((v) => v === null)) {
+      setError(t.provider.invalidAmount);
+      return false;
+    }
+    return persist(token, {towBase, towPerKm, callOut, travelPerKm});
+  }
+
+  async function persist(
+    token: string,
+    fees: {
+      towBase: number | null | undefined;
+      towPerKm: number | null | undefined;
+      callOut: number | null | undefined;
+      travelPerKm: number | null | undefined;
+    },
+  ): Promise<boolean> {
+    const {towBase, towPerKm, callOut, travelPerKm} = fees;
     setBusy(true);
     setError(null);
     try {
@@ -153,6 +206,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
           ...(kind === "MOBILE_SHOP" ? {plate: normalizeTowPlate(plate), vehicleType: towType, licenseNumber: licenseNumber.trim()} : {}),
           ...(kind === "TOW" ? {plate: normalizeTowPlate(plate), vehicleType: towType, vehicleWidth: parseTowWidth(towWidth) ?? undefined} : {}),
+          ...feePatch(kind, {towBase: towBase ?? undefined, towPerKm: towPerKm ?? undefined, callOut: callOut ?? undefined, travelPerKm: travelPerKm ?? undefined}),
         }, token);
       } else if (kind === "MOBILE_SHOP" && point) {
         await createProvider({
@@ -164,6 +218,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           plate: normalizeTowPlate(plate),
           vehicleType: towType,
           licenseNumber: licenseNumber.trim(),
+          ...feePatch(kind, {callOut: callOut ?? undefined, travelPerKm: travelPerKm ?? undefined}),
         }, token);
       } else if (kind === "TOW" && towPoint) {
         await createProvider({
@@ -174,6 +229,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           plate: normalizeTowPlate(plate),
           vehicleType: towType,
           vehicleWidth: parseTowWidth(towWidth) ?? undefined,
+          ...feePatch(kind, {towBase: towBase ?? undefined, towPerKm: towPerKm ?? undefined}),
         }, token);
       } else if (kind === "SHOP" && point) {
         const hours = buildOpenHours(week);
@@ -195,6 +251,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
       setBusy(false);
     }
   }
+
   return {
     kind,
     provider,
@@ -213,6 +270,14 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     toggleVehicleClass,
     licenseNumber,
     setLicenseNumber,
+    towBaseFee,
+    setTowBaseFee,
+    towPerKmFee,
+    setTowPerKmFee,
+    callOutFee,
+    setCallOutFee,
+    travelPerKmFee,
+    setTravelPerKmFee,
     existingVehicles,
     useExistingVehicle,
     shopSearch,

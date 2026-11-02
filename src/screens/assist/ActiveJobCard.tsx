@@ -12,6 +12,7 @@ type Props = {
   ticket: FeedTicket;
   title: string;
   line: string;
+  pills?: string[];
   icon: "tow" | "sos" | "pending";
   tone: string;
   iconTone?: string;
@@ -25,6 +26,7 @@ export default function ActiveJobCard({
   ticket,
   title,
   line,
+  pills = [],
   icon,
   tone,
   iconTone,
@@ -49,7 +51,18 @@ export default function ActiveJobCard({
           <Text style={styles.pillText}>{ticketStatusLabel(ticket.status, t)}</Text>
         </View>
       </View>
-      <Text style={[styles.line, {color: theme.muted}]}>{line}</Text>
+      <View style={styles.metaRow}>
+        <Text style={[styles.line, {color: theme.muted}]} numberOfLines={1}>{line}</Text>
+        {pills.length > 0 ? (
+          <View testID="active-job-pills" style={styles.pills}>
+            {pills.map((pill) => (
+              <View key={pill} style={[styles.metaPill, {borderColor: theme.border, backgroundColor: theme.background}]}>
+                <Text style={[styles.metaPillText, {color: theme.text}]}>{pill}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
       {warning ? <Text style={[styles.line, {color: "#f59e0b"}]}>{warning}</Text> : null}
     </Pressable>
   );
@@ -61,5 +74,9 @@ const styles = StyleSheet.create({
   title: {fontWeight: "700", flex: 1},
   pill: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   pillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
-  line: {fontSize: 12},
+  metaRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  pills: {flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto"},
+  metaPill: {borderWidth: 1, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8},
+  metaPillText: {fontSize: 11, fontWeight: "700"},
+  line: {fontSize: 12, flexShrink: 1},
 });

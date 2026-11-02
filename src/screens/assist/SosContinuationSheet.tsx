@@ -5,10 +5,12 @@ import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
+import TicketStatusPill from "./TicketStatusPill";
 
 type Props = {
   t: Strings;
   ticketLabel: string;
+  status: string;
   attempt: number;
   callOutTotal: number;
   busy: boolean;
@@ -17,7 +19,7 @@ type Props = {
   onCancel: () => void;
 };
 
-export default function SosContinuationSheet({t, ticketLabel, attempt, callOutTotal, busy, error, onConfirm, onCancel}: Props) {
+export default function SosContinuationSheet({t, ticketLabel, status, attempt, callOutTotal, busy, error, onConfirm, onCancel}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const body = t.assist.continueSosBody
@@ -28,6 +30,7 @@ export default function SosContinuationSheet({t, ticketLabel, attempt, callOutTo
       visible
       variant="dialog"
       title={`${t.assist.continueSosTitle} · ${ticketLabel}`}
+      right={<TicketStatusPill t={t} theme={theme} status={status} />}
       closeLabel={t.common.cancel}
       onClose={onCancel}
       scrollable={false}

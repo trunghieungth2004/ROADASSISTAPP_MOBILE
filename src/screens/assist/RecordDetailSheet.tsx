@@ -11,9 +11,9 @@ import type {UserRating} from "../../api/ratings";
 import Overlay, {type OverlayAction, type OverlayActionTone} from "../../components/overlay/Overlay";
 import {distBetween} from "../navigation/navUtils";
 import {timeAgoLabel} from "../hazards/hazardFilter";
-import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canResolve, canSendEstimate, canSendQuote, estimateStateOf, viewerRoleOf, type ViewerRole, type ViewerRoleContext} from "./recordActions";
+import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canConfirmTowReceived, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canResolve, canSendEstimate, canSendQuote, canTowArrive, canTowDeliver, estimateStateOf, returnTowPending, viewerRoleOf, type ViewerRole, type ViewerRoleContext} from "./recordActions";
 import {declineReasonLabel, statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel, unfixableReasonLabel} from "./ticketLabels";
-import {shopDeclineReasonLabel, towerCancelReasonLabel} from "./cancelReasons";
+import {quoteDeclineReasonLabel, shopDeclineReasonLabel, towerCancelReasonLabel} from "./cancelReasons";
 import {directionOf} from "./recordFilter";
 import RatingRow from "./RatingRow";
 import {resolvePhotoUrl} from "../../services/photos";
@@ -80,6 +80,12 @@ type Props = {
   onApproveEstimate?: ((ticket: FeedTicket) => void) | null;
   onDeclineEstimate?: ((ticket: FeedTicket) => void) | null;
   onApproveFinal?: ((ticket: FeedTicket) => void) | null;
+  onApproveInvoice?: ((ticket: FeedTicket) => void) | null;
+  onApproveMobileFix?: ((ticket: FeedTicket) => void) | null;
+  onDeclineMobileFix?: ((ticket: FeedTicket) => void) | null;
+  onDeclineQuote?: ((ticket: FeedTicket) => void) | null;
+  onMarkTowLoaded?: ((ticket: FeedTicket) => void) | null;
+  onConfirmTowReceived?: ((ticket: FeedTicket) => void) | null;
   onConfirmCash?: ((ticket: FeedTicket) => void) | null;
   onOpenBill?: ((ticket: FeedTicket) => void) | null;
   onOpenDispute?: ((ticket: FeedTicket) => void) | null;
@@ -90,6 +96,7 @@ type Props = {
   onMarkUnfixable?: ((ticket: FeedTicket) => void) | null;
   bill?: Bill | null;
   quoteFunded?: boolean;
+  quotePayMethod?: string | null;
 };
 
 function agoOf(at: string, t: Strings): string {
@@ -105,7 +112,7 @@ function Section({theme, icon, children}: {theme: AppTheme; icon: string; childr
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onOfferMobileTow, canOfferMobileTow = false, mobileTowShopOff = false, onContinueSos, onReleaseSos, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onConfirmCash, onOpenBill, onOpenDispute, onTowerCancel, onOpenArchivedChat, payment, waiting, onMarkUnfixable, bill, quoteFunded, roleContext}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onOfferMobileTow, canOfferMobileTow = false, mobileTowShopOff = false, onContinueSos, onReleaseSos, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onApproveInvoice, onApproveMobileFix, onDeclineMobileFix, onDeclineQuote, onMarkTowLoaded, onConfirmTowReceived, onConfirmCash, onOpenBill, onOpenDispute, onTowerCancel, onOpenArchivedChat, payment, waiting, onMarkUnfixable, bill, quoteFunded, quotePayMethod, roleContext}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
@@ -222,10 +229,26 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   const sinceMinutes = typeof ticket.waitingSince === "string" && ticket.waitingSince !== "" ? Math.max(0, Math.round((Date.now() - Date.parse(ticket.waitingSince)) / 60000)) : null;
   const waitingMinutes = typeof waiting?.waitingMinutes === "number" ? waiting.waitingMinutes : typeof ticket.waitingMinutes === "number" ? ticket.waitingMinutes : fareWaitingMinutes ?? sinceMinutes;
   const showWaiting = (waitingMinutes !== null && waitingMinutes > 0) || (waitingFee !== null && waitingFee > 0);
-  const billPayment = bill != null ? (bill.items.find((item) => item.ticketId === ticket.id)?.payment ?? bill.items[0]?.payment ?? null) : null;
+  const billPayment = bill != null ? (bill.items.find((item) => item.ticketId === ticket.id)?.payment ?? null) : null;
   const payMethod = (typeof payment?.method === "string" ? payment.method : typeof ticket.paymentMethod === "string" ? ticket.paymentMethod : null) ?? (typeof billPayment?.method === "string" ? billPayment.method : null);
   const payStatus = (typeof payment?.status === "string" ? payment.status : typeof ticket.paymentStatus === "string" ? ticket.paymentStatus : null) ?? (typeof billPayment?.status === "string" ? billPayment.status : null);
   const formerAssignment = ticket.formerAssignment === true;
+  const formerMobile = formerAssignment &&
+    ticket.formerAssignmentKind === "MOBILE_SHOP";
+  const mobileFeeHistory = Array.isArray(ticket.mobileFeeHistory) ?
+    [...ticket.mobileFeeHistory].sort((a, b) =>
+      String(b.declinedAt).localeCompare(String(a.declinedAt))) :
+    [];
+  const mobileDeclineReason = formerMobile ?
+    (mobileFeeHistory[0]?.reason ?? null) :
+    null;
+  const mobileDeclineLabel = typeof mobileDeclineReason === "string" &&
+    mobileDeclineReason !== "" ?
+    (["PRICE_TOO_HIGH", "WORK_NOT_DONE", "ITEMS_WRONG", "OTHER"]
+      .includes(mobileDeclineReason) ?
+      quoteDeclineReasonLabel(mobileDeclineReason, t) :
+      mobileDeclineReason) :
+    null;
   const towerCancelled = !formerAssignment && ticket.direction === "out" && typeof ticket.cancelledBy === "string" && ticket.cancelledBy !== "" && !isTerminal(ticket.status);
   const shopDeclinedMid = !formerAssignment && ticket.destinationDecline != null && !isTerminal(ticket.status);
   const towCancelHistory = Array.isArray(ticket.towCancelHistory) ? ticket.towCancelHistory : [];
@@ -295,11 +318,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   if (declineOpen && onDecline) {
     actions.push({label: t.provider.decline, tone: "danger", busy, onPress: () => { onDecline(ticket, declineReason, declineNote.trim() || undefined); setDeclineOpen(false); }});
   }
-  if (canSendQuote(ticket.direction, ticket.status, ticket.ticketType, hasShop) && typeof ticket.shopQuotedAmount !== "number") {
-    actions.push({label: t.assist.sendQuote, tone: "primary", busy, onPress: () => onOpenQuote(ticket)});
+  if (canSendQuote(ticket.direction, ticket.status, ticket.ticketType, hasShop)) {
+    actions.push({label: typeof ticket.shopQuotedAmount === "number" ? t.assist.amendQuote : t.assist.sendQuote, tone: "primary", busy, onPress: () => onOpenQuote(ticket)});
   }
   if (canEditWork(ticket.direction, ticket.status, hasShop, ticket.ticketType)) {
-    actions.push({label: t.provider.workDone, tone: "neutral", outline: true, group: "secondary", busy, onPress: () => onOpenWork(ticket)});
+    actions.push({label: t.provider.workDone, tone: "neutral", outline: true, group: "secondary", busy, icon: iconOf("receipt-long"), onPress: () => onOpenWork(ticket)});
   }
   const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && !disputeHold && ticket.direction === "in" && hasShop && !showUnfixable && canMarkUnfixable(ticket.ticketType, ticket.status);
   if (mobileShopAssigned && onOpenMobileFix && ticket.status === "3" && !disputeHold) {
@@ -329,7 +352,8 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
     actions.push({label: t.assist.acceptTow, tone: "primary", onPress: () => onRespondMobileTow(ticket, true)});
     actions.push({label: t.assist.declineTow, tone: "danger", outline: true, onPress: () => onRespondMobileTow(ticket, false)});
   }
-  if (role.kind === "rider" && ticket.returnTowOffer?.status === "PENDING" && ticket.status === "7" && onRespondReturnTow) {
+  if (role.kind === "rider" && returnTowPending(ticket) &&
+    (ticket.status === "7" || ticket.status === "15") && onRespondReturnTow) {
     actions.push({label: t.assist.returnTow, tone: "primary", onPress: () => onRespondReturnTow(ticket, true)});
     actions.push({label: t.assist.declineReturnTow, tone: "neutral", outline: true, iconOnly: true, icon: iconOf("close"), onPress: () => onRespondReturnTow(ticket, false)});
   }
@@ -337,22 +361,53 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
     actions.push({label: t.chat.open, tone: "neutral", outline: true, iconOnly: true, icon: iconOf("chat-bubble-outline"), onPress: () => onOpenChat(ticket)});
   }
   if (unfixableReady) {
-    actions.push({label: t.assist.unfixableAction, tone: "danger", outline: true, group: ticket.ticketType === "SOS" ? "primary" : "secondary", busy, onPress: () => onMarkUnfixable(ticket)});
+    actions.push({label: t.assist.unfixableAction, tone: "danger", group: "primary", busy, onPress: () => onMarkUnfixable(ticket)});
   }
-  if (canApproveQuote(ticket.direction, ticket.status) && (ticket.ticketType === "WALK_IN" || ticket.ticketType === "MECHANIC")) {
-    actions.push({label: quoteFunded === true ? t.assist.approveQuote : t.assist.payToApprove, tone: "primary", busy, onPress: () => onApproveQuote(ticket)});
+
+  if (ticket.direction === "in" && ticket.ticketType === "TOW" &&
+    ticket.status === "3" && !ticket.loadedAt && onMarkTowLoaded) {
+    actions.push({label: t.assist.loaded, tone: "primary", busy, onPress: () => onMarkTowLoaded(ticket)});
+  }
+  if (ticket.direction === "out" && ticket.invoiceApproval === "PENDING" &&
+    onApproveInvoice) {
+    actions.push({label: t.assist.approveInvoice, tone: "primary", busy, onPress: () => onApproveInvoice(ticket)});
   }
   if (canResolve(ticket.direction, ticket.status) && !disputeHold) {
     actions.push({label: t.assist.resolved, tone: "primary", busy, onPress: () => onAdvance(ticket, "4")});
   }
-  if ((ticket.ticketType === "TOW" || ticket.ticketType === "SOS") && ticket.direction === "out" && ticket.status === "2") {
+  if (ticket.ticketType === "SOS" && ticket.direction === "out" && ticket.status === "2") {
     actions.push({label: t.assist.arrived, tone: "primary", busy, onPress: () => onAdvance(ticket, "3")});
   }
   if (!disputeHold && ticket.direction === "out" &&
-    ((ticket.ticketType === "TOW" && ticket.status === "3") ||
-      (ticket.ticketType === "SOS" && ticket.status === "3" &&
-        typeof ticket.finalAmount === "number"))) {
+    ticket.ticketType === "SOS" && ticket.status === "3" &&
+    typeof ticket.finalAmount === "number") {
     actions.push({label: t.assist.resolved, tone: "primary", busy, onPress: () => onAdvance(ticket, "4")});
+  }
+  if (canTowArrive(role, ticket.ticketType, ticket.status)) {
+    actions.push({
+      label: ticket.towKind === "RETURN" ? t.assist.arrivedAtHangar : t.assist.arrivedAtPickup,
+      tone: "primary",
+      busy,
+      onPress: () => onAdvance(ticket, "3"),
+    });
+  }
+  if (canTowDeliver(role, ticket.ticketType, ticket.status, ticket.loadedAt)) {
+    actions.push({
+      label: ticket.towKind === "RETURN" ? t.assist.deliveredToRider : t.assist.delivered,
+      tone: "primary",
+      busy,
+      onPress: () => onAdvance(ticket, "4"),
+    });
+  }
+  if (canConfirmTowReceived(ticket.direction, ticket.ticketType, ticket.status, ticket.receivedAt) &&
+    typeof ticket.deliveredAt === "string" && ticket.deliveredAt !== "" &&
+    onConfirmTowReceived) {
+    actions.push({
+      label: t.assist.confirmReceived,
+      tone: "primary",
+      busy,
+      onPress: () => onConfirmTowReceived(ticket),
+    });
   }
   if (onNavigateJob) {
     actions.push({label: t.common.routeFromHere, tone: "neutral", outline: true, iconOnly: true, icon: iconOf("navigation"), busy, onPress: () => onNavigateJob(ticket)});
@@ -373,15 +428,20 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   if (!formOpen && canEditDest && onEditDestination !== null) {
     actions.push({label: t.assist.changeDropOff, tone: "primary", outline: true, iconOnly: true, icon: iconOf("edit-location", "primary"), busy, onPress: () => onEditDestination(ticket)});
   }
+  const feeDecision = ticket.direction === "out" && ticket.status === "9" &&
+    (ticket.ticketType === "WALK_IN" ||
+      ticket.ticketType === "MECHANIC" ||
+      (ticket.ticketType === "SOS" &&
+        typeof ticket.finalAmount === "number"));
   return (
     <Overlay
       visible
       variant="sheet"
-      title={ticketTypeLabel(ticket.ticketType, t)}
+      title={ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}
       closeLabel={t.common.cancel}
       onClose={onClose}
       actions={actions}
-      actionLayout="ticket"
+      actionLayout={feeDecision ? "confirm" : "ticket"}
       right={
         <View style={styles.headerPills}>
           {pickupIn !== null ? (
@@ -405,7 +465,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
       <View style={styles.body}>
         <View style={styles.meta}>
           <Text style={[styles.direction, {color: theme.primary}]} accessibilityLabel={inbound ? t.assist.incoming : t.assist.outgoing}>{inbound ? t.assist.filterIn : t.assist.filterOut}</Text>
-          <Text style={[styles.coords, {color: theme.muted}]}>{ticketTypeLabel(ticket.ticketType, t)}{typeof ticket.createdAt === "string" ? ` · ${agoOf(ticket.createdAt, t)}` : ""}</Text>
+          <Text style={[styles.coords, {color: theme.muted}]}>{ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}{typeof ticket.createdAt === "string" ? ` · ${agoOf(ticket.createdAt, t)}` : ""}</Text>
         </View>
         {disputeOpen ? (
           <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
@@ -416,11 +476,22 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
             </View>
           </View>
         ) : null}
+        {ticket.invoiceApproval === "PENDING" ? (
+          <View style={[styles.banner, {borderColor: theme.primary, backgroundColor: theme.primary}]}>
+            <MaterialIcons name="receipt-long" size={16} color="#fff" />
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerTitle}>{t.assist.invoicePending}</Text>
+              <Text style={styles.bannerText}>{t.assist.invoicePendingHint}</Text>
+            </View>
+          </View>
+        ) : null}
         {formerAssignment ? (
           <View style={[styles.banner, {borderColor: theme.muted, backgroundColor: theme.muted}]}>
             <MaterialIcons name="history" size={16} color="#fff" />
             <View style={styles.bannerBody}>
-              <Text style={styles.bannerText}>{`${t.assist.formerAssignmentBanner}${towCancelReason !== null ? ` · ${towerCancelReasonLabel(towCancelReason, t)}` : ""}`}</Text>
+              <Text style={styles.bannerText}>{formerMobile ?
+                `${t.assist.formerFixDeclinedBanner}${mobileDeclineLabel !== null ? ` · ${mobileDeclineLabel}` : ""}` :
+                `${t.assist.formerAssignmentBanner}${towCancelReason !== null ? ` · ${towerCancelReasonLabel(towCancelReason, t)}` : ""}`}</Text>
             </View>
           </View>
         ) : null}
@@ -454,6 +525,16 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
             </View>
           </View>
         ) : null}
+        {ticket.ticketType === "TOW" && Array.isArray(ticket.towFeeHistory) &&
+          ticket.towFeeHistory.some((entry) => entry.reasonCode === "TOWER_CANCEL_BREAKDOWN") ? (
+            <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
+              <MaterialIcons name="build" size={16} color="#fff" />
+              <View style={styles.bannerBody}>
+                <Text style={styles.bannerTitle}>{t.assist.towerBreakdown}</Text>
+                <Text style={styles.bannerText}>{t.assist.towerBreakdownHint}</Text>
+              </View>
+            </View>
+          ) : null}
         {mobileShopAssigned && ticket.ticketType === "SOS" && ticket.status === "15" &&
           !ticket.continuationTicketId && ticket.mobileTowAvailable !== true &&
           ticket.mobileTowState !== "NONE_NEARBY" ? (
@@ -622,6 +703,12 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
           onApproveEstimate={onApproveEstimate ?? null}
           onDeclineEstimate={onDeclineEstimate ?? null}
           onApproveFinal={onApproveFinal ?? null}
+          onApproveQuote={onApproveQuote}
+          onDeclineQuote={onDeclineQuote ?? null}
+          onApproveMobileFix={onApproveMobileFix ?? null}
+          onDeclineMobileFix={onDeclineMobileFix ?? null}
+          quotePayMethod={quotePayMethod ?? null}
+          quoteFunded={quoteFunded}
           payMethod={payMethod}
           payStatus={payStatus}
           onConfirmCash={canConfirmCash ? onConfirmCash ?? null : null}

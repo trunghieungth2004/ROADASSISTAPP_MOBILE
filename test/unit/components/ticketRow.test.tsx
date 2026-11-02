@@ -44,6 +44,80 @@ test("a former tower row is marked cancelled by you", async () => {
   }
 });
 
+test("a declined mobile fix is marked as a quote decline", async () => {
+  const ticket = {
+    id: "sos1",
+    userId: "rider1",
+    ticketType: "SOS",
+    lat: 10.7,
+    lng: 106.6,
+    status: "1",
+    direction: "in",
+    formerAssignedShopIds: ["mobile1"],
+    formerAssignment: true,
+    formerAssignmentKind: "MOBILE_SHOP",
+    otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
+  } as FeedTicket;
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <TicketRow
+        t={en}
+        theme={lightTheme}
+        ticket={ticket}
+        kind="MOBILE_SHOP"
+        onPress={() => undefined}
+      />,
+    );
+  });
+  if (!renderer) throw new Error("render failed");
+  try {
+    const texts = renderer.root
+      .findAll((node) => typeof node.props?.children === "string")
+      .map((node) => node.props.children as string);
+    expect(texts).toContain(en.assist.formerFixDeclinedPill);
+    expect(texts).not.toContain(en.assist.formerAssignmentPill);
+  } finally {
+    await act(async () => {
+      renderer?.unmount();
+    });
+  }
+});
+
+test("an SOS record row uses the mobile-shop wrench on the rider side", async () => {
+  const ticket = {
+    id: "sos1",
+    userId: "rider1",
+    ticketType: "SOS",
+    lat: 10.7,
+    lng: 106.6,
+    status: "1",
+    direction: "out",
+    otherParty: {id: "mobile1", name: "Mobile Fix", kind: "MOBILE_SHOP"},
+  } as FeedTicket;
+  let renderer: ReturnType<typeof create> | undefined;
+  await act(async () => {
+    renderer = create(
+      <TicketRow
+        t={en}
+        theme={lightTheme}
+        ticket={ticket}
+        kind={null}
+        onPress={() => undefined}
+      />,
+    );
+  });
+  if (!renderer) throw new Error("render failed");
+  try {
+    expect(renderer.root.findAll((node) => node.props?.name === "build").length).toBeGreaterThan(0);
+    expect(renderer.root.findAll((node) => node.props?.name === "person")).toHaveLength(0);
+  } finally {
+    await act(async () => {
+      renderer?.unmount();
+    });
+  }
+});
+
 test("a TOW record row uses the tow-truck icon even in a shop context", async () => {
   const ticket = {
     id: "t1",

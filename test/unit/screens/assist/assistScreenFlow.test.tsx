@@ -398,6 +398,45 @@ test("request tab opens a ticket modal from the sos button", async () => {
   }
 });
 
+test("a second SOS on another vehicle is blocked", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{
+      id: "sos-old",
+      userId: "u1",
+      ticketType: "SOS",
+      lat: 10.7,
+      lng: 106.6,
+      status: "1",
+      vehicleId: "v2",
+      direction: "out",
+      otherParty: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    const sos = texts(renderer.root, en.assist.sos).find((n) => typeof n.props?.onPress === "function");
+    expect(sos).toBeDefined();
+    await act(async () => {
+      await sos?.props.onPress();
+      await flush();
+    });
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.request)?.props.onPress();
+      await flush(8);
+    });
+    expect(seen.some((call) => call.path === "/dispatch")).toBe(false);
+    expect(hasText(renderer.root, en.assist.sosBusyTitle)).toBe(true);
+    expect(hasText(renderer.root, en.assist.sosBusyMessage)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
 test("tow ticket modal requires a destination", async () => {
   const renderer = await mount();
   try {

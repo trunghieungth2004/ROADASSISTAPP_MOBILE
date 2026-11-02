@@ -1,5 +1,5 @@
 import {useMemo, useState} from "react";
-import {Pressable, StyleSheet, View} from "react-native";
+import {Pressable, ScrollView, StyleSheet, useWindowDimensions, View} from "react-native";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -51,6 +51,8 @@ export default function MobileShopSection({
   locationMissing,
   onOpen,
 }: Props) {
+  const {height} = useWindowDimensions();
+  const listHeight = Math.max(160, Math.min(300, Math.round(height * 0.3)));
   const [sort, setSort] = useState<SortMode>("closest");
   const [vehicle, setVehicle] = useState<VehicleFilter>("ALL");
   const rows = useMemo(() => {
@@ -108,16 +110,17 @@ export default function MobileShopSection({
           </View>
         </View>
       </View>
-      {locationMissing ? (
-        <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.towLocationNeeded}</Text>
-      ) : loading && rows.length === 0 ? (
-        <StatusRow theme={theme} text={t.common.loading} />
-      ) : rows.length === 0 ? (
-        <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.noNearby}</Text>
-      ) : (
-        rows.map((ticket) => {
-          const row = toFeed(ticket, t);
-          return (
+      <ScrollView style={{maxHeight: listHeight}} contentContainerStyle={styles.list} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+        {locationMissing ? (
+          <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.towLocationNeeded}</Text>
+        ) : loading && rows.length === 0 ? (
+          <StatusRow theme={theme} text={t.common.loading} />
+        ) : rows.length === 0 ? (
+          <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.noNearby}</Text>
+        ) : (
+          rows.map((ticket) => {
+            const row = toFeed(ticket, t);
+            return (
             <TicketRow
               key={ticket.id}
               t={t}
@@ -130,12 +133,14 @@ export default function MobileShopSection({
           );
         })
       )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {gap: 8},
+  list: {gap: 8},
   filterWrap: {gap: 6},
   section: {fontSize: 15, fontWeight: "700"},
   filterRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap"},

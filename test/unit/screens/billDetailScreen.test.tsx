@@ -1,7 +1,7 @@
 import {expect, jest, test, beforeEach} from "@jest/globals";
 import {act, create, type ReactTestInstance} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {Linking, Text} from "react-native";
+import {Alert, Text} from "react-native";
 import BillDetailScreen from "../../../src/screens/BillDetailScreen";
 import {en} from "../../../src/i18n/en";
 import type {Bill} from "../../../src/api/bills";
@@ -36,15 +36,23 @@ jest.mock("@react-navigation/native", () => {
 const mockFetchBill = jest.fn(async () => null as unknown as Bill);
 const mockCreatePayment = jest.fn(async () => ({checkoutUrl: null}) as unknown);
 const mockConfirmCashReceipt = jest.fn(async () => ({}) as unknown);
+const mockFetchTicketPayments = jest.fn(async () => [] as unknown[]);
+const mockCancelPayment = jest.fn(async () => ({cancelled: true, method: "SEPAY"}));
 
 jest.mock("../../../src/api/bills", () => ({
   fetchBill: (...args: unknown[]) => (mockFetchBill as (...a: unknown[]) => Promise<Bill>)(...args),
 }));
 
-jest.mock("../../../src/api/dispatch", () => ({
-  createPayment: (...args: unknown[]) => (mockCreatePayment as (...a: unknown[]) => Promise<unknown>)(...args),
-  confirmCashReceipt: (...args: unknown[]) => (mockConfirmCashReceipt as (...a: unknown[]) => Promise<unknown>)(...args),
-}));
+jest.mock("../../../src/api/dispatch", () => {
+  const actual = jest.requireActual("../../../src/api/dispatch") as Record<string, unknown>;
+  return {
+    ...actual,
+    createPayment: (...args: unknown[]) => (mockCreatePayment as (...a: unknown[]) => Promise<unknown>)(...args),
+    confirmCashReceipt: (...args: unknown[]) => (mockConfirmCashReceipt as (...a: unknown[]) => Promise<unknown>)(...args),
+    fetchTicketPayments: (...args: unknown[]) => (mockFetchTicketPayments as (...a: unknown[]) => Promise<unknown[]>)(...args),
+    cancelPayment: (...args: unknown[]) => (mockCancelPayment as (...a: unknown[]) => Promise<unknown>)(...args),
+  };
+});
 
 const metrics: Metrics = {
   insets: {top: 0, bottom: 0, left: 0, right: 0},
@@ -160,6 +168,10 @@ beforeEach(() => {
   mockCreatePayment.mockReset();
   mockCreatePayment.mockResolvedValue({checkoutUrl: null});
   mockConfirmCashReceipt.mockReset();
+  mockFetchTicketPayments.mockReset();
+  mockFetchTicketPayments.mockResolvedValue([]);
+  mockCancelPayment.mockReset();
+  mockCancelPayment.mockResolvedValue({cancelled: true, method: "SEPAY"});
   mockConfirmCashReceipt.mockResolvedValue({});
 });
 
@@ -184,8 +196,6 @@ test("paying a sepay item arms it and opens checkout", async () => {
   mockFetchBill.mockReset();
   mockFetchBill.mockResolvedValueOnce(UNPAID_BILL).mockResolvedValue(ARMED_BILL);
   mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/checkout"});
-  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
-  open.mockClear();
   const renderer = await mount();
   try {
     const pay = pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`);
@@ -195,8 +205,57 @@ test("paying a sepay item arms it and opens checkout", async () => {
       await flush();
     });
     expect(mockCreatePayment).toHaveBeenCalledWith("walk1", "SEPAY", "tok");
-    expect(open).toHaveBeenCalledWith("https://pay.example/checkout");
+    const webview = renderer.root.findByProps({testID: "sepay-webview"});
+    expect(webview.props.source).toEqual({uri: "https://pay.example/checkout"});
     expect(texts(renderer)).toContain(en.bills.itemPending);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a pending SePay item can switch to cash", async () => {
+  mockFetchBill.mockReset();
+  mockFetchBill.mockResolvedValue(ARMED_BILL);
+  mockCreatePayment.mockResolvedValue({checkoutUrl: null});
+  const alert = jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => {
+    buttons?.find((button) => button.style === "destructive")?.onPress?.();
+  });
+  const renderer = await mount();
+  try {
+    const cash = pressable(renderer, en.bills.payCash);
+    expect(cash).toBeDefined();
+    await act(async () => {
+      cash?.props.onPress?.();
+      await flush();
+    });
+    expect(mockCreatePayment).toHaveBeenCalledWith("tow1", "CASH", "tok");
+    expect(texts(renderer)).toContain(en.bills.cashArmed);
+  } finally {
+    alert.mockRestore();
+    renderer.unmount();
+  }
+});
+
+test("SePay page cancel cancels the pending charge", async () => {
+  mockFetchBill.mockResolvedValue(ARMED_BILL);
+  mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/cancel"});
+  const renderer = await mount();
+  try {
+    const open = pressable(renderer, en.bills.openQr);
+    expect(open).toBeDefined();
+    await act(async () => {
+      open?.props.onPress?.();
+      await flush();
+    });
+    const webview = renderer.root.findByProps({testID: "sepay-webview"});
+    await act(async () => {
+      webview.props.onShouldStartLoadWithRequest({
+        url: "https://roadassistapp-c2e37.web.app/?payment=cancel",
+      });
+      await flush();
+    });
+    expect(mockCancelPayment).toHaveBeenCalledWith("tow1", "tok");
+    expect(renderer.root.findAllByProps({testID: "sepay-webview"})).toHaveLength(0);
   } finally {
     renderer.unmount();
   }
@@ -205,8 +264,6 @@ test("paying a sepay item arms it and opens checkout", async () => {
 test("paying a cash item arms it without a checkout", async () => {
   mockFetchBill.mockReset();
   mockFetchBill.mockResolvedValueOnce(UNPAID_BILL).mockResolvedValue(CASH_PENDING_BILL);
-  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
-  open.mockClear();
   const renderer = await mount();
   try {
     const pay = pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`);
@@ -216,25 +273,27 @@ test("paying a cash item arms it without a checkout", async () => {
       await flush();
     });
     expect(mockCreatePayment).toHaveBeenCalledWith("walk1", "CASH", "tok");
-    expect(open).not.toHaveBeenCalled();
     expect(texts(renderer)).toContain(en.bills.cashArmed);
   } finally {
     renderer.unmount();
   }
 });
 
-test("an armed sepay item reopens its payment page", async () => {
+test("an armed sepay item refreshes its payment page", async () => {
   mockFetchBill.mockResolvedValue(ARMED_BILL);
-  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
-  open.mockClear();
+  mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/fresh"});
+  mockCreatePayment.mockClear();
   const renderer = await mount();
   try {
     const button = pressable(renderer, en.bills.openQr);
     expect(button).toBeDefined();
     await act(async () => {
       button?.props.onPress?.();
+      await flush();
     });
-    expect(open).toHaveBeenCalledWith("https://pay.example/qr1");
+    expect(mockCreatePayment).toHaveBeenCalledWith("tow1", "SEPAY", "tok");
+    const webview = renderer.root.findByProps({testID: "sepay-webview"});
+    expect(webview.props.source).toEqual({uri: "https://pay.example/fresh"});
   } finally {
     renderer.unmount();
   }

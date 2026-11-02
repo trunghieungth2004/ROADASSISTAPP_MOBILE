@@ -21,6 +21,14 @@ export type Provider = {
   vehicleWidth?: number | null;
   vehicleProfileId?: string | null;
   serviceFee?: number | null;
+  services?: Array<{
+    code: string;
+    name: string;
+    displayPrice: number;
+    quoteRequired: boolean;
+  }> | null;
+  callOutFee?: number | null;
+  travelPerKmFee?: number | null;
   licenseNumber?: string | null;
   licensePhotoUrl?: string | null;
   towBaseFee?: number | null;
@@ -111,6 +119,25 @@ export function myProviders(token: string): Promise<Provider[]> {
   return withCache(`providersMine:${token}`, CACHE_TTL_MS.providersMine, () => api.post<Provider[]>("/providers/mine", {}, token));
 }
 
+export type ProviderPricingLimits = {
+  TOW: {
+    baseMin: number;
+    baseMax: number;
+    perKmMin: number;
+    perKmMax: number;
+  };
+  MOBILE_SHOP: {
+    callOutMin: number;
+    callOutMax: number;
+    travelPerKmMin: number;
+    travelPerKmMax: number;
+  };
+};
+
+export function providerPricingLimits(token: string): Promise<ProviderPricingLimits> {
+  return api.post<ProviderPricingLimits>("/providers/pricing", {}, token);
+}
+
 export type CreateShopProviderPayload = {
   kind: "SHOP";
   name: string;
@@ -145,6 +172,8 @@ export type CreateMobileShopProviderPayload = {
   vehicleType: string;
   licenseNumber: string;
   licensePhotoUrl?: string;
+  callOutFee?: number;
+  travelPerKmFee?: number;
 };
 
 export async function createProvider(payload: CreateShopProviderPayload | CreateTowProviderPayload | CreateMobileShopProviderPayload, token: string): Promise<Provider> {
@@ -163,6 +192,8 @@ export type UpdateProviderPayload = {
   openHours?: string | null;
   vehicleClasses?: string[];
   serviceFee?: number;
+  callOutFee?: number;
+  travelPerKmFee?: number;
   licenseNumber?: string;
   licensePhotoUrl?: string | null;
   plate?: string;

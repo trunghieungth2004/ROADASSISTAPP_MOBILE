@@ -71,6 +71,7 @@ export function statusStages(ticketType: string): string[] {
       DISPATCH_STATUS.PENDING,
       DISPATCH_STATUS.MATCHED,
       DISPATCH_STATUS.ARRIVED,
+      DISPATCH_STATUS.QUOTED,
       DISPATCH_STATUS.READY,
       DISPATCH_STATUS.RESOLVED,
     ];
@@ -102,7 +103,8 @@ export function declineReasonLabel(reason: string, t: Strings): string {
   return t.assist.declineOther;
 }
 
-export function ticketTypeLabel(ticketType: string, t: Strings): string {
+export function ticketTypeLabel(ticketType: string, t: Strings, towKind?: string | null): string {
+  if (ticketType === "TOW" && towKind === "RETURN") return t.assist.returnTowTitle;
   if (ticketType === "TOW") return t.assist.typeTow;
   if (ticketType === "SOS") return t.assist.typeSos;
   if (ticketType === "WALK_IN") return t.assist.typeWalkin;
@@ -111,8 +113,8 @@ export function ticketTypeLabel(ticketType: string, t: Strings): string {
 }
 
 export function ticketTitle(
-  ticket: {ticketType: string; status: string},
+  ticket: {ticketType: string; status: string; towKind?: string | null},
   t: Strings,
 ): string {
-  return `${ticketTypeLabel(ticket.ticketType, t)} · ${ticketStatusLabel(ticket.status, t)}`;
+  return `${ticketTypeLabel(ticket.ticketType, t, ticket.towKind)} · ${ticketStatusLabel(ticket.status, t)}`;
 }

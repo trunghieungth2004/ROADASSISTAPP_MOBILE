@@ -1,4 +1,4 @@
-import {DISPATCH_STATUS, isTerminal, riderActionsFor, type FeedDirection, type FeedTicket, type RiderAction} from "../../api/dispatch";
+import {DISPATCH_STATUS, isTerminal, type FeedDirection, type FeedTicket} from "../../api/dispatch";
 import {towDestOf} from "./towDest";
 
 export function canRate(status: string): boolean {
@@ -11,10 +11,6 @@ export function canCancel(status: string): boolean {
 
 export function canCancelSosShop(ticketType: string, status: string, assigned: boolean): boolean {
   return assigned && ticketType === "SOS" && status === DISPATCH_STATUS.MATCHED;
-}
-
-export function visibleActions(status: string): RiderAction[] {
-  return riderActionsFor(status);
 }
 
 export type ViewerRoleKind = "SHOP" | "TOW";
@@ -108,10 +104,43 @@ export function canMarkReady(direction: FeedDirection, status: string, ticketTyp
   return status === DISPATCH_STATUS.IN_PROGRESS;
 }
 
+export function canTowArrive(role: ViewerRole, ticketType: string, status: string): boolean {
+  return ticketType === "TOW" &&
+    role.kind === "assigned" &&
+    role.assignedKind === "TOW" &&
+    status === DISPATCH_STATUS.MATCHED;
+}
+
+export function returnTowPending(ticket: Pick<FeedTicket, "returnTowOffer">): boolean {
+  const offer = ticket.returnTowOffer;
+  return offer === undefined || offer === null || offer.status === "PENDING";
+}
+
+export function canTowDeliver(role: ViewerRole, ticketType: string, status: string, loadedAt: string | null | undefined): boolean {
+  return ticketType === "TOW" &&
+    role.kind === "assigned" &&
+    role.assignedKind === "TOW" &&
+    status === DISPATCH_STATUS.ARRIVED &&
+    typeof loadedAt === "string" &&
+    loadedAt !== "";
+}
+
+export function canConfirmTowReceived(direction: FeedDirection, ticketType: string, status: string, receivedAt: string | null | undefined): boolean {
+  return direction === "out" &&
+    ticketType === "TOW" &&
+    status === DISPATCH_STATUS.RESOLVED &&
+    (typeof receivedAt !== "string" || receivedAt === "");
+}
+
 export function canSendQuote(direction: FeedDirection, status: string, ticketType: string, hasShop: boolean): boolean {
   if (direction !== "in" || !hasShop) return false;
   if (!SHOP_TYPES.has(ticketType)) return false;
-  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.IN_SHOP || status === DISPATCH_STATUS.ESTIMATED || status === DISPATCH_STATUS.EST_APPROVED;
+  return status === DISPATCH_STATUS.MATCHED ||
+    status === DISPATCH_STATUS.ARRIVED ||
+    status === DISPATCH_STATUS.IN_SHOP ||
+    status === DISPATCH_STATUS.ESTIMATED ||
+    status === DISPATCH_STATUS.EST_APPROVED ||
+    status === DISPATCH_STATUS.QUOTED;
 }
 
 export function canMarkUnfixable(ticketType: string, status: string): boolean {
@@ -119,7 +148,10 @@ export function canMarkUnfixable(ticketType: string, status: string): boolean {
     return status === DISPATCH_STATUS.ARRIVED;
   }
   if (!SHOP_TYPES.has(ticketType)) return false;
-  return status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.IN_PROGRESS || status === DISPATCH_STATUS.QUOTED || status === DISPATCH_STATUS.IN_SHOP || status === DISPATCH_STATUS.FINAL_QUOTED;
+  return status === DISPATCH_STATUS.MATCHED ||
+    status === DISPATCH_STATUS.ARRIVED ||
+    status === DISPATCH_STATUS.IN_PROGRESS ||
+    status === DISPATCH_STATUS.IN_SHOP;
 }
 
 export function canApproveQuote(direction: FeedDirection, status: string): boolean {
@@ -152,7 +184,8 @@ export function canSeeRequestPhotos(ticket: Pick<FeedTicket, "direction" | "tick
   }
   if (ticket.ticketType === "SOS" && ownMobileShopId !== null) {
     if (ticket.assignedShopId === ownMobileShopId) return true;
-    if (roleContext === "shop" && ticket.status === "1") return true;
+    if (ticket.providerId === ownMobileShopId) return true;
+    if (ticket.status === DISPATCH_STATUS.PENDING) return true;
   }
   return false;
 }

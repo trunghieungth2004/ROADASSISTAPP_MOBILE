@@ -28,7 +28,7 @@ function partyName(ticket: FeedTicket, t: Strings): string {
 export default function TicketRow({t, theme, ticket, kind, onPress, subtitle = null, showParty = true}: Props) {
   const inbound = ticket.direction === "in";
   const ago = typeof ticket.createdAt === "string" ? timeAgoLabel(ticket.createdAt, Date.now(), t.hazards) : null;
-  const iconKind = ticket.ticketType === "TOW" ? "TOW" : kind;
+  const iconKind = ticket.ticketType === "TOW" ? "TOW" : ticket.ticketType === "SOS" ? "MOBILE_SHOP" : kind;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={ticketTitle(ticket, t)}>
       <View style={[styles.innerCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
@@ -42,10 +42,14 @@ export default function TicketRow({t, theme, ticket, kind, onPress, subtitle = n
             );
           })()}
           <MaterialIcons name={inbound ? "arrow-downward" : "arrow-upward"} size={16} color={inbound ? theme.primary : theme.muted} />
-          <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTypeLabel(ticket.ticketType, t)}</Text>
+          <Text style={[styles.cardTitle, {color: theme.text}]}>{ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}</Text>
           {ticket.formerAssignment === true ? (
             <View style={[styles.pill, {backgroundColor: theme.muted}]}>
-              <Text style={styles.pillText}>{t.assist.formerAssignmentPill}</Text>
+              <Text style={styles.pillText}>
+                {ticket.formerAssignmentKind === "MOBILE_SHOP" ?
+                  t.assist.formerFixDeclinedPill :
+                  t.assist.formerAssignmentPill}
+              </Text>
             </View>
           ) : (
             <View style={[styles.pill, {backgroundColor: statusPillColor(ticket.status, theme)}]}>

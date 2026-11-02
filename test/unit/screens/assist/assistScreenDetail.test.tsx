@@ -117,6 +117,30 @@ export function installFetch(): void {
     if (u.pathname === "/dispatch/mine") return envelope(mockMine);
     if (u.pathname === "/dispatch/one") return envelope(mockOne);
     if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
+    if (u.pathname === "/payments/create") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string; method?: string};
+      return envelope({
+        id: "pay1",
+        ticketId: body.ticketId ?? "t1",
+        method: body.method ?? "SEPAY",
+        status: "PENDING",
+        amount: 150000,
+        checkout: {qrUrl: "https://pay.example/checkout"},
+      });
+    }
+    if (u.pathname === "/payments/cancel") {
+      return envelope({cancelled: true, method: "SEPAY"});
+    }
+    if (u.pathname === "/payments/one") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string};
+      return envelope([{
+        id: "pay1",
+        ticketId: body.ticketId ?? "t1",
+        method: "SEPAY",
+        status: "HELD",
+        amount: 150000,
+      }]);
+    }
     if (u.pathname === "/dispatch/near") return envelope(mockNear);
     if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
     if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
@@ -703,11 +727,63 @@ test("destination shop sends an estimate from the modal", async () => {
   }
 });
 
+test("a pending SePay quote can switch to cash", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, paymentMethod: "SEPAY", paymentStatus: "PENDING", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Quoted");
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.payToApprove)?.props.onPress();
+      await flush(12);
+    });
+    expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === en.bills.payCash).length).toBeGreaterThan(0);
+    await act(async () => {
+      await sheetAction(renderer, en.bills.payCash)?.props.onPress();
+      await flush(12);
+    });
+    const created = seen.find((call) => call.path === "/payments/create");
+    expect(JSON.parse(created?.body ?? "{}")).toMatchObject({ticketId: "t9", method: "CASH"});
+    expect(seen.find((call) => call.path === "/dispatch/quote/approve")).toBeDefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("SePay page cancel cancels the pending charge", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, paymentMethod: "SEPAY", paymentStatus: "PENDING", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Quoted");
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.payToApprove)?.props.onPress();
+      await flush(12);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.bills.paySepay)?.props.onPress();
+      await flush(12);
+    });
+    const webview = renderer.root.findByProps({testID: "sepay-webview"});
+    await act(async () => {
+      webview.props.onShouldStartLoadWithRequest({
+        url: "https://roadassistapp-c2e37.web.app/?payment=cancel",
+      });
+      await flush(12);
+    });
+    expect(seen.find((call) => call.path === "/payments/cancel")).toBeDefined();
+    expect(renderer.root.findAllByProps({testID: "sepay-webview"})).toHaveLength(0);
+  } finally {
+    teardown(renderer);
+  }
+});
+
 test("rider approves a pending quote", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, paymentMethod: "CASH", paymentStatus: "PENDING", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Walk-in · Quoted");
+    expect(renderer.root.findByProps({testID: "fees-quote-approve"})).toBeDefined();
     expect(sheetAction(renderer, en.assist.approveQuote)).toBeDefined();
     seen.length = 0;
     await act(async () => {
@@ -722,19 +798,34 @@ test("rider approves a pending quote", async () => {
   }
 });
 
-test("an unfunded quote approval opens the bill", async () => {
+test("an unfunded quote approval opens the in-app SePay checkout", async () => {
   const renderer = await mount();
   try {
-    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    mockFeed = [{id: "t9", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "9", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, paymentMethod: "SEPAY", paymentStatus: "PENDING", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Walk-in · Quoted");
     seen.length = 0;
     mockNavigate.mockClear();
     await act(async () => {
       await sheetAction(renderer, en.assist.payToApprove)?.props.onPress();
-      await flush();
+      await flush(12);
     });
-    expect(seen.find((call) => call.path === "/dispatch/quote/approve")).toBeUndefined();
-    expect(mockNavigate).toHaveBeenCalledWith("BillDetail", {ticketId: "t9", payFirst: true});
+    expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === en.bills.paySepay).length).toBeGreaterThan(0);
+    await act(async () => {
+      await sheetAction(renderer, en.bills.paySepay)?.props.onPress();
+      await flush(12);
+    });
+    expect(seen.find((call) => call.path === "/payments/create")).toBeDefined();
+    const webview = renderer.root.findByProps({testID: "sepay-webview"});
+    expect(webview).toBeDefined();
+    act(() => {
+      webview.props.onShouldStartLoadWithRequest({
+        url: "https://roadassistapp-c2e37.web.app/?payment=success",
+      });
+    });
+    await act(async () => {
+      await flush(16);
+    });
+    expect(seen.find((call) => call.path === "/dispatch/quote/approve")).toBeDefined();
   } finally {
     teardown(renderer);
   }

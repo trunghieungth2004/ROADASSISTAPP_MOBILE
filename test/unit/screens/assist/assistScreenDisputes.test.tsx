@@ -117,6 +117,30 @@ export function installFetch(): void {
     if (u.pathname === "/dispatch/mine") return envelope(mockMine);
     if (u.pathname === "/dispatch/one") return envelope(mockOne);
     if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
+    if (u.pathname === "/payments/create") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string; method?: string};
+      return envelope({
+        id: "pay1",
+        ticketId: body.ticketId ?? "t1",
+        method: body.method ?? "SEPAY",
+        status: "PENDING",
+        amount: 150000,
+        checkout: {qrUrl: "https://pay.example/checkout"},
+      });
+    }
+    if (u.pathname === "/payments/cancel") {
+      return envelope({cancelled: true, method: "SEPAY"});
+    }
+    if (u.pathname === "/payments/one") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string};
+      return envelope([{
+        id: "pay1",
+        ticketId: body.ticketId ?? "t1",
+        method: "SEPAY",
+        status: "HELD",
+        amount: 150000,
+      }]);
+    }
     if (u.pathname === "/dispatch/near") return envelope(mockNear);
     if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
     if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
@@ -413,7 +437,7 @@ test("mobile shop SOS matched offers cancel and no can't fix", async () => {
   }
 });
 
-test("mobile shop SOS arrived offers fix fee, fix complete, and no start work", async () => {
+test("mobile shop SOS arrived sends a fix quote without completing it", async () => {
   const renderer = await mount();
   try {
     mockOwnProviders = [{id: "mobile1", kind: "MOBILE_SHOP", status: "ACTIVE", accepting: true}];
@@ -433,27 +457,172 @@ test("mobile shop SOS arrived offers fix fee, fix complete, and no start work", 
       await sheetAction(renderer, en.assist.mobileFixSave)?.props.onPress();
       await flush(12);
     });
-    const posted = seen.find((call) => call.path === "/dispatch/status");
+    const posted = seen.find((call) => call.path === "/dispatch/mobile-shop/fix");
     expect(posted).toBeDefined();
-    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "sos3", status: "7"});
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "sos3", fixAmount: 120000});
+    expect(seen.find((call) => call.path === "/dispatch/status")).toBeUndefined();
   } finally {
     teardown(renderer);
   }
 });
 
-test("rider marks arrival and resolution from the ticket modal", async () => {
+test("rider approves or declines a mobile fix from the quoted SOS", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "sos9", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "9", assignedShopId: "mobile1", finalAmount: 120000, direction: "out", otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "SOS · Quoted");
+    expect(sheetAction(renderer, en.assist.approve)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.decline)).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.approve)?.props.onPress();
+      await flush(8);
+    });
+    expect(hasText(renderer.root, en.assist.paymentChoiceTitle)).toBe(true);
+    await act(async () => {
+      await sheetAction(renderer, en.bills.payCash)?.props.onPress();
+      await flush(12);
+    });
+    const approved = seen.find((call) => call.path === "/dispatch/mobile-shop/fix/approve");
+    expect(approved).toBeDefined();
+    expect(JSON.parse(approved?.body ?? "{}")).toMatchObject({ticketId: "sos9"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider can choose SePay for a mobile fix", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "sos11", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "9", assignedShopId: "mobile1", finalAmount: 120000, direction: "out", otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "SOS · Quoted");
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.approve)?.props.onPress();
+      await flush(8);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.bills.paySepay)?.props.onPress();
+      await flush(12);
+    });
+    const created = seen.find((call) => call.path === "/payments/create");
+    expect(created).toBeDefined();
+    expect(JSON.parse(created?.body ?? "{}")).toMatchObject({ticketId: "sos11", method: "SEPAY"});
+    expect(renderer.root.findByProps({testID: "sepay-webview"})).toBeDefined();
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider declines a mobile fix with a reason", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "sos10", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "9", assignedShopId: "mobile1", finalAmount: 120000, direction: "out", otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "SOS · Quoted");
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.decline)?.props.onPress();
+      await flush(8);
+    });
+    expect(hasText(renderer.root, en.assist.quoteDeclineTitle)).toBe(true);
+    await act(async () => {
+      await sheetAction(renderer, en.assist.quoteDeclinePrice)?.props.onPress();
+      await flush(4);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.cancelReasonSubmit)?.props.onPress();
+      await flush(12);
+    });
+    const declined = seen.find((call) => call.path === "/dispatch/mobile-shop/fix/decline");
+    expect(declined).toBeDefined();
+    expect(JSON.parse(declined?.body ?? "{}")).toMatchObject({ticketId: "sos10", reason: "PRICE_TOO_HIGH"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider declines a walk-in quote and can see the shop again", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "walk9", userId: "u1", ticketType: "WALK_IN", lat: 10.71, lng: 106.61, status: "9", assignedShopId: "shop1", shopQuotedAmount: 150000, direction: "out", otherParty: {id: "shop1", name: "Fix Co", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Walk-in · Quoted");
+    expect(sheetAction(renderer, en.assist.approveQuote)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.decline)).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.decline)?.props.onPress();
+      await flush(8);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.quoteDeclineItems)?.props.onPress();
+      await flush(4);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.cancelReasonSubmit)?.props.onPress();
+      await flush(12);
+    });
+    const declined = seen.find((call) => call.path === "/dispatch/quote/decline");
+    expect(declined).toBeDefined();
+    expect(JSON.parse(declined?.body ?? "{}")).toMatchObject({ticketId: "walk9", reason: "ITEMS_WRONG"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("tower marks a tow loaded", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE", accepting: true}];
+    mockFeed = [{id: "tow3", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "3", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Arrived");
+    expect(sheetAction(renderer, en.assist.loaded)).toBeDefined();
+    seen.length = 0;
+    await act(async () => {
+      await sheetAction(renderer, en.assist.loaded)?.props.onPress();
+      await flush(12);
+    });
+    const loaded = seen.find((call) => call.path === "/dispatch/tow/loaded");
+    expect(loaded).toBeDefined();
+    expect(JSON.parse(loaded?.body ?? "{}")).toMatchObject({ticketId: "tow3"});
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("tower sees the breakdown banner on a re-matched tow", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE", accepting: true}];
+    mockFeed = [{id: "tow4", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "3", assignedShopId: "tow7", direction: "in", towFeeHistory: [{shopId: "tow6", amount: 50000, reasonCode: "TOWER_CANCEL_BREAKDOWN", at: "2026-01-01T00:00:00.000Z"}], otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Arrived");
+    expect(hasText(renderer.root, en.assist.towerBreakdown)).toBe(true);
+    expect(hasText(renderer.root, en.assist.towerBreakdownHint)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider cannot mark arrival or resolution on a tow", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t3", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "Tow · Matched");
     seen.length = 0;
-    await act(async () => {
-      await sheetAction(renderer, en.assist.arrived)?.props.onPress();
-      await flush(12);
-    });
-    const posted = seen.find((call) => call.path === "/dispatch/status");
-    expect(posted).toBeDefined();
-    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t3", status: "3"});
+    expect(sheetAction(renderer, en.assist.arrived)).toBeUndefined();
+    expect(sheetAction(renderer, en.assist.resolved)).toBeUndefined();
+    expect(seen.some((call) => call.path === "/dispatch/status")).toBe(false);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("records open an assigned tow with the tower arrival action", async () => {
+  const renderer = await mount();
+  try {
+    mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE", accepting: false}];
+    mockFeed = [{id: "t3", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    await openRecord(renderer, "Tow · Matched");
+    expect(sheetAction(renderer, en.assist.arrivedAtPickup)).toBeDefined();
   } finally {
     teardown(renderer);
   }
@@ -669,7 +838,7 @@ test("active job card opens details without expanding the top panel", async () =
     });
     expect(hasText(renderer.root, en.assist.expandPanel)).toBe(true);
     expect(hasText(renderer.root, en.assist.sectionRecords)).toBe(false);
-    expect(sheetAction(renderer, en.assist.arrived)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.arrived)).toBeUndefined();
   } finally {
     teardown(renderer);
   }
@@ -965,7 +1134,8 @@ test("live job card shows no tow suffix and flips its line on arrival", async ()
     expect(mini).toBeDefined();
     const titles = mini?.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string) ?? [];
     expect(titles.some((text) => text.includes("· Tow"))).toBe(false);
-    expect(titles.some((text) => text.includes("km") && text.includes("min"))).toBe(true);
+    expect(titles.some((text) => text.includes("km"))).toBe(true);
+    expect(titles.some((text) => text.includes("min"))).toBe(true);
   } finally {
     teardown(renderer);
   }
@@ -1163,14 +1333,9 @@ test("stored working pin beats the rider fallback", async () => {
   }
 });
 
-test("duplicate filing shows the duplicate dialog without a force action", async () => {
+test("a stale duplicate response shows the duplicate dialog without a force action", async () => {
   const renderer = await mount();
   try {
-    mockFeed = [{id: "t7", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "1", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await act(async () => {
-      await renderer.root.findAll((n) => n.props?.accessibilityLabel === en.assist.refresh && typeof n.props?.onPress === "function")[0]?.props.onPress();
-      await flush();
-    });
     const sos = texts(renderer.root, en.assist.sos).find((n) => typeof n.props?.onPress === "function");
     await act(async () => {
       await sos?.props.onPress();

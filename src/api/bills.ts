@@ -26,6 +26,7 @@ export type BillItem = {
   ticketStatus: string;
   amount: number;
   waitingFee: number;
+  items?: Array<{name: string; qty: number; unitPrice: number; amount: number}>;
   status: string;
   payeeId: string | null;
   payeeName: string | null;

@@ -1,4 +1,4 @@
-import {Pressable, StyleSheet, View} from "react-native";
+import {Pressable, ScrollView, StyleSheet, useWindowDimensions, View} from "react-native";
 import {MaterialCommunityIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -32,8 +32,11 @@ type Props = {
 };
 
 export default function TowSection({t, theme, tickets, jobs, requests, loading, locationMissing, onOpen, onOpenJob, onOpenRequest}: Props) {
+  const {height} = useWindowDimensions();
+  const listHeight = Math.max(160, Math.min(300, Math.round(height * 0.3)));
   return (
     <View style={styles.wrap}>
+      <ScrollView style={{maxHeight: listHeight}} contentContainerStyle={styles.list} nestedScrollEnabled showsVerticalScrollIndicator={false}>
       {requests.length > 0 ? (
         <View style={styles.wrap}>
           <Text style={[styles.section, {color: theme.text}]}>{t.assist.requestsForYou}</Text>
@@ -85,12 +88,14 @@ export default function TowSection({t, theme, tickets, jobs, requests, loading, 
           </Pressable>
         ))
       )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {gap: 8},
+  list: {gap: 8},
   section: {fontSize: 15, fontWeight: "700"},
   innerCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 6},
   headRow: {flexDirection: "row", alignItems: "center", gap: 8},

@@ -1,12 +1,12 @@
 import {useCallback, useEffect, useState} from "react";
-import {ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation, useRoute} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {toMessage} from "../api/client";
 import {fetchBill, type Bill, type BillItem} from "../api/bills";
-import {confirmCashReceipt, createPayment} from "../api/dispatch";
+import {cancelPayment, confirmCashReceipt, createPayment, fetchTicketPayments, type TicketPayment} from "../api/dispatch";
 import {paymentMethodLabel} from "../api/payments";
 import {useAuth} from "../context/AuthContext";
 import {useBills} from "../context/BillsContext";
@@ -16,6 +16,7 @@ import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
+import SePayCheckoutSheet from "./assist/SePayCheckoutSheet";
 import {billDateLabel, billItemCount, billItemLabel, billItemStatusColor, billItemStatusLabel, billPayeeLabel, billStatusColor, billStatusLabel, billTitle, itemNetPayout, itemPayoutStatus, payeeSummary, payoutStatusColor, payoutStatusLabel} from "./bills/billLabels";
 
 type BillParams = {
@@ -45,6 +46,9 @@ export default function BillDetailScreen() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyTicket, setBusyTicket] = useState<string | null>(null);
+  const [sepayCheckout, setSepayCheckout] = useState<{ticketId: string; status: string; url: string; checkout: TicketPayment["checkout"]} | null>(null);
+  const [sepayBusy, setSepayBusy] = useState(false);
+  const [sepayError, setSepayError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const load = useCallback(async (): Promise<void> => {
@@ -79,19 +83,90 @@ export default function BillDetailScreen() {
     setError(null);
     try {
       const created = await createPayment(item.ticketId, method, token);
-      await load();
-      void refreshBills();
       if (method === "SEPAY") {
-        if (created.checkoutUrl) await Linking.openURL(created.checkoutUrl);
-        else setError(t.bills.qrMissing);
+        if (created.checkoutUrl) {
+          setSepayError(null);
+          setSepayCheckout({ticketId: item.ticketId, status: item.ticketStatus, url: created.checkoutUrl, checkout: created.checkout ?? null});
+        } else {
+          setError(t.bills.qrMissing);
+        }
       } else {
         setNotice(t.bills.cashArmed);
       }
+      await load();
+      void refreshBills();
     } catch (err) {
       setError(toMessage(err));
     } finally {
       setBusyTicket(null);
     }
+  }
+  async function waitForSepayPayment(ticketId: string): Promise<boolean> {
+    if (!token) return false;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const rows = await fetchTicketPayments(ticketId, token).catch(() => []);
+      const sepay = rows.find((row) => row.method === "SEPAY");
+      if (sepay && (sepay.status === "HELD" || sepay.status === "CONFIRMED")) return true;
+      if (attempt < 5) await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    }
+    return false;
+  }
+  async function onSepaySuccess(): Promise<void> {
+    const active = sepayCheckout;
+    if (!active) return;
+    setSepayBusy(true);
+    setSepayError(null);
+    try {
+      const paid = await waitForSepayPayment(active.ticketId);
+      await load();
+      void refreshBills();
+      setSepayCheckout(null);
+      setNotice(paid ? t.bills.sepayPaid : t.bills.sepayPending);
+    } catch (err) {
+      setSepayCheckout(null);
+      setError(toMessage(err));
+    } finally {
+      setSepayBusy(false);
+    }
+  }
+  async function onSepayCancel(): Promise<void> {
+    const active = sepayCheckout;
+    if (!active || !token) {
+      setSepayCheckout(null);
+      return;
+    }
+    setSepayBusy(true);
+    setSepayError(null);
+    try {
+      await cancelPayment(active.ticketId, token);
+      setSepayCheckout(null);
+      setNotice(t.bills.sepayCancelled);
+      await load();
+      void refreshBills();
+    } catch (err) {
+      setSepayError(toMessage(err));
+    } finally {
+      setSepayBusy(false);
+    }
+  }
+  function onSepayFailure(): void {
+    setSepayCheckout(null);
+    setError(t.assist.sepayFailed);
+  }
+  function closeSepayCheckout(): void {
+    if (sepayBusy) return;
+    setSepayCheckout(null);
+    void load();
+  }
+  function switchToCash(item: BillItem): void {
+    Alert.alert(
+      t.bills.switchCashTitle,
+      t.bills.switchCashHint,
+      [
+        {text: t.common.cancel, style: "cancel"},
+        {text: t.bills.payCash, style: "destructive", onPress: () => void pay(item, "CASH")},
+      ],
+    );
   }
   async function confirmCash(item: BillItem): Promise<void> {
     if (!token || busyTicket !== null || readOnly || !item.payment?.canConfirmCash) return;
@@ -213,6 +288,16 @@ export default function BillDetailScreen() {
                   {item.waitingFee > 0 ? (
                     <Text style={[styles.muted, {color: theme.muted}]}>{`${t.bills.waiting}: ${item.waitingFee.toLocaleString()} VND`}</Text>
                   ) : null}
+                  {Array.isArray(item.items) && item.items.length > 0 ? (
+                    <View style={styles.itemLines}>
+                      {item.items.map((line, index) => (
+                        <View key={`${line.name}-${index}`} style={styles.rowBetween}>
+                          <Text style={[styles.muted, {color: theme.muted, flex: 1}]} numberOfLines={2}>{`${line.name} × ${line.qty}`}</Text>
+                          <Text style={[styles.muted, {color: theme.text}]}>{`${line.amount.toLocaleString()} VND`}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                   {item.payeeName ? <Text style={[styles.muted, {color: theme.muted}]}>{item.payeeName}</Text> : null}
                   <View style={styles.rowBetween}>
                     <Text style={[styles.itemStatus, {color: billItemStatusColor(item.status, theme)}]}>{billItemStatusLabel(item.status, t)}</Text>
@@ -281,15 +366,27 @@ export default function BillDetailScreen() {
                       <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.payCashHint}</Text>
                     </>
                   ) : null}
-                  {!payeeMode && item.status === "PENDING" && itemPayment?.method === "SEPAY" && item.qrUrl && !readOnly && bill.canPay ? (
-                    <Pressable
-                      style={[styles.payBtn, {backgroundColor: theme.primary}]}
-                      onPress={() => void Linking.openURL(item.qrUrl as string)}
-                      accessibilityRole="button"
-                      accessibilityLabel={t.bills.openQr}
-                    >
-                      <Text style={styles.payText}>{t.bills.openQr}</Text>
-                    </Pressable>
+                  {!payeeMode && item.status === "PENDING" && itemPayment?.method === "SEPAY" && !readOnly && bill.canPay ? (
+                    <View style={styles.payRow}>
+                      <Pressable
+                        style={[styles.payBtn, {backgroundColor: theme.primary}, busy && styles.disabled]}
+                        disabled={busy}
+                        onPress={() => void pay(item, "SEPAY")}
+                        accessibilityRole="button"
+                        accessibilityLabel={t.bills.openQr}
+                      >
+                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.payText}>{t.bills.openQr}</Text>}
+                      </Pressable>
+                      <Pressable
+                        style={[styles.payBtn, styles.cashBtn, {borderColor: theme.primary}, busy && styles.disabled]}
+                        disabled={busy}
+                        onPress={() => switchToCash(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t.bills.payCash}
+                      >
+                        <Text style={[styles.cashText, {color: theme.primary}]}>{t.bills.payCash}</Text>
+                      </Pressable>
+                    </View>
                   ) : null}
                   {!payeeMode && item.status === "PENDING" && itemPayment?.method === "CASH" ? (
                     <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.cashArmed}</Text>
@@ -300,6 +397,20 @@ export default function BillDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+      {sepayCheckout ? (
+        <SePayCheckoutSheet
+          t={t}
+          url={sepayCheckout.url}
+          checkout={sepayCheckout.checkout}
+          status={sepayCheckout.status}
+          busy={sepayBusy}
+          error={sepayError}
+          onClose={closeSepayCheckout}
+          onSuccess={() => void onSepaySuccess()}
+          onCancel={() => void onSepayCancel()}
+          onFailure={onSepayFailure}
+        />
+      ) : null}
       <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
     </ScreenContainer>
   );
@@ -321,6 +432,7 @@ const styles = StyleSheet.create({
   rowBetween: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
   muted: {fontSize: 12},
   hint: {fontSize: 12},
+  itemLines: {gap: 3},
   totalRow: {flexDirection: "row", justifyContent: "space-between", alignItems: "center"},
   payoutRow: {borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, marginTop: 2},
   totalText: {fontWeight: "700", fontSize: 14},

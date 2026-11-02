@@ -31,8 +31,6 @@ export function isUnfixableStatus(status: string): boolean {
   return status === DISPATCH_STATUS.UNFIXABLE || status === DISPATCH_STATUS.RESOLVED_UNFIXABLE;
 }
 
-export type RiderAction = "arrived" | "resolved" | "cancel";
-
 export type FeedDirection = "in" | "out";
 
 export type FeedTicket = DispatchTicket & {
@@ -97,12 +95,6 @@ export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as con
 
 export type DeclineReason = (typeof DECLINE_REASONS)[number];
 
-export function riderActionsFor(status: string): RiderAction[] {
-  if (status === DISPATCH_STATUS.MATCHED) return ["arrived", "cancel"];
-  if (status === DISPATCH_STATUS.ARRIVED || status === DISPATCH_STATUS.READY) return ["resolved", "cancel"];
-  if (status === DISPATCH_STATUS.PENDING) return ["cancel"];
-  return [];
-}
 
 export type TowFare = {
   estimate: number;
@@ -113,8 +105,17 @@ export type TowFare = {
   loadedKm: number;
   night: boolean;
   vehicleClass?: string | null;
+  baseFee?: number | null;
+  perKmFee?: number | null;
   waitingFee?: number | null;
   waitingMinutes?: number | null;
+};
+
+export type WorkItem = {
+  name: string;
+  qty: number;
+  unitPrice: number;
+  amount?: number;
 };
 
 export type DispatchTicket = {
@@ -155,12 +156,27 @@ export type DispatchTicket = {
   }>;
   formerAssignment?: boolean;
   formerAssignmentAt?: string | null;
+  formerAssignmentKind?: "TOW" | "MOBILE_SHOP";
+  formerAssignmentReason?: "TOWER_CANCEL" | "RIDER_DECLINED_FIX" | null;
   needsNewDestination?: boolean | null;
   assignedKind?: string | null;
+  assignedAt?: string | null;
+  loadedAt?: string | null;
+  towKind?: "NORMAL" | "RETURN" | null;
+  deliveredAt?: string | null;
+  deliveredBy?: string | null;
+  receivedAt?: string | null;
   towPlate?: string | null;
   towFare?: TowFare | null;
   cancelledBy?: string | null;
   workType?: string | null;
+  quoteItems?: WorkItem[] | null;
+  invoiceItems?: WorkItem[] | null;
+  quoteVersion?: number;
+  invoiceAmount?: number | null;
+  invoiceApproval?: string | null;
+  invoiceVersion?: number;
+  invoiceApprovedAt?: string | null;
   priceEstimate?: number | null;
   priceCurrency?: string | null;
   shopQuotedAmount?: number | null;
@@ -185,6 +201,32 @@ export type DispatchTicket = {
   mobileCallOutFee?: number | null;
   mobileCallOutWaived?: boolean | null;
   mobileTravelFee?: number | null;
+  mobileFeeHistory?: Array<{
+    shopId: string;
+    shopName?: string | null;
+    callOutFee: number;
+    travelFee: number;
+    waived: boolean;
+    fixAmount?: number | null;
+    items?: WorkItem[];
+    declinedAt: string;
+    reason?: string | null;
+  }>;
+  mobileFixApprovedAt?: string | null;
+  mobileFixDeclinedAt?: string | null;
+  mobileFixDeclineReason?: string | null;
+  quoteDeclinedAt?: string | null;
+  quoteDeclineReason?: string | null;
+  towFeeHistory?: Array<{
+    shopId: string;
+    shopName?: string | null;
+    amount: number;
+    deadheadKm: number;
+    loadedKm: number;
+    at: string;
+    reasonCode?: string | null;
+  }>;
+  towFeeCap?: number | null;
   chatVersion?: number;
   chatHistory?: Array<{
     version: number;
@@ -304,10 +346,53 @@ export type WorkOrderPayload = {
   quotedAmount?: number;
   finalAmount?: number;
   invoiceRef?: string;
+  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>;
 };
 
 export async function updateWorkOrder(payload: WorkOrderPayload, token: string): Promise<{updated: number}> {
   const res = await api.post<{updated: number}>("/dispatch/work", payload, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function approveInvoice(ticketId: string, token: string): Promise<{approved: boolean}> {
+  const res = await api.post<{approved: boolean}>("/dispatch/invoice/approve", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function approveMobileFix(ticketId: string, token: string): Promise<{approved: boolean}> {
+  const res = await api.post<{approved: boolean}>("/dispatch/mobile-shop/fix/approve", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function declineMobileFix(ticketId: string, reason: string | undefined, token: string): Promise<{declined: boolean}> {
+  const res = await api.post<{declined: boolean}>("/dispatch/mobile-shop/fix/decline", {ticketId, ...(reason ? {reason} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function declineQuote(ticketId: string, reason: string | undefined, token: string): Promise<{declined: boolean}> {
+  const res = await api.post<{declined: boolean}>("/dispatch/quote/decline", {ticketId, ...(reason ? {reason} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function markTowLoaded(ticketId: string, token: string): Promise<{loaded: boolean}> {
+  const res = await api.post<{loaded: boolean}>("/dispatch/tow/loaded", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function confirmTowReceived(ticketId: string, token: string): Promise<{received: boolean}> {
+  const res = await api.post<{received: boolean}>("/dispatch/tow/received", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function cancelTowerSearch(ticketId: string, reasonCode: string, token: string, lat?: number, lng?: number): Promise<{updated: number; requeued?: boolean}> {
+  const res = await api.post<{updated: number; requeued?: boolean}>("/dispatch/tower/cancel", {ticketId, reasonCode, ...(lat !== undefined ? {lat} : {}), ...(lng !== undefined ? {lng} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -348,6 +433,8 @@ export type TowFareQuote = {
   loadedKm: number;
   night: boolean;
   vehicleClass: string;
+  baseFee?: number;
+  perKmFee?: number;
 };
 
 export async function updateTicketDestination(ticketId: string, dest: {destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}}, token: string): Promise<DispatchTicket> {
@@ -429,8 +516,8 @@ export async function declineEstimate(ticketId: string, token: string): Promise<
   return res;
 }
 
-export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string): Promise<{quoted: boolean}> {
-  const res = await api.post<{quoted: boolean}>("/dispatch/quote", {ticketId, quotedAmount, ...(workType ? {workType} : {})}, token);
+export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>): Promise<{quoted: boolean; version?: number}> {
+  const res = await api.post<{quoted: boolean; version?: number}>("/dispatch/quote", {ticketId, quotedAmount, ...(workType ? {workType} : {}), ...(items && items.length > 0 ? {items} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -482,8 +569,8 @@ export async function respondReturnTow(ticketId: string, accept: boolean, token:
   return res;
 }
 
-export async function setMobileShopFix(ticketId: string, fixAmount: number, token: string): Promise<{updated: number}> {
-  const res = await api.post<{updated: number}>("/dispatch/mobile-shop/fix", {ticketId, fixAmount}, token);
+export async function setMobileShopFix(ticketId: string, fixAmount: number, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>): Promise<{updated: number}> {
+  const res = await api.post<{updated: number}>("/dispatch/mobile-shop/fix", {ticketId, fixAmount, ...(items && items.length > 0 ? {items} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -507,6 +594,13 @@ export async function fileDispute(payload: FileDisputePayload, token: string): P
   return res;
 }
 
+export type SepayCheckout = {
+  action: string;
+  method: string;
+  fields: Record<string, string>;
+  qrUrl?: string | null;
+};
+
 export type TicketPayment = {
   id: string;
   ticketId: string;
@@ -514,20 +608,42 @@ export type TicketPayment = {
   status: string;
   amount?: number | null;
   checkoutUrl?: string | null;
+  checkout?: SepayCheckout | null;
   waitingFee?: number | null;
   unfixable?: boolean | null;
 };
 
-type PaymentWire = TicketPayment & {checkout?: {qrUrl?: string | null} | null};
+type PaymentWire = TicketPayment;
+
+function toSepayCheckout(raw: unknown): SepayCheckout | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.action !== "string" || value.action === "") return null;
+  if (typeof value.method !== "string" || value.method === "") return null;
+  if (!value.fields || typeof value.fields !== "object" || Array.isArray(value.fields)) return null;
+  const fields: Record<string, string> = {};
+  Object.entries(value.fields as Record<string, unknown>).forEach(([key, field]) => {
+    if (typeof field === "string") fields[key] = field;
+  });
+  return {
+    action: value.action,
+    method: value.method,
+    fields,
+    qrUrl: typeof value.qrUrl === "string" ? value.qrUrl : null,
+  };
+}
 
 function toTicketPayment(raw: PaymentWire): TicketPayment {
+  const checkout = toSepayCheckout(raw.checkout);
+  const checkoutUrl = typeof raw.checkout?.qrUrl === "string" && raw.checkout.qrUrl !== "" ? raw.checkout.qrUrl : null;
   return {
     id: raw.id,
     ticketId: raw.ticketId,
     method: raw.method,
     status: raw.status,
     amount: typeof raw.amount === "number" ? raw.amount : null,
-    checkoutUrl: typeof raw.checkout?.qrUrl === "string" && raw.checkout.qrUrl !== "" ? raw.checkout.qrUrl : null,
+    checkoutUrl: checkout?.qrUrl ?? checkoutUrl,
+    checkout,
     waitingFee: typeof raw.waitingFee === "number" ? raw.waitingFee : null,
     unfixable: raw.unfixable === true ? true : null,
   };
@@ -538,9 +654,18 @@ export async function createPayment(ticketId: string, method: string, token: str
   return toTicketPayment(res);
 }
 
+export function cancelPayment(ticketId: string, token: string): Promise<{cancelled: boolean; method: string | null}> {
+  return api.post<{cancelled: boolean; method: string | null}>("/payments/cancel", {ticketId}, token);
+}
+
 export async function confirmCashReceipt(ticketId: string, token: string): Promise<TicketPayment> {
   const res = await api.post<PaymentWire>("/payments/confirm-cash", {ticketId}, token);
   return toTicketPayment(res);
+}
+
+export async function fetchTicketPayments(ticketId: string, token: string): Promise<TicketPayment[]> {
+  const res = await api.post<PaymentWire[]>("/payments/one", {ticketId}, token);
+  return Array.isArray(res) ? res.map(toTicketPayment) : [];
 }
 
 export async function refreshWaiting(ticketId: string, token: string): Promise<{waitingMinutes: number; waitingFee: number}> {

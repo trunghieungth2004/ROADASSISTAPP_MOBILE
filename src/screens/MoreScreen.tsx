@@ -4,7 +4,7 @@ import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppTe
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {updateProfile} from "../api/users";
-import {operatedKinds, serviceLabel} from "./more/providerUi";
+import {profileServiceKinds, serviceLabel} from "./more/providerUi";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
@@ -57,7 +57,7 @@ export default function MoreScreen() {
   const displayName = user?.displayName || user?.email || "—";
   const services = user?.services ?? [];
   const isAdmin = user?.role === "1";
-  const operated = operatedKinds(providers);
+  const profileKinds = profileServiceKinds(services, providers);
   function openEdit() { setNameDraft(user?.displayName ?? ""); setEditError(null); setEditOpen(true); }
   async function onSaveName() {
     if (!token || !nameDraft.trim() || nameBusy) return;
@@ -82,10 +82,7 @@ export default function MoreScreen() {
               <Text style={[styles.email, {color: theme.muted}]}>{user?.email ?? ""}</Text>
               <View style={styles.badgeRow}>
                 <View style={[styles.badge, {backgroundColor: theme.primary}]}><Text style={styles.badgeText}>{isAdmin ? t.more.roleAdmin : t.roles.rider}</Text></View>
-                {[...new Set(services.filter((s) => s !== "RIDER"))].map((s) => (<View key={s} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(s, t)}</Text></View>))}
-                {operated.shop ? (<View key="SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("SHOP", t)}</Text></View>) : null}
-                {operated.tow ? (<View key="TOW" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("TOW", t)}</Text></View>) : null}
-                {operated.mobileShop ? (<View key="MOBILE_SHOP" style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel("MOBILE_SHOP", t)}</Text></View>) : null}
+                {profileKinds.map((kind) => (<View key={kind} style={[styles.service, {borderColor: theme.border}]}><Text style={[styles.serviceText, {color: theme.text}]}>{serviceLabel(kind, t)}</Text></View>))}
               </View>
             </View>
           </View>

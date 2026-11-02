@@ -182,14 +182,22 @@ server-side, so it would be a dead end. Sections live in
 active-job overlay, snack, and dialogs. The TOW type button uses the `tow-truck` glyph
 (MaterialCommunityIcons — `local-shipping` read as delivery).
 
-Status is a vertical stepper (`StatusStepper`): SOS/TOW show
+Status is a vertical stepper (`StatusStepper`): SOS shows
+Pending → Matched → Arrived → Quoted → Ready → Resolved, TOW shows
 Pending → Matched → Arrived → Resolved, walk-in shows
-Pending → Accepted → In progress → Ready → Resolved, declined/expired collapse
-to a flat line with the reason. Active-job actions come from the shared
+Pending → Accepted → In shop → Quoted → In progress → Ready → Resolved, and
+declined/expired collapse to a flat line with the reason. The record's status
+history card starts from the latest Pending entry, so a declined/reset ticket
+shows only the current Pending dot instead of dots from the previous cycle;
+quote uses its purple status colour rather than a failed red. Active-job actions come from the shared
 `riderActionsFor` map in `src/api/dispatch.ts`. Cancelling asks for
 confirmation (terminal server-side); rating submits straight through (the
 server upserts). A 404 on rate means the row vanished under the BE expiry
 sweep, so the sheet closes with a notice instead of an error.
+
+The top card is fixed: the bill strip, workspace switch, tabs, and filters do
+not scroll. Ticket rows scroll inside a bounded list (`RecordsSection`,
+`TowSection`, `MobileShopSection`), so the panel itself never moves.
 
 Sections are Request, Tow, and Records in one segmented control: Request files
 SOS/repair jobs and browses shops, Tow files tow tickets (destination via the
@@ -201,9 +209,10 @@ first) — since they can never take a tow),
 Records merges everything. An accepted tow pins a live job view: map layers
 (green tower-dot pin, pickup pin, drop-off pin, leg-aware straight connector —
 tower→pickup while matched, tower→shop once arrived — camera fit on open)
-plus a buttonless mini card (title, counterparty, live ETA) that opens the
-record modal, where every action lives — riders mark arrival/resolution
-there, towers resume navigation there. Countdowns show live distance first
+plus a buttonless mini card (title, counterparty, live distance/ETA pills)
+that opens the record modal, where every action lives — towers mark arrival
+and delivery there, riders confirm receipt, and towers resume navigation.
+Countdowns show live distance first
 (tower→pickup) and refresh from the tower's fix every few minutes while
 matched, via `POST /dispatch/eta/refresh`. While any job card shows, the top
 panel collapses to an expand bar (auto-collapsed on pin, manually
@@ -221,9 +230,11 @@ truck icon, and an extra amber line under the normal job info — the rider
 reads "pick one," the tower reads "waiting for the rider to update the
 drop-off." The info line stays in both cases, since tower distance and ETA
 are still worth reading. The card title is the job name alone (the truck
-icon already says tow), and the info line is status-aware: matched reads
-tower distance plus pickup ETA, arrived reads rider distance to the drop-off
-plus drop-off ETA. The tower dot is the heartbeat fix for the rider's view
+icon already says tow), and the detail row keeps the counterparty on the
+left with status-aware pills on the right: matched reads tower distance plus
+pickup ETA, arrived reads rider distance to the drop-off plus drop-off ETA,
+and SOS shows its live distance. Return tows carry `towKind: "RETURN"` and
+use the hangar/delivery labels. The tower dot is the heartbeat fix for the rider's view
 and the viewer's own GPS for the tower's — "where the truck is" to the best
 data each side has. The polyline fits the camera once per geometry key,
 never on poll ticks.
@@ -344,7 +355,7 @@ on walk-in, with a reverse-geocoded label over the coordinates), the shop card w
 a shop (name title, address, stars, phone with the open-status pill —
 tapping it opens the full shop modal, which owns the route action), a
 drop-off section whenever a destination exists (full shop card from
-`destinationParty` for registered shops, compact labeled point otherwise),
+`destinationParty` for registered shops, reverse-geocoded point otherwise),
 an empty drop-off block on destination-less tows (rider wording plus the
 change action for the rider, neutral assigned-yet wording for inbound
 viewers), a people card on both sides (rider-location block with name,
@@ -362,8 +373,9 @@ jumping to the auto-spawned shop ticket on resolved tows, and
 the rating thread with reply (ratee-only: the reply affordance hides on your
 own ratings; every row is a shared `RatingRow` — initial avatar, author
 name, stars, comment, indented reply with replier name — under a Your rating
-title). Committing actions (Rate/Edit rating, Resolve at ready, Accept, Cancel,
-Decline-send, work-save, Send-quote, Approve, Decline drop-off) live in
+title). Ticket-related dialogs share the same status pill on the right of the
+header. Committing actions (Rate/Edit rating, Resolve at ready, Accept, Cancel,
+Decline-send, Work order, Send-quote, Approve, Decline drop-off) live in
 `Overlay`'s pinned footer; forms (cancel
 confirm, decline reasons, work editor, reply) stay in the body on demand.
 The walk-in Decline renders only on walk-in tickets — tow rows never offer
@@ -404,36 +416,44 @@ touching the ticket status (the tower keeps the job and waits for the rider's
 new drop-off; no travel leg is written when no tower is engaged) and the
 reload drops the block on success; the rider is told to pick another
 drop-off, and retargeting restamps the tower's ETAs from the live fix.
-Sent amounts are one-shot (the server `400`s re-quotes and re-finals), and
-the shop block carries a route button
+Quotes are itemized and may be amended while the ticket is still `9`; approved
+quotes are immutable. The shop block carries a route button
 (resolves snapshot → known-shop coords into navigation) beside a shared row
 with the phone on the left and the open status on the right.
 The sheet stays open and live across accept, work-save, and status moves:
 every reload re-syncs the open ticket from the feed. Map dots are display
 only — tapping them never opens anything; the sheet is the sole ticket UI.
 Operator lifecycle runs inside the sheet: Accept (pending) → Send quote
-(`WorkSheet`, amount required) → rider Approve (`6`) → Work done
-(`WorkSheet`, work type + invoice, no amounts) → Mark ready (`7`), with
-Decline + reason as the pending off-ramp; SOS mobile shops keep the direct
-Start work at arrival. Work states, the work sheet, and quotes are
+(`WorkSheet`, itemized lines from the shop catalog or ad-hoc) → rider Approve
+(`6`) → Work done (`WorkSheet`, itemized invoice + invoice ref) → Mark ready
+(`7`), with
+Decline + reason as the pending off-ramp. SOS mobile shops quote the fix at
+arrival (`MobileFixSheet`, itemized); the ticket moves `3→9`, the rider gets
+Approve/Decline on one 50:50 row (`9→7` or back to `1`), and the shop cannot
+edit the fee after sending. Work states, the work sheet, and quotes are
 shop-ticket only — tower-held tickets never see those controls (the server 403s them regardless; the client gates on the ticket
 touching one of your own SHOPs, so dual-role accounts see the workbench only
 on their shop jobs).
-The workbench is one binding quote. The send-quote action opens its own
-sheet and posts `POST /dispatch/quote` (`quotedAmount` required, optional
-work-type) — ticket `9` (Quoted) with the amount on the record; the sheet
-also opens from `IN_SHOP` and legacy estimate states, and an existing quote
-hides the action (amounts are one-shot). Rider Approve
-(`POST /dispatch/quote/approve`) moves `9`→`6` and requires a funded payment
-on the ticket; Decline reuses the cancel pair. Work done opens the same
-sheet in details mode and posts `POST /dispatch/work` (`workType` +
-`invoiceRef` only — amounts are refused), then Mark ready (`7`) closes the
-workbench. Tows never show a shop quote: the drop-off shop's optional
-estimate is advisory (`estimateAmount`, no status move), and the repair
-price lands on the walk-in ticket spawned at drop-off. An unfixable close
-(`POST /dispatch/unfixable`, Matched/Arrived/In progress/Quoted/In shop/
-Final quoted) voids pending charges and refunds held ones; payment CTAs
-disappear once a ticket is unfixable or terminal.
+The workbench is one itemized quote. The send-quote action opens its own
+sheet and posts `POST /dispatch/quote` with `quotedAmount` and optional
+`items` (`{name, qty, unitPrice}`) — ticket `9` (Quoted) with the item list on
+the record. While still `9`, the action becomes **Amend quote** and the server
+keeps the previous version in `quoteHistory`; approved quotes cannot be
+amended. Rider Approve (`POST /dispatch/quote/approve`) moves `9`→`6`; cash
+creates a pending charge automatically and is confirmed at Mark ready, while
+SePay must be `HELD`/`CONFIRMED` first. Work done opens the same sheet in
+details mode and posts `POST /dispatch/work` with `items` + `invoiceRef`; a
+matching total is auto-approved, while a different total before Mark ready
+stores `invoiceApproval: "PENDING"` and asks the rider to approve it. The
+mobile-shop fix sheet uses the same itemized lines for SOS fixes. Tows never
+show a shop quote:
+the drop-off shop's optional estimate is advisory (`estimateAmount`, no status
+move), and the repair price lands on the walk-in ticket spawned at drop-off.
+An unfixable close (`POST /dispatch/unfixable`, Matched/Arrived/In progress/
+In shop; SOS only Arrived) voids pending charges and refunds held ones;
+payment CTAs disappear once a ticket is unfixable or terminal. The record
+sheet body scrolls while its footer actions stay pinned; the assist top panel
+is fixed and only its ticket lists scroll.
 Either side's phone number rides the feed on live tickets
 (`2`/`3`/`4`/`6`/`7`/`9`, never pending or dead) and renders as a tappable
 `tel:` row in the matching block; absent when unregistered.
@@ -574,9 +594,9 @@ The tow subtitle reports effective visibility from beat freshness ("waiting
 for location" on a cold start), because the switch alone can't promise what
 the radius can't see. Per-provider switches stay as the source of truth for
 multi-provider edge cases. Registration and edit forms
-carry no fees and no duty switch — pricing lives in server-side platform
-config and duty lives in these rows; the server still accepts the legacy fee
-columns so older builds keep saving.
+carry the provider's own pricing fields (TOW base/per-km, mobile-shop
+call-out/travel per-km) within platform bounds; the duty switch stays in these
+rows. The platform config remains the fallback card.
 
 ## Saved places live in place search
 
@@ -601,20 +621,46 @@ empty state at the cost of dead space on every non-empty one.
 
 ## Quotes, payments & disputes
 
-### One binding quote, advisory tow estimates
+### Itemized quotes, cash/SePay approval
 
-The record sheet money block renders the binding `shopQuotedAmount` with its
-quote card, legacy `finalAmount` with fault photos, and the tow fare rows
-(board-preview estimate, live "up to" ceiling, resolved final, recorded
-cancel partial — all read from the stored ticket, never recomputed). The
-workbench sends one quote (`POST /dispatch/quote` → `9` Quoted) and the
-rider's Approve (`POST /dispatch/quote/approve`) moves `9`→`6`, gated on a
-funded payment; Work done saves details only (`POST /dispatch/work`,
-`workType` + `invoiceRef`), never a second amount. Legacy `11` Final-quoted
-tickets still render their card and approve through the same gate. An
-on-site `UNFIXABLE` verdict (reason + evidence photos) closes the ticket at
-`15` with no `final` — the sheet shows the unfixable banner and the payment
-state (refunded/held), never a price.
+The record sheet money block renders the approved itemized quote
+(`shopQuotedAmount` + `quoteItems` / `invoiceItems`), legacy `finalAmount`
+with fault photos, prior mobile/tower partials (`mobileFeeHistory` /
+`towFeeHistory`), and the tow fare rows (board-preview estimate, live "up to"
+ceiling, resolved final, recorded traveled partial — all read from the stored
+ticket, never recomputed). The workbench sends an itemized quote
+(`POST /dispatch/quote` → `9` Quoted), amendable while still `9`; the rider's
+Approve (`POST /dispatch/quote/approve`) moves `9`→`6`; Decline
+(`POST /dispatch/quote/decline`) clears the quote and returns `9`→`3`. Cash
+approval creates a pending charge automatically and the rider confirms cash
+at Mark ready; SePay must be `HELD`/`CONFIRMED` before approval. SOS fix
+quotes use the same 50:50 rider decision: Approve moves `9`→`7`, Decline
+archives the chat, excludes the shop, and rebroadcasts from `9`→`1` while
+prior call-out/travel stays payable. Approving any quote opens a small
+non-scrolling Cash / SePay choice. Cash creates a pending cash charge before
+approval; SePay creates the charge and submits the signed SePay form inside an
+in-app `WebView` (`SePayCheckoutSheet`), so the hosted QR is shown without
+leaving the app. Success redirects are intercepted, the payment is polled until
+`HELD`/`CONFIRMED`, and the quote is approved automatically. A pending SePay
+charge reopens the same form from `Pay & approve`; the sheet also offers
+“Cash instead”, which asks the backend to cancel the SePay order through
+SePay's Cancel Order API before creating the cash charge. The sheet's own
+back button leaves the charge pending for a later retry, while SePay's hosted
+“Cancel transaction” redirect calls `POST /payments/cancel` to cancel the
+gateway order and clear the local guard. BillDetail's “Open payment page” uses
+the same in-app sheet, so a stale link never strands an unpaid charge. Every quote and decision writes a chat
+system event (`QUOTE_*` / `MOBILE_FIX_*`), and the rider's decision sends an
+urgent provider FCM; a declined mobile fix also sends a targeted push to the
+declined shop after its assignment is cleared. Former-assignment rows carry
+`formerAssignmentKind`/`formerAssignmentReason`, so a declined mobile shop
+sees “Quote declined”, not the tower “Cancelled by you” wording. Work done posts the itemized
+invoice (`POST /dispatch/work`, `items` + `invoiceRef`). A matching total is
+auto-approved; a different total becomes `invoiceApproval: "PENDING"` and the
+rider must approve the revised invoice before resolving. Legacy `11`
+Final-quoted tickets still render their card and approve through the same gate. An on-site `UNFIXABLE` verdict
+(reason + evidence photos) closes the ticket at `15` with no `final` — the
+sheet shows the unfixable banner and the payment state (refunded/held), never
+a price.
 
 Tow estimates run the same handshake without the status machine. The
 drop-off shop (the ticket's `destinationShopId` owned by the viewer) sees a
@@ -650,7 +696,11 @@ tower's live fix. A tower that bows out mid-tow instead requeues the ticket
 back to pending with the tow broadcast re-opened (`towerSearch: "ACTIVE"`,
 "Finding another tower" push) and a deadhead partial frozen on record — the
 tower cancel rides the sheet's cancel action (`allowTowerCancel` on engaged
-tows) and the server detects the tower actor on an engaged tow. Client side:
+tows) and the server detects the tower actor on an engaged tow. The tower
+marks `Loaded` at pickup (`POST /dispatch/tow/loaded`); a genuine breakdown
+adds the tracked loaded distance (when loaded) to the partial
+(`towFeeHistory`, no base), skips the tower dispute/counters, and caps the
+replacement fare at the original ceiling minus the paid partial. Client side:
 the tower's 60 s location share already runs while a tow job is attached
 (Assist foreground; navigator session while navigating), so a waiting tower
 keeps its fix warm for the rematch — no extra ping needed. The BE writes
@@ -705,16 +755,19 @@ they show. Every chip files through the `DisputeSheet` above.
 ### Bills & itemized payment
 
 Paying moved off the record. Each journey is one bill under More → Bills
-(`POST /bills/all`) — the bill id is the tow, items are the tow fare (fare +
-waiting fee) and the repair quote on the linked drop-off walk-in; a
-standalone walk-in is its own bill. Rows show total/paid/due and a status
+(`POST /bills/all`) — the bill id is the journey root; items include the tow
+fare (fare + waiting fee, plus any genuine-breakdown `towFeeHistory`), the
+repair quote on the linked drop-off walk-in, prior mobile-shop visits
+(`mobileFeeHistory`), and, for an SOS that continued into a TOW, the SOS
+call-out plus the continuation TOW. A standalone walk-in is its own bill. Rows show total/paid/due and a status
 pill. `BillDetailScreen` takes `{ticketId}` (also `{payFirst: true}` when
-the record redirected an unfunded approval), reloads on focus and on
+opened directly for an unfunded bill), reloads on focus and on
 AppState `active` (the checkout page returns to the app), and pays per item
 through `POST /payments/create` with the item's `ticketId` — SePay arms the
-charge and opens the hosted checkout (`checkoutUrl`), cash arms `PENDING`
-for the shop to confirm. A pending SePay item reopens its page from the item
-`qrUrl` (`ticket.checkoutUrl`), so leaving the screen loses nothing. Labels
+charge and opens the signed form in the in-app `SePayCheckoutSheet`, cash arms
+`PENDING` for the shop to confirm. A pending SePay item reopens the same sheet
+from the item and can switch to cash through the backend cancel-and-replace
+flow. Labels
 come from `paymentMethodLabel`/`paymentStatusLabel`; there are no payment
 push events, so the bill re-reads on return.
 

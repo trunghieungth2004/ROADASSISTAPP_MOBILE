@@ -1,5 +1,6 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
+import {Modal} from "react-native";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import UpdateDialog from "../../../src/components/UpdateDialog";
 import {en} from "../../../src/i18n/en";
@@ -44,9 +45,12 @@ function texts(renderer: ReturnType<typeof create>): string[] {
     .map((n) => n.props.children as string);
 }
 
-test("dialog shows version, notes, and three exits", async () => {
+test("full-screen overlay shows version, notes, and exits", async () => {
   const {renderer, onSkip, onClose} = await renderDialog();
   try {
+    const modal = renderer.root.findByType(Modal);
+    expect(modal.props.transparent ?? false).toBe(false);
+    expect(modal.props.animationType).toBe("slide");
     expect(texts(renderer)).toContain("Fixes and speed");
     expect(actionLabels(renderer)).toContain(en.more.updateDownload);
     expect(actionLabels(renderer)).toContain(en.more.updateSkip);

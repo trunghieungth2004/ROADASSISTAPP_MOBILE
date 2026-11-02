@@ -2,9 +2,9 @@ import {StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../../components/ui/AppText";
 import type {Strings} from "../../../i18n/en";
 import type {AppTheme} from "../../../theme";
-import type {FeedTicket} from "../../../api/dispatch";
+import {DISPATCH_STATUS, type FeedTicket} from "../../../api/dispatch";
 import {timeAgoLabel} from "../../hazards/hazardFilter";
-import {stageLabel, statusPillColor, statusStages} from "../ticketLabels";
+import {stageLabel, statusPillColor, statusStages, statusTone} from "../ticketLabels";
 import {CardHead, DetailCard} from "./parts";
 
 function agoOf(at: string, t: Strings): string {
@@ -14,12 +14,15 @@ function agoOf(at: string, t: Strings): string {
 export default function StatusCard({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: FeedTicket}) {
   const history = Array.isArray(ticket.statusHistory) ? ticket.statusHistory : [];
   const stages = statusStages(ticket.ticketType);
-  const seen = new Set(history.map((h) => h.status));
-  const atOf = new Map(history.map((h) => [h.status, h.at] as [string, string]));
+  const cycleStart = history.reduce((last, entry, index) =>
+    entry.status === DISPATCH_STATUS.PENDING ? index : last, -1);
+  const cycle = cycleStart >= 0 ? history.slice(cycleStart) : history;
+  const seen = new Set(cycle.map((h) => h.status));
+  const atOf = new Map(cycle.map((h) => [h.status, h.at] as [string, string]));
   const current = ticket.status;
   const trailing = !stages.includes(current) ? [current] : [];
   const rows = [...stages.filter((s) => seen.has(s) || s === current), ...trailing];
-  const currentAt = atOf.get(current) ?? history[history.length - 1]?.at ?? null;
+  const currentAt = atOf.get(current) ?? cycle[cycle.length - 1]?.at ?? null;
   const tint = statusPillColor(current, theme);
   const summary = rows.map((status) => {
     const at = atOf.get(status);
@@ -31,7 +34,8 @@ export default function StatusCard({t, theme, ticket}: {t: Strings; theme: AppTh
       <CardHead theme={theme} icon="timeline" title={t.assist.statusTitle} />
       <View style={styles.history} accessible accessibilityLabel={summary}>
         {rows.map((status, i) => {
-          const failed = !stages.includes(status);
+          const failed = !stages.includes(status) &&
+            statusTone(status) === "failed";
           const filled = seen.has(status) || status === current;
           const dotColor = failed ? theme.danger : filled ? statusPillColor(status, theme) : theme.border;
           return (

@@ -2,7 +2,7 @@
   "name": "roadassistapp-mobile",
   "description": "RoadAssist mobile app (React Native / Expo) \u2014 1:1 of web FE.",
   "license": "MIT",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/roboto": "^0.4.3",
@@ -37,7 +37,8 @@
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.26.0"
+    "react-native-screens": "~4.26.0",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",

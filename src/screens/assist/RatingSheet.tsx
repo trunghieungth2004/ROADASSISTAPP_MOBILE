@@ -7,6 +7,7 @@ import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
+import TicketStatusPill from "./TicketStatusPill";
 import {ticketTitle} from "./ticketLabels";
 
 type Props = {
@@ -29,6 +30,7 @@ export default function RatingSheet({t, ticket, initialScore, initialComment, bu
       visible
       variant="dialog"
       title={`${t.rating.title} · ${ticketTitle(ticket, t)}`}
+      right={<TicketStatusPill t={t} theme={theme} status={ticket.status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}
       scrollable={false}

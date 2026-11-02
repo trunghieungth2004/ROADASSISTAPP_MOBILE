@@ -1,6 +1,7 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
+import {Text} from "react-native";
 import ShopRadiusOverlay, {type RadiusCardHandlers} from "../../../../src/screens/assist/ShopRadiusOverlay";
 import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
@@ -259,6 +260,27 @@ test("tow card offers use-this-shop and hides it in browse", async () => {
     expect((onUseShop.mock.calls[0]?.[0] as Provider).id).toBe("s1");
   } finally {
     teardown(renderer);
+  }
+});
+
+test("an empty radius result shows one centred message", async () => {
+  globalThis.fetch = (jest.fn(async () => envelope([])) as unknown) as typeof fetch;
+  const {renderer} = await render();
+  try {
+    const notes = renderer.root.findAllByType(Text)
+      .filter((n) => n.props?.children === en.shop.empty);
+    expect(notes).toHaveLength(1);
+    const raw = notes[0]?.props.style as unknown;
+    const flat = Array.isArray(raw) ?
+      Object.assign({}, ...raw.filter((entry) => entry !== null && typeof entry === "object")) :
+      raw;
+    expect((flat as {textAlign?: string}).textAlign).toBe("center");
+  } finally {
+    await act(async () => {
+      renderer.unmount();
+    });
+    globalThis.fetch = realFetch;
+    clearApiCache();
   }
 });
 

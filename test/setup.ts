@@ -105,3 +105,11 @@ jest.mock("expo-application", () => ({
   nativeApplicationVersion: "0.1.0",
   nativeBuildVersion: "1",
 }));
+
+jest.mock("react-native-webview", () => {
+  const React = require("react");
+  const {View} = require("react-native");
+  const WebView = (props: Record<string, unknown>) =>
+    React.createElement(View, {...props, testID: props.testID ?? "webview"});
+  return {WebView, default: WebView};
+});

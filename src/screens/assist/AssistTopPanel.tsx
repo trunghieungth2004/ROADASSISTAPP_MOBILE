@@ -1,5 +1,5 @@
 import type {ReactNode} from "react";
-import {Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {Pressable, StyleSheet, useWindowDimensions, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {AppTheme} from "../../theme";
@@ -33,6 +33,8 @@ export default function AssistTopPanel({
   children,
   onLayoutHeight,
 }: Props) {
+  const {height} = useWindowDimensions();
+  const maxPanel = Math.max(320, Math.min(560, Math.round(height * 0.62)));
   if (hasJobCard && collapsed) {
     return (
       <Pressable
@@ -50,16 +52,12 @@ export default function AssistTopPanel({
     <View style={[styles.topContainer, {top}]}>
       <View
         onLayout={(event) => onLayoutHeight(event.nativeEvent.layout.height)}
-        style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}
+        style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border, maxHeight: maxPanel}]}
       >
-        <ScrollView
-          contentContainerStyle={styles.cardScroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.cardBody}>
           {billStrip}
           {children}
-        </ScrollView>
+        </View>
         {hasJobCard ? (
           <Pressable
             style={styles.collapseBar}
@@ -94,10 +92,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
-    maxHeight: 420,
     overflow: "hidden",
   },
-  cardScroll: {gap: 8, paddingBottom: 4},
+  cardBody: {gap: 8, flexShrink: 1},
   collapseBar: {
     flexDirection: "row",
     alignItems: "center",

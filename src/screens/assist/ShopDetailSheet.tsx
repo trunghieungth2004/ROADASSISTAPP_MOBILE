@@ -37,6 +37,16 @@ export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy
   const preview = reviews !== null ? reviews.slice(0, 2) : null;
   const {height} = useWindowDimensions();
   const offDuty = shop.accepting === false || shop.status !== "ACTIVE" || shop.suspended === true;
+  const pricing = shop.kind === "TOW" &&
+    (typeof shop.towBaseFee === "number" || typeof shop.towPerKmFee === "number") ? [
+      typeof shop.towBaseFee === "number" ? `${t.provider.towBaseFee}: ${shop.towBaseFee.toLocaleString()} ₫` : null,
+      typeof shop.towPerKmFee === "number" ? `${t.provider.towPerKmFee}: ${shop.towPerKmFee.toLocaleString()} ₫` : null,
+    ].filter((row): row is string => row !== null).join(" · ") :
+    shop.kind === "MOBILE_SHOP" &&
+      (typeof shop.callOutFee === "number" || typeof shop.travelPerKmFee === "number") ? [
+        typeof shop.callOutFee === "number" ? `${t.provider.callOutFee}: ${shop.callOutFee.toLocaleString()} ₫` : null,
+        typeof shop.travelPerKmFee === "number" ? `${t.provider.travelPerKmFee}: ${shop.travelPerKmFee.toLocaleString()} ₫` : null,
+      ].filter((row): row is string => row !== null).join(" · ") : null;
   return (
     <Overlay
       visible
@@ -71,6 +81,7 @@ export default function ShopDetailSheet({t, shop, openLabel, openColor, walkBusy
             <MaterialIcons name="flag" size={22} color={theme.danger} />
           </Pressable>
         </View>
+        {pricing !== null ? <Text style={[styles.coords, {color: theme.text}]}>{pricing}</Text> : null}
         {offDuty ? (
           <View style={[styles.offDuty, {borderColor: theme.border}]}>
             <MaterialIcons name="info-outline" size={16} color={theme.muted} />

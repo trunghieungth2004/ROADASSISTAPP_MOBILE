@@ -109,7 +109,9 @@ export function billDateLabel(createdAt: string | null): string {
 }
 
 export function billTitle(bill: Bill, t: Strings): string {
-  if (bill.ticketType === "SOS") return t.assist.mobileCallOut;
+  if (bill.ticketType === "SOS") {
+    return bill.items.length > 1 ? t.bills.journey : t.assist.mobileCallOut;
+  }
   return bill.ticketType === "TOW" ? t.bills.journey : t.bills.visit;
 }
 

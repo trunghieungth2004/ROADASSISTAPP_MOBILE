@@ -85,15 +85,17 @@ function Footer({actions, layout}: {actions: OverlayAction[]; layout: OverlayAct
     return (
       <Pressable
         key={action.label}
-        style={[action.iconOnly ? styles.iconBtn : styles.actionBtn, filled ? {backgroundColor: toneColor} : {borderColor, borderWidth: 1, backgroundColor: "transparent"}, off && styles.disabled]}
+        style={[action.iconOnly ? styles.iconBtn : layout === "confirm" ? styles.confirmBtn : styles.actionBtn, filled ? {backgroundColor: toneColor} : {borderColor, borderWidth: 1, backgroundColor: "transparent"}, off && styles.disabled]}
         disabled={off}
         onPress={() => dismissAnd(action.onPress)}
         accessibilityRole="button"
         accessibilityLabel={action.label}
       >
         {action.busy === true ? <ActivityIndicator color={textColor} /> :
-          action.iconOnly === true && action.icon !== undefined ? action.icon :
-            <Text style={[styles.actionText, {color: textColor}]}>{action.label}</Text>}
+          <View style={styles.actionContent}>
+            {action.icon !== undefined ? action.icon : null}
+            {action.iconOnly === true ? null : <Text style={[styles.actionText, {color: textColor}]}>{action.label}</Text>}
+          </View>}
       </Pressable>
     );
   };
@@ -115,9 +117,11 @@ function Footer({actions, layout}: {actions: OverlayAction[]; layout: OverlayAct
   }
   if (layout === "confirm") {
     return (
-      <View style={styles.confirmRow}>
-        {secondary.map(renderAction)}
-        {primary.map(renderAction)}
+      <View style={styles.confirmFooter}>
+        {secondary.length > 0 ? (
+          <View style={styles.secondaryRow}>{secondary.map(renderAction)}</View>
+        ) : null}
+        <View style={styles.confirmRow}>{primary.map(renderAction)}</View>
       </View>
     );
   }
@@ -215,8 +219,11 @@ const styles = StyleSheet.create({
   body: {flexShrink: 1},
   staticBody: {width: "100%"},
   actionRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  actionContent: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6},
   primaryStack: {gap: 8},
+  confirmFooter: {gap: 8},
   confirmRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  confirmBtn: {flex: 1, flexGrow: 1, minWidth: 0, borderRadius: 8, padding: 10, alignItems: "center"},
   ticketFooter: {gap: 8},
   ticketRail: {flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 4},
   ticketPrimaryRow: {flexDirection: "row", alignItems: "center", gap: 8},

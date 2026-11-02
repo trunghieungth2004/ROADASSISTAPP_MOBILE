@@ -7,6 +7,69 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-02
+
+### Added
+
+- Itemized shop quotes and invoices, with provider service-catalog chips and
+  line totals.
+- Provider-set TOW base/per-km and mobile-shop call-out/travel pricing within
+  platform bounds.
+- Quote amendment history while a quote is still awaiting approval.
+- Itemized mobile-shop SOS fix fees, using the same line-item editor.
+- Rider approval for revised invoices after quote approval.
+- Precise tracked deadhead distance from the provider location trail.
+- SOS mobile-fix approval: the shop quotes `3→9`, the rider gets 50:50
+  Approve/Decline, decline excludes the shop and keeps prior call-out/travel
+  payable through `mobileFeeHistory`.
+- Explicit WALK_IN/MECHANIC quote decline restores the pre-quote state (`9→2`
+  for a walk-in, `9→3` for a mechanic) so the shop can re-quote.
+- TOW loaded marker and genuine-breakdown re-match: pays actual deadhead plus
+  loaded distance, records `towFeeHistory`, and caps the replacement fare at
+  the original ceiling.
+- Cash / SePay choice for every quote approval, with the SePay QR rendered in
+  an in-app WebView instead of leaving the app.
+- Pending SePay charges stay reusable until paid or cancelled; reopening the
+  QR refreshes the bridge token without creating a duplicate payment.
+- Tower-owned TOW arrival and delivery, with rider receipt confirmation and
+  distinct return-tow labels.
+- Return-tow destinations carry a reverse-geocoded street label.
+- Tower delivery requires the loaded marker; ticket modals show the live status pill.
+- Unfixable WALK_IN/MECHANIC tickets can request a return tow.
+
+### Changed
+
+- Cash quote approval starts work immediately and confirms cash at Mark ready;
+  SePay must be paid before approval.
+- Return-tow offers are blocked while a WALK_IN CASH charge is unconfirmed,
+  and journey-bill payments no longer leak across linked ticket items.
+- Work done is presented as the secondary Work order action; rider receipt is
+  labelled Confirm.
+- The ticket detail body scrolls with pinned actions; the assist top panel
+  stays fixed and only its ticket lists scroll.
+- “Can’t fix” is a primary action and disappears once a quote is sent.
+- Destination shops filter by the ticket’s vehicle class, not the rider’s
+  currently active vehicle.
+- Admin-configurable provider price bounds.
+
+### Fixed
+
+- SOS quote now appears on the purple Quoted stage; a ticket reset to Pending
+  shows only the current Pending dot.
+- Mobile shops see the rider's request photos on a pending SOS, and older
+  unfixable tickets can request a return tow without a stored offer.
+- Quote and mobile-fix decisions send provider FCMs, including a targeted
+  push to the declined mobile shop after its assignment is cleared.
+- A declined mobile fix is labelled as a rider quote decline, not a provider
+  cancellation or a re-match to another tower.
+- Chat records quote sent/updated/approved/declined and mobile-fix quote
+  events.
+- Cancelling a TOW bills only traveled deadhead; a tower that never moved
+  bills 0.
+- SOS journeys include their continuation TOW in the same bill.
+- Invoice line items stay visible on the ticket and bill.
+- SOS and TOW billing include prior mobile-shop and tower partials.
+
 ## [0.2.1] - 2026-10-30
 
 ### Fixed

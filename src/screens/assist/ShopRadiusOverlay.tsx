@@ -300,7 +300,6 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
           </View>
         </View>
       ) : null}
-      {!loading && !error && shops.length === 0 ? <Text style={[styles.note, {color: theme.muted}]}>{t.shop.empty}</Text> : null}
     </View>
   );
 }
@@ -312,7 +311,7 @@ const styles = StyleSheet.create({
   title: {fontSize: 16, fontWeight: "700", flex: 1},
   radiusCycle: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12},
   radiusCycleText: {fontSize: 13, fontWeight: "600"},
-  note: {fontSize: 13},
+  note: {fontSize: 13, textAlign: "center", alignSelf: "stretch"},
   mapWrap: {flex: 1, borderRadius: 16, overflow: "hidden", position: "relative"},
   loading: {position: "absolute", left: 12, top: 12, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)"},
   card: {position: "absolute", left: 0, right: 0, bottom: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 12, gap: 8, maxHeight: "62%"},

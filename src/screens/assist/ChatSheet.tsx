@@ -31,7 +31,7 @@ type Props = {
   onClose: () => void;
 };
 
-type IconName = "chat-bubble-outline" | "info-outline" | "check-circle" | "cancel" | "local-shipping" | "build" | "lock-outline" | "error-outline";
+type IconName = "chat-bubble-outline" | "info-outline" | "check-circle" | "cancel" | "local-shipping" | "build" | "lock-outline" | "error-outline" | "request-quote";
 
 function clockTime(iso: string): string {
   const at = Date.parse(iso);
@@ -99,6 +99,13 @@ function systemText(message: ChatMessage, t: Props["t"]): string {
   if (event === "TOW_DECLINED") return t.assist.declineTow;
   if (event === "TOW_EXPIRED") return t.assist.towOfferExpired;
   if (event === "SOS_CONTINUED") return t.assist.continueSosSnack;
+  if (event === "QUOTE_SENT") return t.assist.quoteSent;
+  if (event === "QUOTE_UPDATED") return t.assist.quoteUpdated;
+  if (event === "QUOTE_APPROVED") return t.assist.quoteApproved;
+  if (event === "QUOTE_DECLINED") return t.assist.quoteDeclined;
+  if (event === "MOBILE_FIX_QUOTED") return t.assist.fixQuoteSent;
+  if (event === "MOBILE_FIX_APPROVED") return t.assist.fixQuoteApproved;
+  if (event === "MOBILE_FIX_DECLINED") return t.assist.fixQuoteDeclined;
   return message.text ?? "";
 }
 
@@ -109,6 +116,14 @@ function systemIcon(event?: string): IconName {
   if (event === "TOW_ACCEPTED") return "check-circle";
   if (event === "TOW_DECLINED" || event === "TOW_EXPIRED") return "cancel";
   if (event === "SOS_CONTINUED") return "chat-bubble-outline";
+  if (event === "QUOTE_SENT" || event === "QUOTE_UPDATED" ||
+    event === "MOBILE_FIX_QUOTED") return "request-quote";
+  if (event === "QUOTE_APPROVED" || event === "MOBILE_FIX_APPROVED") {
+    return "check-circle";
+  }
+  if (event === "QUOTE_DECLINED" || event === "MOBILE_FIX_DECLINED") {
+    return "cancel";
+  }
   return "info-outline";
 }
 
@@ -119,6 +134,10 @@ function systemColor(message: ChatMessage, theme: AppTheme): string {
   if (message.event === "UNFIXABLE") return theme.danger;
   if (message.event === "TOW_ACCEPTED") return theme.success;
   if (message.event === "TOW_DECLINED" || message.event === "TOW_EXPIRED") return theme.danger;
+  if (message.event === "QUOTE_DECLINED" ||
+    message.event === "MOBILE_FIX_DECLINED") return theme.danger;
+  if (message.event === "QUOTE_APPROVED" ||
+    message.event === "MOBILE_FIX_APPROVED") return theme.success;
   return theme.primary;
 }
 

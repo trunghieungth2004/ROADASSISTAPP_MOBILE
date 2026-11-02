@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, viewerRoleOf, visibleActions} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, returnTowPending, viewerRoleOf} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -19,15 +19,6 @@ test("mobile shop can cancel only a matched SOS", () => {
   expect(canCancelSosShop("TOW", "2", true)).toBe(false);
 });
 
-test("visible actions follow the rider matrix", () => {
-  expect(visibleActions("1")).toEqual(["cancel"]);
-  expect(visibleActions("2")).toEqual(["arrived", "cancel"]);
-  expect(visibleActions("3")).toEqual(["resolved", "cancel"]);
-  expect(visibleActions("7")).toEqual(["resolved", "cancel"]);
-  expect(visibleActions("4")).toEqual([]);
-  expect(visibleActions("5")).toEqual([]);
-  expect(visibleActions("8")).toEqual([]);
-});
 
 test("operator takes pending inbound jobs", () => {
   expect(canAccept({kind: "candidate", candidateKind: "SHOP"})).toBe(true);
@@ -74,8 +65,8 @@ test("work states are shop-only", () => {
 });
 
 test("unfixable runs from live shop states", () => {
-  for (const s of ["2", "3", "6", "9", "10", "11"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(true);
-  for (const s of ["1", "4", "7", "8", "12", "15"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(false);
+  for (const s of ["2", "3", "6", "10"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(true);
+  for (const s of ["1", "4", "7", "8", "9", "11", "12", "15"]) expect(canMarkUnfixable("WALK_IN", s)).toBe(false);
   expect(canMarkUnfixable("TOW", "3")).toBe(false);
   expect(canMarkUnfixable("SOS", "2")).toBe(false);
   expect(canMarkUnfixable("SOS", "3")).toBe(true);
@@ -141,6 +132,7 @@ test("quote handshake gates both sides", () => {
   expect(canSendQuote("in", "2", "WALK_IN", true)).toBe(true);
   expect(canSendQuote("in", "3", "MECHANIC", true)).toBe(true);
   expect(canSendQuote("in", "10", "WALK_IN", true)).toBe(true);
+  expect(canSendQuote("in", "9", "WALK_IN", true)).toBe(true);
   expect(canSendQuote("in", "6", "WALK_IN", true)).toBe(false);
   expect(canSendQuote("in", "2", "TOW", true)).toBe(false);
   expect(canSendQuote("in", "2", "WALK_IN", false)).toBe(false);
@@ -223,6 +215,33 @@ test("request photos follow the viewer gate", () => {
   expect(canSeeRequestPhotos(row({assignedShopId: "shop-2"}), mine)).toBe(false);
   expect(canSeeRequestPhotos(row({assignedUid: "u1"}), mine)).toBe(false);
   expect(canSeeRequestPhotos(row({assignedUid: "u2"}), mine)).toBe(false);
+});
+
+test("request photos show for a mobile shop on a pending SOS", () => {
+  const row = (overrides?: object) => ({
+    direction: "in",
+    ticketType: "SOS",
+    status: "1",
+    assignedShopId: null,
+    providerId: null,
+    destinationShopId: null,
+    assignedUid: null,
+    ...overrides,
+  }) as Parameters<typeof canSeeRequestPhotos>[0];
+  const mine = new Set<string>();
+  expect(canSeeRequestPhotos(row({}), mine, null, "auto", "mobile-1")).toBe(true);
+  expect(canSeeRequestPhotos(row({providerId: "mobile-1"}), mine, null, "auto", "mobile-1")).toBe(true);
+  expect(canSeeRequestPhotos(row({status: "2"}), mine, null, "auto", "mobile-1")).toBe(false);
+  expect(canSeeRequestPhotos(row({status: "2", assignedShopId: "mobile-1"}), mine, null, "auto", "mobile-1")).toBe(true);
+  expect(canSeeRequestPhotos(row({}), mine, null, "auto", null)).toBe(false);
+});
+
+test("return tow stays available without a stored offer", () => {
+  expect(returnTowPending({})).toBe(true);
+  expect(returnTowPending({returnTowOffer: null})).toBe(true);
+  expect(returnTowPending({returnTowOffer: {status: "PENDING", shopId: "shop-1", by: "u1", at: "2026-01-01T00:00:00.000Z"}})).toBe(true);
+  expect(returnTowPending({returnTowOffer: {status: "DECLINED", shopId: "shop-1", by: "u1", at: "2026-01-01T00:00:00.000Z"}})).toBe(false);
+  expect(returnTowPending({returnTowOffer: {status: "ACCEPTED", shopId: "shop-1", by: "u1", at: "2026-01-01T00:00:00.000Z"}})).toBe(false);
 });
 
 test("viewer role resolves one owner per ticket", () => {

@@ -32,6 +32,10 @@ jest.mock("@react-navigation/native", () => {
 
 const mockMyProviders = jest.fn(async () => [] as unknown[]);
 const mockUpdateProvider = jest.fn(async () => ({updated: 1}));
+const mockProviderPricingLimits = jest.fn(async () => ({
+  TOW: {baseMin: 100000, baseMax: 300000, perKmMin: 8000, perKmMax: 15000},
+  MOBILE_SHOP: {callOutMin: 0, callOutMax: 100000, travelPerKmMin: 3000, travelPerKmMax: 10000},
+}));
 
 jest.mock("../../../src/api/providers", () => {
   const actual = jest.requireActual("../../../src/api/providers") as Record<string, unknown>;
@@ -39,6 +43,7 @@ jest.mock("../../../src/api/providers", () => {
     ...actual,
     myProviders: (...args: unknown[]) => (mockMyProviders as (...a: unknown[]) => Promise<unknown>)(...args),
     updateProvider: (...args: unknown[]) => (mockUpdateProvider as (...a: unknown[]) => Promise<unknown>)(...args),
+    providerPricingLimits: (...args: unknown[]) => (mockProviderPricingLimits as (...a: unknown[]) => Promise<unknown>)(...args),
   };
 });
 
@@ -80,6 +85,7 @@ async function mount() {
 beforeEach(() => {
   mockMyProviders.mockReset();
   mockUpdateProvider.mockClear();
+  mockProviderPricingLimits.mockClear();
   mockMyProviders.mockResolvedValue([]);
 });
 
@@ -120,6 +126,25 @@ test("register button opens the matching form", async () => {
       await flush();
     });
     expect(textsUnder(renderer.root).filter((text) => text === en.provider.registerTow).length).toBe(2);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("the tow form shows the platform fee limits", async () => {
+  const renderer = await mount();
+  try {
+    const button = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.provider.registerTow && typeof n.props?.onPress === "function")
+      .at(0);
+    await act(async () => {
+      await button?.props.onPress();
+      await flush();
+    });
+    const all = textsUnder(renderer.root);
+    expect(mockProviderPricingLimits).toHaveBeenCalledWith("tok");
+    expect(all).toContain(`${en.provider.pricingLimit}: 100,000 – 300,000 ₫`);
+    expect(all).toContain(`${en.provider.pricingLimit}: 8,000 – 15,000 ₫`);
   } finally {
     renderer.unmount();
   }

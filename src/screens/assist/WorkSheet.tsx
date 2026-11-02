@@ -1,12 +1,14 @@
 import {useState} from "react";
-import {StyleSheet, View} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
+import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {statusPillColor, ticketStatusLabel} from "./ticketLabels";
 import {formatAmountInput, parseAmountInput} from "./money";
+import type {WorkItem} from "../../api/dispatch";
 
 export type WorkFormMode = "quote" | "done";
 
@@ -14,6 +16,20 @@ export type WorkFormValue = {
   workType: string;
   amount: number | null;
   invoiceRef: string;
+  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>;
+};
+
+type CatalogItem = {
+  code: string;
+  name: string;
+  displayPrice: number;
+  quoteRequired: boolean;
+};
+
+type ItemDraft = {
+  name: string;
+  qty: string;
+  unitPrice: string;
 };
 
 type Props = {
@@ -25,30 +41,105 @@ type Props = {
   error: string | null;
   initialWorkType?: string | null;
   initialInvoiceRef?: string | null;
+  initialItems?: WorkItem[] | null;
+  catalog?: CatalogItem[];
   onSubmit: (value: WorkFormValue) => void;
   onClose: () => void;
 };
 
-export default function WorkSheet({t, ticketLabel, mode, status, busy, error, initialWorkType, initialInvoiceRef, onSubmit, onClose}: Props) {
+function draftsFrom(items: WorkItem[] | null | undefined): ItemDraft[] {
+  return (items ?? []).map((item) => ({
+    name: item.name,
+    qty: String(item.qty),
+    unitPrice: formatAmountInput(String(item.unitPrice)),
+  }));
+}
+
+export default function WorkSheet({t, ticketLabel, mode, status, busy, error, initialWorkType, initialInvoiceRef, initialItems, catalog, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [workType, setWorkType] = useState(typeof initialWorkType === "string" ? initialWorkType : "");
   const [amount, setAmount] = useState("");
   const [invoiceRef, setInvoiceRef] = useState(typeof initialInvoiceRef === "string" ? initialInvoiceRef : "");
+  const [items, setItems] = useState<ItemDraft[]>(() => draftsFrom(initialItems));
   const [localError, setLocalError] = useState<string | null>(null);
+
+  function updateItem(index: number, patch: Partial<ItemDraft>): void {
+    setItems((prev) => prev.map((item, i) => i === index ? {...item, ...patch} : item));
+    setLocalError(null);
+  }
+
+  function addItem(): void {
+    setItems((prev) => [...prev, {name: "", qty: "1", unitPrice: ""}]);
+    setLocalError(null);
+  }
+
+  function addCatalogItem(item: CatalogItem): void {
+    setItems((prev) => [...prev, {
+      name: item.name,
+      qty: "1",
+      unitPrice: formatAmountInput(String(item.displayPrice)),
+    }]);
+    setLocalError(null);
+  }
+
+  function removeItem(index: number): void {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    setLocalError(null);
+  }
+
+  function itemTotal(): number {
+    return items.reduce((sum, item) => {
+      const qty = Number.parseInt(item.qty, 10);
+      const price = parseAmountInput(item.unitPrice);
+      if (!Number.isFinite(qty) || qty <= 0 || price === null) return sum;
+      return sum + qty * price;
+    }, 0);
+  }
+
   function send(): void {
+    const payloadItems = items.map((item) => ({
+      name: item.name.trim(),
+      qty: Number.parseInt(item.qty, 10),
+      unitPrice: parseAmountInput(item.unitPrice),
+    }));
+    const invalid = payloadItems.find((item) =>
+      item.name === "" ||
+      !Number.isInteger(item.qty) || item.qty < 1 ||
+      item.unitPrice === null);
+    if (invalid) {
+      setLocalError(t.provider.invalidItem);
+      return;
+    }
+    const cleanItems = payloadItems.map((item) => ({
+      name: item.name,
+      qty: item.qty,
+      unitPrice: item.unitPrice as number,
+    }));
     if (mode === "quote") {
-      const parsed = parseAmountInput(amount);
-      if (parsed === null) {
+      const parsed = cleanItems.length > 0 ? itemTotal() : parseAmountInput(amount);
+      if (parsed === null || parsed <= 0) {
         setLocalError(t.provider.invalidAmount);
         return;
       }
       setLocalError(null);
-      onSubmit({workType: workType.trim(), amount: parsed, invoiceRef: ""});
+      onSubmit({
+        workType: workType.trim(),
+        amount: parsed,
+        invoiceRef: "",
+        ...(cleanItems.length > 0 ? {items: cleanItems} : {}),
+      });
       return;
     }
-    onSubmit({workType: workType.trim(), amount: null, invoiceRef: invoiceRef.trim()});
+    setLocalError(null);
+    onSubmit({
+      workType: workType.trim(),
+      amount: null,
+      invoiceRef: invoiceRef.trim(),
+      ...(cleanItems.length > 0 ? {items: cleanItems} : {}),
+    });
   }
+
   return (
     <Overlay
       visible
@@ -75,7 +166,56 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
           placeholder={t.provider.workPlaceholder}
           placeholderTextColor={theme.muted}
         />
-        {mode === "quote" ? (
+        {mode === "quote" && catalog !== undefined && catalog.length > 0 ? (
+          <>
+            <Text style={[styles.label, {color: theme.text}]}>{t.provider.fixItems}</Text>
+            <View style={styles.catalogRow}>
+              {catalog.slice(0, 8).map((item) => (
+                <Pressable key={item.code} style={[styles.catalogChip, {borderColor: theme.primary}]} onPress={() => addCatalogItem(item)} accessibilityRole="button" accessibilityLabel={item.name}>
+                  <Text style={{color: theme.primary}}>{item.name}</Text>
+                  <Text style={[styles.catalogPrice, {color: theme.muted}]}>{`${item.displayPrice.toLocaleString()} ₫`}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
+        <View style={styles.itemsHead}>
+          <Text style={[styles.label, {color: theme.text}]}>{t.provider.invoiceItems}</Text>
+          <Pressable onPress={addItem} accessibilityRole="button" accessibilityLabel={t.provider.addItem}>
+            <Text style={{color: theme.primary, fontWeight: "700"}}>{t.provider.addItem}</Text>
+          </Pressable>
+        </View>
+        {items.map((item, index) => (
+          <View key={`item-${index}`} style={styles.itemRow}>
+            <TextInput
+              style={[styles.input, styles.itemName, {borderColor: theme.border, color: theme.text}]}
+              value={item.name}
+              onChangeText={(value) => updateItem(index, {name: value})}
+              placeholder={t.provider.itemName}
+              placeholderTextColor={theme.muted}
+            />
+            <TextInput
+              style={[styles.input, styles.itemQty, {borderColor: theme.border, color: theme.text}]}
+              value={item.qty}
+              onChangeText={(value) => updateItem(index, {qty: value.replace(/[^0-9]/g, "")})}
+              placeholder={t.provider.qty}
+              placeholderTextColor={theme.muted}
+              keyboardType="number-pad"
+            />
+            <TextInput
+              style={[styles.input, styles.itemPrice, {borderColor: theme.border, color: theme.text}]}
+              value={item.unitPrice}
+              onChangeText={(value) => updateItem(index, {unitPrice: formatAmountInput(value)})}
+              placeholder={t.provider.unitPrice}
+              placeholderTextColor={theme.muted}
+              keyboardType="number-pad"
+            />
+            <Pressable onPress={() => removeItem(index)} accessibilityRole="button" accessibilityLabel={t.provider.removeItem} hitSlop={8}>
+              <MaterialIcons name="close" size={18} color={theme.danger} />
+            </Pressable>
+          </View>
+        ))}
+        {mode === "quote" && items.length === 0 ? (
           <>
             <Text style={[styles.label, {color: theme.text}]}>{t.provider.quotedAmount}</Text>
             <TextInput
@@ -91,7 +231,14 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
               autoFocus
             />
           </>
-        ) : (
+        ) : null}
+        {items.length > 0 ? (
+          <View style={[styles.totalRow, {borderTopColor: theme.divider}]}>
+            <Text style={[styles.label, {color: theme.text}]}>{mode === "quote" ? t.provider.quoteTotal : t.provider.invoiceTotal}</Text>
+            <Text style={[styles.total, {color: theme.text}]}>{`${itemTotal().toLocaleString()} ₫`}</Text>
+          </View>
+        ) : null}
+        {mode === "done" ? (
           <>
             <Text style={[styles.label, {color: theme.text}]}>{t.provider.invoiceRef}</Text>
             <TextInput
@@ -103,7 +250,7 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
               maxLength={80}
             />
           </>
-        )}
+        ) : null}
       </View>
     </Overlay>
   );
@@ -116,4 +263,14 @@ const styles = StyleSheet.create({
   hint: {fontSize: 13},
   pill: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   pillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
+  catalogRow: {flexDirection: "row", flexWrap: "wrap", gap: 6},
+  catalogChip: {borderWidth: 1, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 8, gap: 1},
+  catalogPrice: {fontSize: 10},
+  itemsHead: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
+  itemRow: {flexDirection: "row", alignItems: "center", gap: 6},
+  itemName: {flex: 1, minWidth: 0},
+  itemQty: {width: 46, textAlign: "center"},
+  itemPrice: {width: 96},
+  totalRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, paddingTop: 8},
+  total: {fontSize: 16, fontWeight: "700"},
 });

@@ -1,5 +1,6 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
+import {ScrollView} from "react-native";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import RecordDetailSheet from "../../../../src/screens/assist/RecordDetailSheet";
 import {usePhotoUrl} from "../../../../src/services/photos";
@@ -92,6 +93,126 @@ function flatStyle(style: unknown): Record<string, unknown> {
   const flat = Array.isArray(style) ? style : [style];
   return Object.assign({}, ...flat.filter(Boolean));
 }
+
+test("the assigned tower marks arrival and delivery", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const arrived = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      direction: "in",
+      status: "2",
+      assignedShopId: "tow1",
+      otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
+    }),
+    ownTowId: "tow1",
+  });
+  try {
+    expect(texts(arrived)).toContain(en.assist.arrivedAtPickup);
+  } finally {
+    arrived.unmount();
+  }
+  const delivered = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      towKind: "RETURN",
+      direction: "in",
+      status: "3",
+      assignedShopId: "tow1",
+      loadedAt: "2026-01-01T00:00:00.000Z",
+      otherParty: {id: "rider1", name: "Rider", kind: "RIDER"},
+    }),
+    ownTowId: "tow1",
+  });
+  try {
+    expect(texts(delivered)).toContain(en.assist.deliveredToRider);
+  } finally {
+    delivered.unmount();
+  }
+});
+
+test("an unfixable walk-in still offers a return tow", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onRespondReturnTow = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "WALK_IN",
+      direction: "out",
+      status: "15",
+      returnTowOffer: {
+        status: "PENDING",
+        shopId: "shop-1",
+        by: "u9",
+        at: "2026-01-01T00:00:00.000Z",
+      },
+    }),
+    onRespondReturnTow,
+  });
+  try {
+    const action = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.assist.returnTow && typeof n.props?.onPress === "function")
+      .at(0);
+    expect(action).toBeDefined();
+    await act(async () => {
+      await action?.props.onPress();
+    });
+    expect(onRespondReturnTow).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}), true);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("an old unfixable walk-in offers a return tow without a stored offer", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onRespondReturnTow = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "WALK_IN",
+      direction: "out",
+      status: "15",
+      returnTowOffer: null,
+    }),
+    onRespondReturnTow,
+  });
+  try {
+    const action = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.assist.returnTow && typeof n.props?.onPress === "function")
+      .at(0);
+    expect(action).toBeDefined();
+    await act(async () => {
+      await action?.props.onPress();
+    });
+    expect(onRespondReturnTow).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}), true);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("the rider confirms receipt after delivery", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onConfirmTowReceived = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      direction: "out",
+      status: "4",
+      deliveredAt: "2026-01-01T00:00:00.000Z",
+      receivedAt: null,
+    }),
+    onConfirmTowReceived,
+  });
+  try {
+    const confirm = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.assist.confirmReceived && typeof n.props?.onPress === "function")
+      .at(0);
+    expect(confirm).toBeDefined();
+    await act(async () => {
+      await confirm?.props.onPress();
+    });
+    expect(onConfirmTowReceived).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}));
+  } finally {
+    renderer.unmount();
+  }
+});
 
 test("shop phone number renders with a call icon", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
@@ -348,14 +469,149 @@ test("previous SOS is a compact link that opens a read-only summary", async () =
         (n.props.accessibilityLabel as string).includes(en.assist.previousSos))
       .find((n) => typeof n.props?.onPress === "function");
     expect(row).toBeDefined();
+    const scrollsBefore = renderer.root.findAllByType(ScrollView)
+      .filter((node) => node.props.horizontal !== true).length;
     await act(async () => {
       await row?.props.onPress();
     });
+    const scrollsAfter = renderer.root.findAllByType(ScrollView)
+      .filter((node) => node.props.horizontal !== true).length;
+    expect(scrollsAfter).toBe(scrollsBefore);
     expect(texts(renderer)).toContain(en.assist.previousShopEvidence);
     expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://evidence.jpg").length).toBeGreaterThan(0);
   } finally {
     await act(async () => {
       renderer.unmount();
     });
+  }
+});
+
+test("the detail body scrolls so the footer stays reachable", async () => {
+  const renderer = await render();
+  try {
+    const vertical = renderer.root.findAllByType(ScrollView)
+      .filter((node) => node.props.horizontal !== true);
+    expect(vertical.length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a revised invoice asks the rider to approve it", async () => {
+  const onApproveInvoice = jest.fn();
+  const renderer = await render({
+    ticket: ticket({invoiceApproval: "PENDING", invoiceAmount: 180000, shopQuotedAmount: 150000}),
+    onApproveInvoice,
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.invoicePending);
+    const action = renderer.root.findAll((n) =>
+      n.props?.accessibilityLabel === en.assist.approveInvoice &&
+      typeof n.props?.onPress === "function")[0];
+    expect(action).toBeDefined();
+    await act(async () => {
+      await action?.props.onPress();
+    });
+    expect(onApproveInvoice).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}));
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a mobile fix approval lives in the payment card", async () => {
+  const onApproveMobileFix = jest.fn();
+  const onDeclineMobileFix = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      direction: "out",
+      status: "9",
+      assignedShopId: "mobile-1",
+      finalAmount: 120000,
+    }),
+    onApproveMobileFix,
+    onDeclineMobileFix,
+  });
+  try {
+    const approve = renderer.root.findAll((n) =>
+      n.props?.testID === "fees-quote-approve")[0];
+    const decline = renderer.root.findAll((n) =>
+      n.props?.testID === "fees-quote-decline")[0];
+    const approveSlot = renderer.root.findAll((n) =>
+      n.props?.testID === "fees-quote-approve-slot")[0];
+    const declineSlot = renderer.root.findAll((n) =>
+      n.props?.testID === "fees-quote-decline-slot")[0];
+    expect(approve).toBeDefined();
+    expect(decline).toBeDefined();
+    expect(flatStyle(approveSlot?.props.style).flex).toBe(1);
+    expect(flatStyle(declineSlot?.props.style).flex).toBe(1);
+    await act(async () => {
+      await approve?.props.onPress();
+    });
+    expect(onApproveMobileFix).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}));
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("prior mobile and tower partials stay visible in the money block", async () => {
+  const mobile = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      direction: "out",
+      status: "4",
+      assignedShopId: "mobile-1",
+      finalAmount: 120000,
+      mobileFeeHistory: [{shopId: "mobile-0", callOutFee: 30000, travelFee: 5000, waived: false, declinedAt: "2026-01-01T00:00:00.000Z"}],
+    }),
+  });
+  try {
+    expect(texts(mobile)).toContain(en.assist.priorMobileFees);
+  } finally {
+    mobile.unmount();
+  }
+  const tow = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      direction: "out",
+      status: "4",
+      towFare: {estimate: 300000, ceiling: 330000, final: 200000, deadheadKm: 0, loadedKm: 0, night: false},
+      towFeeHistory: [{shopId: "tow-0", amount: 50000, deadheadKm: 2, loadedKm: 1, at: "2026-01-01T00:00:00.000Z"}],
+    }),
+  });
+  try {
+    expect(texts(tow)).toContain(en.assist.priorTowPartial);
+  } finally {
+    tow.unmount();
+  }
+});
+
+test("a declined mobile fix uses mobile wording, not tower wording", async () => {
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      direction: "in",
+      status: "1",
+      formerAssignment: true,
+      formerAssignmentKind: "MOBILE_SHOP",
+      mobileFeeHistory: [{
+        shopId: "mobile-1",
+        callOutFee: 50000,
+        travelFee: 10000,
+        waived: false,
+        declinedAt: "2026-01-01T00:00:00.000Z",
+        reason: "PRICE_TOO_HIGH",
+      }],
+    }),
+  });
+  try {
+    const all = texts(renderer);
+    expect(all.some((text) =>
+      text.startsWith(en.assist.formerFixDeclinedBanner))).toBe(true);
+    expect(all.some((text) =>
+      text.includes(en.assist.quoteDeclinePrice))).toBe(true);
+    expect(all.join(" ")).not.toContain(en.assist.formerAssignmentBanner);
+  } finally {
+    renderer.unmount();
   }
 });
