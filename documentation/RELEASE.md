@@ -97,10 +97,11 @@ breaks updates without a compile error anywhere.
 
 ### Current rollout
 
-`v0.2.1` is the current published build. `v0.2.0` introduced curated release
-notes and explicit Latest marking; `v0.2.1` fixes the Route hazard-placement
-hint that blocked map taps. Install `v0.2.1` over `v0.2.0` with the same
-signing key to verify the in-app updater path.
+`v0.2.2` is the current published build. It adds the tower-owned TOW
+arrival/delivery flow, return-tow billing on the journey bill, provider
+pricing and subscriptions, and the walk-in quote-decline fix. Install
+`v0.2.2` over `v0.2.1` with the same signing key to verify the in-app
+updater path.
 
 ### Verify a published release
 
