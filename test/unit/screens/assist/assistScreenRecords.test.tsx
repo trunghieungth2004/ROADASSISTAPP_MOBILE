@@ -10,6 +10,8 @@ import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
 }));
@@ -113,14 +115,14 @@ export function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/mine") return envelope(mockMine);
-    if (u.pathname === "/dispatch/one") return envelope(mockOne);
-    if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
-    if (u.pathname === "/dispatch/near") return envelope(mockNear);
-    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
-    if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
-    if (u.pathname === "/providers/ratings") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/mine") return envelope(mockMine);
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOne);
+    if (apiPath(u) === "/dispatch/feed") return envelope(mockFeed);
+    if (apiPath(u) === "/dispatch/near") return envelope(mockNear);
+    if (apiPath(u) === "/providers/mine") return envelope(mockOwnProviders);
+    if (apiPath(u) === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
@@ -131,23 +133,23 @@ export function installFetch(): void {
         completedJobs: 7,
       });
     }
-    if (u.pathname === "/vehicleProfiles/all") {
+    if (apiPath(u) === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "BIKE", baseWidth: 0.7, baseHeight: 1.1},
         {id: "v2", type: "CAR", baseWidth: 1.9, baseHeight: 1.5},
       ]);
     }
-    if (u.pathname === "/providers/near") {
+    if (apiPath(u) === "/providers/near") {
       return envelope([
         {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330, ...(mockClosesIn === null ? {} : {closesInMinutes: mockClosesIn})},
       ]);
     }
-    if (u.pathname === "/providers/search") {
+    if (apiPath(u) === "/providers/search") {
       return envelope([
         {id: "s2", kind: "SHOP", name: "Good Shop North", lat: 10.72, lng: 106.62, status: "ACTIVE", accepting: true, openNow: true, distance: 900},
       ]);
     }
-    if (u.pathname === "/routes") {
+    if (apiPath(u) === "/routes") {
       return envelope({cached: false, routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]});
     }
     return envelope([]);
@@ -390,7 +392,7 @@ test("records row rates a resolved ticket", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t9", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "4", assignedShopId: "shop9", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "SOS · Resolved");
+    await openRecord(renderer, "SOS · Completed");
     const rate = sheetAction(renderer, en.assist.rate);
     expect(rate).toBeDefined();
     await act(async () => {
@@ -492,7 +494,7 @@ test("incoming job quote requires an amount", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     const open = sheetAction(renderer, en.assist.sendQuote);
     expect(open).toBeDefined();
     await act(async () => {
@@ -518,7 +520,7 @@ test("incoming resolved job replies and rates the rider", async () => {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "4", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
     mockTicketRatings = [{id: "r1", targetId: "shop9", targetKind: "SHOP", score: 5, reply: null, repliedAt: null}];
-    await openRecord(renderer, "Walk-in · Resolved");
+    await openRecord(renderer, "Walk-in · Completed");
     expect(seen.some((call) => call.path === "/ratings/by-ticket")).toBe(true);
     const send = sheetAction(renderer, en.rating.sendReply);
     expect(send).toBeDefined();
@@ -575,7 +577,7 @@ test("vehicle button opens the picker and activates", async () => {
     const flatText = (node: ReactTestInstance): string =>
       node.findAll((n) => typeof n.props?.children === "string").map((n) => n.props.children as string).join(" ");
     const rows = renderer.root.findAll((n) => typeof n.props?.onPress === "function" && n.props?.accessibilityRole === "button");
-    const cub = rows.find((n) => flatText(n).includes("Car"));
+    const cub = rows.find((n) => n.props?.accessibilityLabel === en.vehicle.types.CAR || flatText(n).includes("Car"));
     expect(cub).toBeDefined();
     await act(async () => {
       await cub?.props.onPress();

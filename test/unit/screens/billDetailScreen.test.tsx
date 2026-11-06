@@ -5,6 +5,7 @@ import {Alert, Text} from "react-native";
 import BillDetailScreen from "../../../src/screens/BillDetailScreen";
 import {en} from "../../../src/i18n/en";
 import type {Bill} from "../../../src/api/bills";
+import {billDateTimeLabel} from "../../../src/screens/bills/billLabels";
 
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
@@ -66,14 +67,40 @@ const UNPAID_BILL: Bill = {
   ticketStatus: "4",
   createdAt: "2026-10-03T10:00:00.000Z",
   currency: "VND",
-  total: 370000,
+  total: 220000,
   paid: 0,
-  due: 370000,
+  due: 220000,
   status: "UNPAID",
   viewer: "RIDER",
   canPay: true,
   items: [
-    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "UNPAID", payeeId: "op1", payeeName: "Tow Co", qrUrl: null, payment: null},
+    {kind: "TOW_FARE", ticketId: "tow1", ticketType: "TOW", ticketStatus: "4", amount: 220000, waitingFee: 20000, status: "UNPAID", payeeId: "op1", payeeName: "Tow Co", qrUrl: null, payment: null,
+      baseFee: 200000, perKmFee: 10000, includedKm: 10, billableKm: 1.01,
+      distanceKm: 11.01, totalDistanceKm: 20.94, ceiling: 242000, night: false, nightMultiplier: 1.5, vehicleClass: "SOLO_BIKE",
+      pickup: {lat: 10.7, lng: 106.6},
+      destination: {lat: 10.75, lng: 106.7, shopId: "shop1", name: "Fix Shop", label: "12 Nguyen Trai"},
+      breakdown: [
+        {code: "BASE", label: "Base fare", amount: 200000, detail: null},
+        {code: "DISTANCE", label: "Distance", amount: 0, detail: null},
+        {code: "WAITING", label: "Waiting", amount: 20000, detail: "5 min"},
+      ]},
+  ],
+};
+
+const SINGLE_REPAIR_UNPAID: Bill = {
+  billId: "walk1",
+  ticketId: "walk1",
+  ticketType: "WALK_IN",
+  ticketStatus: "9",
+  createdAt: "2026-10-03T10:00:00.000Z",
+  currency: "VND",
+  total: 150000,
+  paid: 0,
+  due: 150000,
+  status: "UNPAID",
+  viewer: "RIDER",
+  canPay: true,
+  items: [
     {kind: "REPAIR", ticketId: "walk1", ticketType: "WALK_IN", ticketStatus: "9", amount: 150000, waitingFee: 0, status: "UNPAID", payeeId: "op2", payeeName: "Fix Shop", qrUrl: null, payment: null},
   ],
 };
@@ -179,12 +206,10 @@ test("bill detail itemizes the journey", async () => {
   const renderer = await mount();
   try {
     const all = texts(renderer);
-    expect(all).toContain(en.bills.journey);
     expect(all).toContain(en.bills.towFare);
-    expect(all).toContain(en.bills.repair);
     expect(all).toContain("220,000 VND");
-    expect(all).toContain(`${en.bills.waiting}: 20,000 VND`);
-    expect(all).toContain("370,000 VND");
+    expect(all).toContain(en.bills.waiting);
+    expect(all).toContain("20,000 VND");
     expect(all).toContain(en.bills.statusUnpaid);
     expect(mockFetchBill).toHaveBeenCalledWith("tok", {ticketId: "tow1"});
   } finally {
@@ -192,13 +217,132 @@ test("bill detail itemizes the journey", async () => {
   }
 });
 
+test("shows the TOW coverage, fare cap, parties and bill time", async () => {
+  const renderer = await mount();
+  try {
+    const all = texts(renderer);
+    expect(all).toContain(en.assist.pickup);
+    expect(all).toContain(en.assist.dropOffPoint);
+    expect(all.join(" ")).toContain("12 Nguyen Trai");
+    expect(all).not.toContain("Fix Shop");
+    expect(all).toContain(en.bills.includedFirstKm.replace("{km}", "10"));
+    expect(all.join(" ")).toContain(en.bills.loadedDistance);
+    expect(all.join(" ")).toContain("11.01 km");
+    expect(all.join(" ")).toContain(en.bills.fareCap);
+    expect(all.join(" ")).toContain("242,000 VND");
+    expect(all.join(" ")).not.toContain(en.bills.baseFareCovers.replace("{km}", "10"));
+    expect(all.join(" ")).not.toContain(en.bills.baseFareExcludes.replace("{km}", "10"));
+    expect(all.join(" ")).not.toContain(en.bills.fareCapHint);
+    expect(all.join(" ")).toContain(billDateTimeLabel(UNPAID_BILL.createdAt));
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a repair bill has no pickup or drop-off row", async () => {
+  mockFetchBill.mockReset();
+  mockFetchBill.mockResolvedValue(SINGLE_REPAIR_UNPAID);
+  const renderer = await mount();
+  try {
+    const all = texts(renderer);
+    expect(all).not.toContain(en.assist.pickup);
+    expect(all).not.toContain(en.assist.dropOffPoint);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a partial tow labels the traveled distance as deadhead", async () => {
+  const partial: Bill = {
+    ...UNPAID_BILL,
+    total: 32000,
+    paid: 0,
+    due: 32000,
+    status: "UNPAID",
+    items: [{
+      ...UNPAID_BILL.items[0],
+      amount: 32000,
+      distanceKm: 3.2,
+      breakdown: [{code: "TRAVELED", label: "Traveled distance", amount: 32000, detail: "3.20 km"}],
+    }],
+  };
+  mockFetchBill.mockReset();
+  mockFetchBill.mockResolvedValue(partial);
+  const renderer = await mount();
+  try {
+    const all = texts(renderer).join(" ");
+    expect(all).toContain(`${en.bills.deadheadDistance}: 3.20 km`);
+    expect(all).not.toContain(en.bills.loadedDistance);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("an SOS bill keeps travel detail and hides vehicle, kind and addresses", async () => {
+  const sos: Bill = {
+    billId: "sos1",
+    ticketId: "sos1",
+    ticketType: "SOS",
+    ticketStatus: "4",
+    createdAt: "2026-10-03T10:00:00.000Z",
+    currency: "VND",
+    total: 90000,
+    paid: 0,
+    due: 90000,
+    status: "UNPAID",
+    viewer: "RIDER",
+    canPay: true,
+    items: [
+      {
+        kind: "REPAIR",
+        ticketId: "sos1",
+        ticketType: "SOS",
+        ticketStatus: "4",
+        amount: 90000,
+        waitingFee: 0,
+        serviceType: "SOS",
+        rider: {uid: "u1", name: "Rider One", phone: "0900000001"},
+        provider: {id: "mobile1", name: "Mobile Shop", kind: "MOBILE_SHOP", phone: "0900000002", label: null},
+        vehicleLabel: "Toyota",
+        vehiclePlate: "65-X1 12455",
+        pickup: {lat: 10.7, lng: 106.6},
+        destination: {lat: 10.75, lng: 106.7, shopId: "mobile1", name: "Mobile Shop", label: "12 Nguyen Trai"},
+        breakdown: [{code: "TRAVEL", label: "Travel", amount: 40000, detail: "8.00 km × 5.000 ₫/km"}],
+        status: "UNPAID",
+        payeeId: "op1",
+        payeeName: "Mobile Shop",
+        qrUrl: null,
+        payment: null,
+      },
+    ],
+  };
+  mockParams = {ticketId: "sos1"};
+  mockFetchBill.mockReset();
+  mockFetchBill.mockResolvedValue(sos);
+  const renderer = await mount();
+  try {
+    const all = texts(renderer);
+    expect(all.join(" ")).toContain("8.00 km × 5.000 ₫/km");
+    expect(all).toContain("Rider One");
+    expect(all).toContain("Mobile Shop");
+    expect(all).not.toContain("MOBILE_SHOP");
+    expect(all.join(" ")).not.toContain("Toyota");
+    expect(all.join(" ")).not.toContain("65-X1 12455");
+    expect(all).not.toContain(en.assist.pickup);
+    expect(all).not.toContain(en.assist.dropOffPoint);
+    expect(all.join(" ")).not.toContain("12 Nguyen Trai");
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("paying a sepay item arms it and opens checkout", async () => {
   mockFetchBill.mockReset();
-  mockFetchBill.mockResolvedValueOnce(UNPAID_BILL).mockResolvedValue(ARMED_BILL);
+  mockFetchBill.mockResolvedValueOnce(SINGLE_REPAIR_UNPAID).mockResolvedValue(ARMED_BILL);
   mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/checkout"});
   const renderer = await mount();
   try {
-    const pay = pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`);
+    const pay = pressable(renderer, en.bills.paySepay);
     expect(pay).toBeDefined();
     await act(async () => {
       pay?.props.onPress?.();
@@ -263,10 +407,10 @@ test("SePay page cancel cancels the pending charge", async () => {
 
 test("paying a cash item arms it without a checkout", async () => {
   mockFetchBill.mockReset();
-  mockFetchBill.mockResolvedValueOnce(UNPAID_BILL).mockResolvedValue(CASH_PENDING_BILL);
+  mockFetchBill.mockResolvedValueOnce(SINGLE_REPAIR_UNPAID).mockResolvedValue(CASH_PENDING_BILL);
   const renderer = await mount();
   try {
-    const pay = pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`);
+    const pay = pressable(renderer, en.bills.payCash);
     expect(pay).toBeDefined();
     await act(async () => {
       pay?.props.onPress?.();
@@ -314,10 +458,8 @@ test("a read-only bill hides payment actions", async () => {
   const renderer = await mount();
   try {
     expect(texts(renderer)).toContain(en.bills.readOnly);
-    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.towFare}`)).toBeUndefined();
-    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.towFare}`)).toBeUndefined();
-    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`)).toBeUndefined();
-    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`)).toBeUndefined();
+    expect(pressable(renderer, en.bills.paySepay)).toBeUndefined();
+    expect(pressable(renderer, en.bills.payCash)).toBeUndefined();
   } finally {
     renderer.unmount();
   }
@@ -351,8 +493,8 @@ test("a payee bill shows only their item and payout", async () => {
     expect(all).toContain(en.payments.payoutPending);
     expect(all).toContain(en.bills.repair);
     expect(all).not.toContain(en.bills.towFare);
-    expect(pressable(renderer, `${en.bills.paySepay} ${en.bills.repair}`)).toBeUndefined();
-    expect(pressable(renderer, `${en.bills.payCash} ${en.bills.repair}`)).toBeUndefined();
+    expect(pressable(renderer, en.bills.paySepay)).toBeUndefined();
+    expect(pressable(renderer, en.bills.payCash)).toBeUndefined();
   } finally {
     renderer.unmount();
   }
@@ -364,7 +506,7 @@ test("a payee confirms cash from the scoped bill", async () => {
   mockFetchBill.mockResolvedValueOnce(CASH_PAYEE_BILL).mockResolvedValue(PAYEE_BILL);
   const renderer = await mount();
   try {
-    const confirm = pressable(renderer, `${en.assist.cashConfirmReceipt} ${en.bills.repair}`);
+    const confirm = pressable(renderer, en.assist.cashConfirmReceipt);
     expect(confirm).toBeDefined();
     await act(async () => {
       confirm?.props.onPress?.();
@@ -384,7 +526,7 @@ test("a read-only payee bill hides cash confirmation", async () => {
   const renderer = await mount();
   try {
     expect(texts(renderer)).toContain(en.bills.readOnly);
-    expect(pressable(renderer, `${en.assist.cashConfirmReceipt} ${en.bills.repair}`)).toBeUndefined();
+    expect(pressable(renderer, en.assist.cashConfirmReceipt)).toBeUndefined();
   } finally {
     renderer.unmount();
   }

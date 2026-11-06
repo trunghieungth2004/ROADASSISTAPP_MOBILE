@@ -194,8 +194,8 @@ test("a rider without a provider sees only the to-pay list", async () => {
     const all = texts(renderer);
     expect(all).toContain(en.payments.toPay);
     expect(all).not.toContain(en.payments.toReceive);
-    expect(all).toContain(en.bills.journey);
-    expect(mockPayeeBills).toHaveBeenCalledWith("tok");
+    expect(all).toContain(en.bills.towFare);
+    expect(mockPayeeBills).not.toHaveBeenCalled();
   } finally {
     renderer.unmount();
   }
@@ -218,12 +218,12 @@ test("a provider switches between to-pay and to-receive", async () => {
     expect(all).toContain("135,000 VND");
     expect(all).toContain(en.payments.payoutPending);
     expect(all).toContain(`${en.payments.collected} 150,000`);
-    const row = pressable(renderer, `${en.bills.journey} 135,000 VND`);
+    const row = pressable(renderer, `${en.bills.visit} 135,000 VND`);
     expect(row).toBeDefined();
     await act(async () => {
       row?.props.onPress?.();
     });
-    expect(mockNavigate).toHaveBeenCalledWith("BillDetail", {ticketId: "tow1", scope: "payee"});
+    expect(texts(renderer)).toContain(en.payments.detailTitle);
   } finally {
     renderer.unmount();
   }

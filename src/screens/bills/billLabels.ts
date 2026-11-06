@@ -108,11 +108,44 @@ export function billDateLabel(createdAt: string | null): string {
   return `${day}/${month}/${at.getFullYear()}`;
 }
 
+export function billDateTimeLabel(createdAt: string | null): string {
+  if (!createdAt) return "";
+  const at = new Date(createdAt);
+  if (Number.isNaN(at.getTime())) return "";
+  const day = String(at.getDate()).padStart(2, "0");
+  const month = String(at.getMonth() + 1).padStart(2, "0");
+  const hours = String(at.getHours()).padStart(2, "0");
+  const minutes = String(at.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${at.getFullYear()} · ${hours}:${minutes}`;
+}
+
+export function billServiceType(bill: Bill): "TOW" | "REPAIR" | "SOS" {
+  const row = bill.items.find((item) => item.serviceType !== undefined);
+  if (row?.serviceType !== undefined) return row.serviceType;
+  if (bill.ticketType === "TOW") return "TOW";
+  if (bill.ticketType === "SOS") return "SOS";
+  return "REPAIR";
+}
+
+export function billMatchesService(
+  bill: Bill,
+  service: "TOW" | "REPAIR" | "SOS",
+): boolean {
+  if (bill.items.length === 0) return billServiceType(bill) === service;
+  return bill.items.some((item) => {
+    const type = item.serviceType ??
+      (bill.ticketType === "TOW" ? "TOW" :
+        bill.ticketType === "SOS" ? "SOS" : "REPAIR");
+    return type === service;
+  });
+}
+
 export function billTitle(bill: Bill, t: Strings): string {
-  if (bill.ticketType === "SOS") {
-    return bill.items.length > 1 ? t.bills.journey : t.assist.mobileCallOut;
-  }
-  return bill.ticketType === "TOW" ? t.bills.journey : t.bills.visit;
+  if (bill.ticketType === "SOS") return t.assist.mobileCallOut;
+  const kind = bill.items[0]?.kind;
+  if (kind === "TOW_FARE") return t.bills.towFare;
+  if (kind === "REPAIR") return t.bills.visit;
+  return bill.ticketType === "TOW" ? t.bills.towFare : t.bills.visit;
 }
 
 export function billItemCount(bill: Bill, t: Strings): string {

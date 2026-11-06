@@ -17,6 +17,8 @@ export type BillPayment = {
   payoutAt: string | null;
   payoutStatus: BillPayoutStatus;
   canConfirmCash: boolean;
+  createdAt?: string | null;
+  confirmedAt?: string | null;
 };
 
 export type BillItem = {
@@ -26,8 +28,96 @@ export type BillItem = {
   ticketStatus: string;
   amount: number;
   waitingFee: number;
-  items?: Array<{name: string; qty: number; unitPrice: number; amount: number}>;
+  distanceKm?: number | null;
+  totalDistanceKm?: number | null;
+  deadheadKm?: number | null;
+  loadedQuotedKm?: number | null;
+  baseFee?: number | null;
+  perKmFee?: number | null;
+  includedKm?: number | null;
+  billableKm?: number | null;
+  ceiling?: number | null;
+  night?: boolean | null;
+  nightMultiplier?: number | null;
+  vehicleClass?: string | null;
+  pickup?: {lat: number; lng: number} | null;
+  destination?: {
+    lat: number;
+    lng: number;
+    shopId?: string | null;
+    name?: string | null;
+    label?: string | null;
+  } | null;
+  warrantyUntil?: string | null;
+  refundRequest?: {
+    id: string;
+    status: string;
+    amount: number;
+    transferRef: string | null;
+    requestedAt: string;
+  } | null;
+  breakdown?: Array<{
+    code?: string;
+    label: string;
+    amount: number;
+    detail: string | null;
+  }>;
+  items?: Array<{
+    lineId?: string;
+    kind?: string;
+    serviceCode?: string;
+    category?: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+    priceMode?: string;
+    listPrice?: number;
+    warrantyDays?: number;
+    warrantyUntil?: string | null;
+    note?: string;
+    legacy?: boolean;
+  }>;
+  services?: Array<{
+    lineId?: string;
+    serviceCode?: string;
+    category?: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+    priceMode?: string;
+    warrantyUntil?: string | null;
+  }>;
+  extras?: Array<{
+    lineId?: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+    note?: string;
+  }>;
   status: string;
+  serviceType?: "TOW" | "REPAIR" | "SOS";
+  rider?: {uid: string; name: string; phone: string | null} | null;
+  provider?: {
+    id: string;
+    name: string;
+    kind: string;
+    phone: string | null;
+    label: string | null;
+  } | null;
+  vehicleLabel?: string | null;
+  vehiclePlate?: string | null;
+  mobileTravelKm?: number | null;
+  mobileTravelRate?: number | null;
+  amountDue?: number;
+  deposit?: {
+    amount: number;
+    status: string;
+    method: string | null;
+    paidAt: string | null;
+  } | null;
   payeeId: string | null;
   payeeName: string | null;
   qrUrl: string | null;
@@ -60,4 +150,14 @@ export async function payeeBills(token: string, limit?: number): Promise<Bill[]>
 
 export async function fetchBill(token: string, params: {ticketId?: string; billId?: string; scope?: "payee"}): Promise<Bill> {
   return api.post<Bill>("/bills/one", params, token);
+}
+
+export function requestInvoice(ticketId: string, token: string): Promise<{
+  invoiceId: string;
+  number: string;
+  url: string;
+  expiresAt: string;
+  status: string;
+}> {
+  return api.post("/bills/invoice", {ticketId}, token);
 }

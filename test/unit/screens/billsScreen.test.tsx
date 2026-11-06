@@ -5,6 +5,7 @@ import {Text} from "react-native";
 import BillsScreen from "../../../src/screens/BillsScreen";
 import {en} from "../../../src/i18n/en";
 import type {Bill} from "../../../src/api/bills";
+import {billDateTimeLabel} from "../../../src/screens/bills/billLabels";
 
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
@@ -132,13 +133,13 @@ test("bills list journeys and standalone visits", async () => {
   const renderer = await mount();
   try {
     const all = texts(renderer);
-    expect(all).toContain(en.bills.journey);
+    expect(all).toContain(en.bills.towFare);
     expect(all).toContain(en.bills.visit);
     expect(all).toContain("370,000 VND");
     expect(all).toContain("90,000 VND");
     expect(all).toContain(en.bills.statusPartial);
     expect(all).toContain(en.bills.statusUnpaid);
-    expect(all).toContain("03/10/2026 · 2 items · Tow Co · Fix Shop");
+    expect(all).toContain(`${billDateTimeLabel("2026-10-03T10:00:00.000Z")} · #tow1`);
   } finally {
     renderer.unmount();
   }
@@ -148,12 +149,12 @@ test("tapping a bill opens its detail", async () => {
   mockMyBills.mockResolvedValue([TOW_BILL]);
   const renderer = await mount();
   try {
-    const row = pressable(renderer, `${en.bills.journey} 370,000 VND`);
+    const row = pressable(renderer, `${en.bills.towFare} 370,000 VND`);
     expect(row).toBeDefined();
     await act(async () => {
       row?.props.onPress?.();
     });
-    expect(mockNavigate).toHaveBeenCalledWith("BillDetail", {ticketId: "tow1"});
+    expect(texts(renderer)).toContain(en.payments.detailTitle);
   } finally {
     renderer.unmount();
   }

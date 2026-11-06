@@ -1,11 +1,18 @@
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View} from "react-native";
-import {AppText as Text} from "../components/ui/AppText";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation, useRoute} from "@react-navigation/native";
 import {toMessage} from "../api/client";
 import {payeeBills, type Bill} from "../api/bills";
-import {myPayouts, type PayoutSummary} from "../api/payouts";
+import {
+  myPayouts,
+  payoutBanks,
+  requestPayout,
+  savePayoutAccount,
+  type PayoutBank,
+  type PayoutSummary,
+} from "../api/payouts";
 import {myProviders, type Provider} from "../api/providers";
 import {useAuth} from "../context/AuthContext";
 import {useBills} from "../context/BillsContext";
@@ -13,12 +20,16 @@ import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
 import {darkTheme, lightTheme, type AppTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
+import Overlay from "../components/overlay/Overlay";
 import BillRow from "./bills/BillRow";
-import {billDateLabel} from "./bills/billLabels";
+import PaymentDetailSheet from "./bills/PaymentDetailSheet";
+import {billDateLabel, billMatchesService, payeeSummary} from "./bills/billLabels";
+import ServiceIcon from "../components/ui/ServiceIcon";
 import {operatedKinds} from "./more/providerUi";
 import type {Strings} from "../i18n/en";
 
 type Tab = "pay" | "receive";
+type ServiceFilter = "ALL" | "TOW" | "REPAIR" | "SOS";
 
 function EmptyState({tab, t, theme}: {tab: Tab; t: Strings; theme: AppTheme}) {
   return (
@@ -30,13 +41,41 @@ function EmptyState({tab, t, theme}: {tab: Tab; t: Strings; theme: AppTheme}) {
   );
 }
 
-function PayoutHistory({summary, t, theme, highlightId}: {summary: PayoutSummary; t: Strings; theme: AppTheme; highlightId?: string}) {
+function requestStatusLabel(status: string, t: Strings): string {
+  if (status === "PAID") return t.payments.requestStatusPAID;
+  if (status === "REJECTED") return t.payments.requestStatusREJECTED;
+  if (status === "CANCELLED") return t.payments.requestStatusCANCELLED;
+  return t.payments.requestStatusPENDING;
+}
+
+function PayoutHistory({
+  summary,
+  t,
+  theme,
+  highlightId,
+  onEditAccount,
+  onWithdraw,
+}: {
+  summary: PayoutSummary;
+  t: Strings;
+  theme: AppTheme;
+  highlightId?: string;
+  onEditAccount: () => void;
+  onWithdraw: () => void;
+}) {
+  const account = summary.account;
+  const masked = account ? `•••• ${account.accountNumber.slice(-4)}` : null;
   return (
     <View style={styles.payoutSection}>
       <View style={[styles.payoutSummary, {backgroundColor: theme.paper, borderColor: theme.border}]}>
         <View style={styles.payoutSummaryCell}>
-          <Text style={[styles.payoutSummaryLabel, {color: theme.muted}]}>{t.payments.payoutPending}</Text>
-          <Text style={[styles.payoutSummaryValue, {color: theme.text}]}>{`${summary.pending.net.toLocaleString()} VND`}</Text>
+          <Text style={[styles.payoutSummaryLabel, {color: theme.muted}]}>{t.payments.available}</Text>
+          <Text style={[styles.payoutSummaryValue, {color: theme.text}]}>{`${(summary.pending.available ?? 0).toLocaleString()} VND`}</Text>
+        </View>
+        <View style={[styles.payoutSummaryDivider, {backgroundColor: theme.divider}]} />
+        <View style={styles.payoutSummaryCell}>
+          <Text style={[styles.payoutSummaryLabel, {color: theme.muted}]}>{t.payments.commissionOwed}</Text>
+          <Text style={[styles.payoutSummaryValue, {color: summary.pending.commissionOwed > 0 ? theme.danger : theme.text}]}>{`${(summary.pending.commissionOwed ?? 0).toLocaleString()} VND`}</Text>
         </View>
         <View style={[styles.payoutSummaryDivider, {backgroundColor: theme.divider}]} />
         <View style={styles.payoutSummaryCell}>
@@ -44,6 +83,40 @@ function PayoutHistory({summary, t, theme, highlightId}: {summary: PayoutSummary
           <Text style={[styles.payoutSummaryValue, {color: theme.success}]}>{`${summary.settled.net.toLocaleString()} VND`}</Text>
         </View>
       </View>
+      <View style={[styles.accountCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+        <MaterialIcons name="account-balance" size={20} color={theme.primary} />
+        <View style={styles.accountText}>
+          <Text style={[styles.accountTitle, {color: theme.text}]}>{account ? account.bankName : t.payments.addAccount}</Text>
+          {account ? (
+            <Text style={[styles.payoutMeta, {color: theme.muted}]}>{`${masked} · ${account.holderName}`}</Text>
+          ) : null}
+        </View>
+        <Pressable style={[styles.smallBtn, {borderColor: theme.primary}]} onPress={onEditAccount} accessibilityRole="button">
+          <Text style={{color: theme.primary, fontSize: 12, fontWeight: "700"}}>{account ? t.payments.editAccount : t.payments.addAccount}</Text>
+        </Pressable>
+      </View>
+      {(summary.pendingRequestCount ?? 0) > 0 ? (
+        <Text style={[styles.payoutMeta, {color: theme.muted}]}>{t.payments.requestPending}</Text>
+      ) : (summary.pending.available ?? 0) > 0 ? (
+        <Pressable style={[styles.withdrawBtn, {backgroundColor: theme.primary}]} onPress={onWithdraw} accessibilityRole="button">
+          <MaterialIcons name="payments" size={18} color="#fff" />
+          <Text style={styles.withdrawText}>{t.payments.withdraw}</Text>
+        </Pressable>
+      ) : null}
+      {(summary.requests ?? []).length > 0 ? (
+        <>
+          <Text style={[styles.sectionLabel, {color: theme.text}]}>{t.payments.requests}</Text>
+          {(summary.requests ?? []).map((request) => (
+            <View key={request.id} style={[styles.requestRow, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <View style={styles.accountText}>
+                <Text style={[styles.payoutRef, {color: theme.text}]}>{`${request.amount.toLocaleString()} VND`}</Text>
+                <Text style={[styles.payoutMeta, {color: theme.muted}]}>{billDateLabel(request.requestedAt)}</Text>
+              </View>
+              <Text style={[styles.payoutStatus, {color: request.status === "PAID" ? theme.success : request.status === "REJECTED" ? theme.danger : theme.muted}]}>{requestStatusLabel(request.status, t)}</Text>
+            </View>
+          ))}
+        </>
+      ) : null}
       <Text style={[styles.sectionLabel, {color: theme.text}]}>{t.payments.payoutHistory}</Text>
       {summary.batches.length === 0 ? (
         <Text style={[styles.payoutEmpty, {color: theme.muted}]}>{t.payments.noPayouts}</Text>
@@ -62,7 +135,10 @@ function PayoutHistory({summary, t, theme, highlightId}: {summary: PayoutSummary
           <View style={styles.payoutMoneyRow}>
             <Text style={[styles.payoutMeta, {color: theme.muted}]}>{`${t.payments.collected} ${batch.gross.toLocaleString()}`}</Text>
             <Text style={[styles.payoutMeta, {color: "#d97706"}]}>{`${t.payments.commission} ${batch.commission.toLocaleString()}`}</Text>
-            <Text style={[styles.payoutNet, {color: theme.success}]}>{`${t.payments.netPayout} ${batch.net.toLocaleString()} VND`}</Text>
+            {typeof batch.commissionDeducted === "number" && batch.commissionDeducted > 0 ? (
+              <Text style={[styles.payoutMeta, {color: theme.danger}]}>{`${t.payments.commissionOwed} -${batch.commissionDeducted.toLocaleString()}`}</Text>
+            ) : null}
+            <Text style={[styles.payoutNet, {color: theme.success}]}>{`${t.payments.netPayout} ${(batch.netPayout ?? batch.net).toLocaleString()} VND`}</Text>
           </View>
         </View>
       ))}
@@ -79,23 +155,45 @@ export default function PaymentsScreen() {
   const params = (useRoute().params ?? {}) as {tab?: Tab; payoutId?: string};
   const theme = mode === "dark" ? darkTheme : lightTheme;
   const [tab, setTab] = useState<Tab>(params.tab === "receive" ? "receive" : "pay");
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>("ALL");
   const [payee, setPayee] = useState<Bill[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [payouts, setPayouts] = useState<PayoutSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const receiveLoadedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async (): Promise<void> => {
+  const [notice, setNotice] = useState<string | null>(null);
+  const [detailFor, setDetailFor] = useState<{ticketId: string; scope?: "payee"} | null>(null);
+  const [banks, setBanks] = useState<PayoutBank[]>([]);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [bankCode, setBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [holderName, setHolderName] = useState("");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const loadProviders = useCallback(async (): Promise<void> => {
+    if (!token || providersLoaded) return;
+    const result = await myProviders(token).catch(() => null);
+    if (result !== null) {
+      setProviders(Array.isArray(result) ? result : []);
+      setProvidersLoaded(true);
+    }
+  }, [token, providersLoaded]);
+  const loadReceive = useCallback(async (): Promise<void> => {
     if (!token) {
       setPayee([]);
-      setProviders([]);
       setPayouts(null);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [payeeResult, providerResult, payoutResult] = await Promise.allSettled([
+    const [payeeResult, payoutResult] = await Promise.allSettled([
       payeeBills(token),
-      myProviders(token),
       myPayouts(token),
     ]);
     if (payeeResult.status === "fulfilled") {
@@ -104,10 +202,8 @@ export default function PaymentsScreen() {
     } else {
       setError(toMessage(payeeResult.reason));
     }
-    if (providerResult.status === "fulfilled") {
-      setProviders(Array.isArray(providerResult.value) ? providerResult.value : []);
-    }
     setPayouts(payoutResult.status === "fulfilled" ? payoutResult.value : null);
+    receiveLoadedRef.current = true;
     setLoading(false);
   }, [token]);
   const operated = operatedKinds(providers);
@@ -118,26 +214,119 @@ export default function PaymentsScreen() {
   useEffect(() => {
     if (!loading && !canReceive && tab === "receive") setTab("pay");
   }, [canReceive, loading, tab]);
+  useEffect(() => {
+    void loadProviders();
+  }, [loadProviders]);
+  useEffect(() => {
+    if (tab === "receive" && canReceive && !receiveLoadedRef.current) {
+      void loadReceive();
+    }
+  }, [tab, canReceive, loadReceive]);
   useFocusEffect(useCallback(() => {
-    void refreshRider();
-    void load();
-  }, [load, refreshRider]));
+    if (tab === "pay") {
+      void refreshRider();
+    } else if (receiveLoadedRef.current) {
+      void loadReceive();
+    }
+  }, [tab, refreshRider, loadReceive]));
   const reload = (): void => {
-    void refreshRider();
-    void load();
+    if (tab === "pay") {
+      void refreshRider();
+    } else {
+      void loadReceive();
+    }
   };
   const pay = (bill: Bill): void => {
-    navigation.navigate("BillDetail", {ticketId: bill.ticketId});
+    setDetailFor({ticketId: bill.ticketId});
   };
   const receive = (bill: Bill): void => {
-    navigation.navigate("BillDetail", {ticketId: bill.ticketId, scope: "payee"});
+    setDetailFor({ticketId: bill.ticketId, scope: "payee"});
+  };
+  const openAccount = (): void => {
+    const account = payouts?.account ?? null;
+    setBankCode(account?.bankCode ?? "");
+    setAccountNumber(account?.accountNumber ?? "");
+    setHolderName(account?.holderName ?? "");
+    setAccountError(null);
+    setAccountOpen(true);
+    if (banks.length === 0 && token) {
+      void payoutBanks(token).then(setBanks).catch(() => undefined);
+    }
+  };
+  const saveAccount = async (): Promise<void> => {
+    if (!token || accountBusy) return;
+    if (!bankCode || accountNumber.trim() === "" || holderName.trim() === "") {
+      setAccountError(t.payments.invalidAccount);
+      return;
+    }
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      await savePayoutAccount({bankCode, accountNumber: accountNumber.trim(), holderName: holderName.trim()}, token);
+      setAccountOpen(false);
+      setNotice(t.payments.accountSaved);
+      await loadReceive();
+    } catch (err) {
+      setAccountError(toMessage(err));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+  const submitWithdraw = async (): Promise<void> => {
+    if (!token || withdrawBusy) return;
+    const amount = Number.parseInt(withdrawAmount.replace(/[^0-9]/g, ""), 10);
+    const available = payouts?.pending.available ?? 0;
+    if (!Number.isFinite(amount) || amount <= 0 || amount > available) {
+      setWithdrawError(t.payments.invalidAmount);
+      return;
+    }
+    setWithdrawBusy(true);
+    setWithdrawError(null);
+    try {
+      await requestPayout({amount}, token);
+      setWithdrawOpen(false);
+      setWithdrawAmount("");
+      setNotice(t.payments.requestSent);
+      await loadReceive();
+    } catch (err) {
+      setWithdrawError(toMessage(err));
+    } finally {
+      setWithdrawBusy(false);
+    }
   };
   const visible = tab === "pay" ? riderBills : payee;
+  const filtered = serviceFilter === "ALL" ?
+    visible :
+    visible.filter((bill) => billMatchesService(bill, serviceFilter));
+  const riderTotals = filtered.reduce(
+    (sum, bill) => ({
+      total: sum.total + bill.total,
+      paid: sum.paid + bill.paid,
+      due: sum.due + bill.due,
+    }),
+    {total: 0, paid: 0, due: 0},
+  );
+  const payeeTotals = filtered.reduce(
+    (sum, bill) => {
+      const row = payeeSummary(bill);
+      return {
+        gross: sum.gross + bill.total,
+        commission: sum.commission + row.commission,
+        net: sum.net + row.net,
+      };
+    },
+    {gross: 0, commission: 0, net: 0},
+  );
   const visibleLoading = tab === "pay" ? riderLoading : loading;
   const visibleError = tab === "pay" ? (riderError ? t.payments.loadError : null) : error;
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
+        {notice !== null ? (
+          <Pressable style={[styles.notice, {borderColor: theme.primary}]} onPress={() => setNotice(null)} accessibilityRole="button">
+            <Text style={{color: theme.primary, fontSize: 13}}>{notice}</Text>
+          </Pressable>
+        ) : null}
         {canReceive ? (
           <View style={[styles.tabs, {backgroundColor: theme.paper, borderColor: theme.border}]}>
             {(["pay", "receive"] as Tab[]).map((id) => {
@@ -160,6 +349,48 @@ export default function PaymentsScreen() {
         ) : (
           <Text style={[styles.sectionLabel, {color: theme.text}]}>{t.payments.toPay}</Text>
         )}
+        <View style={styles.serviceFilters}>
+          {([
+            ["ALL", "apps"],
+            ["TOW", "tow"],
+            ["REPAIR", "repair"],
+            ["SOS", "sos"],
+          ] as Array<[ServiceFilter, string]>).map(([id, icon]) => {
+            const active = serviceFilter === id;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => setServiceFilter(id)}
+                style={[styles.serviceFilter, {borderColor: active ? theme.primary : theme.border, backgroundColor: active ? `${theme.primary}22` : theme.paper}]}
+                accessibilityRole="button"
+                accessibilityState={{selected: active}}
+                accessibilityLabel={id === "ALL" ? t.common.all : id === "TOW" ? t.assist.typeTow : id === "SOS" ? t.assist.typeSos : t.assist.typeWalkin}
+              >
+                {id === "ALL" ? (
+                  <MaterialIcons name="apps" size={18} color={active ? theme.primary : theme.muted} />
+                ) : (
+                  <ServiceIcon service={id === "TOW" ? "TOW" : id === "SOS" ? "SOS" : "REPAIR"} color={active ? theme.primary : theme.muted} />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={[styles.filterTotals, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          {(tab === "pay" ? [
+            [t.bills.total, riderTotals.total],
+            [t.bills.paid, riderTotals.paid],
+            [t.bills.due, riderTotals.due],
+          ] : [
+            [t.payments.gross, payeeTotals.gross],
+            [t.payments.commission, payeeTotals.commission],
+            [t.payments.netPayout, payeeTotals.net],
+          ]).map(([label, amount]) => (
+            <View key={String(label)} style={styles.filterTotalCell}>
+              <Text style={[styles.filterTotalLabel, {color: theme.muted}]}>{label}</Text>
+              <Text style={[styles.filterTotalValue, {color: theme.text}]}>{`${Number(amount).toLocaleString()} VND`}</Text>
+            </View>
+          ))}
+        </View>
         {visibleLoading && visible.length === 0 ? <ActivityIndicator style={styles.loader} color={theme.primary} /> : null}
         {visibleError ? (
           <View style={[styles.errorCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
@@ -169,9 +400,22 @@ export default function PaymentsScreen() {
             </Pressable>
           </View>
         ) : null}
-        {tab === "receive" && payouts ? <PayoutHistory summary={payouts} t={t} theme={theme} highlightId={params.payoutId} /> : null}
-        {!visibleLoading && !visibleError && visible.length === 0 ? <EmptyState tab={tab} t={t} theme={theme} /> : null}
-        {visible.map((bill) => (
+        {tab === "receive" && payouts ? (
+          <PayoutHistory
+            summary={payouts}
+            t={t}
+            theme={theme}
+            highlightId={params.payoutId}
+            onEditAccount={openAccount}
+            onWithdraw={() => {
+              setWithdrawAmount(String(payouts.pending.available ?? 0));
+              setWithdrawError(null);
+              setWithdrawOpen(true);
+            }}
+          />
+        ) : null}
+        {!visibleLoading && !visibleError && filtered.length === 0 ? <EmptyState tab={tab} t={t} theme={theme} /> : null}
+        {filtered.map((bill) => (
           <BillRow
             key={bill.billId}
             bill={bill}
@@ -182,6 +426,79 @@ export default function PaymentsScreen() {
           />
         ))}
       </ScrollView>
+      {detailFor ? (
+        <PaymentDetailSheet
+          ticketId={detailFor.ticketId}
+          {...(detailFor.scope === "payee" ? {scope: "payee" as const} : {})}
+          onClose={() => setDetailFor(null)}
+          onChanged={reload}
+        />
+      ) : null}
+      <Overlay
+        visible={accountOpen}
+        variant="dialog"
+        title={t.payments.payoutAccount}
+        closeLabel={t.common.cancel}
+        onClose={() => setAccountOpen(false)}
+        actions={[{label: t.common.save, tone: "primary", busy: accountBusy, onPress: () => void saveAccount()}]}
+      >
+        {accountError ? <Text style={[styles.errorText, {color: theme.danger}]}>{accountError}</Text> : null}
+        <Text style={[styles.fieldLabel, {color: theme.text}]}>{t.payments.bank}</Text>
+        <View style={styles.bankWrap}>
+          {banks.map((bank) => {
+            const selected = bank.code === bankCode;
+            return (
+              <Pressable
+                key={bank.code}
+                style={[styles.bankChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]}
+                onPress={() => setBankCode(bank.code)}
+                accessibilityRole="button"
+                accessibilityState={{selected}}
+              >
+                <Text style={{color: selected ? theme.primary : theme.text, fontSize: 12}}>{bank.name}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.fieldLabel, {color: theme.text}]}>{t.payments.accountNumber}</Text>
+        <TextInput
+          style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+          value={accountNumber}
+          onChangeText={setAccountNumber}
+          placeholder={t.payments.accountNumber}
+          placeholderTextColor={theme.muted}
+          keyboardType="number-pad"
+        />
+        <Text style={[styles.fieldLabel, {color: theme.text}]}>{t.payments.holderName}</Text>
+        <TextInput
+          style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+          value={holderName}
+          onChangeText={setHolderName}
+          placeholder={t.payments.holderName}
+          placeholderTextColor={theme.muted}
+          autoCapitalize="characters"
+        />
+      </Overlay>
+      <Overlay
+        visible={withdrawOpen}
+        variant="dialog"
+        title={t.payments.withdraw}
+        closeLabel={t.common.cancel}
+        onClose={() => setWithdrawOpen(false)}
+        actions={[{label: t.payments.withdraw, tone: "primary", busy: withdrawBusy, onPress: () => void submitWithdraw()}]}
+      >
+        {withdrawError ? <Text style={[styles.errorText, {color: theme.danger}]}>{withdrawError}</Text> : null}
+        <Text style={[styles.fieldLabel, {color: theme.text}]}>{t.payments.withdrawAmount}</Text>
+        <TextInput
+          style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+          value={withdrawAmount}
+          onChangeText={setWithdrawAmount}
+          placeholder={t.payments.withdrawAmount}
+          placeholderTextColor={theme.muted}
+          keyboardType="number-pad"
+        />
+        <Text style={[styles.payoutMeta, {color: theme.muted}]}>{t.payments.withdrawHint}</Text>
+      </Overlay>
     </ScreenContainer>
   );
 }
@@ -191,6 +508,12 @@ const styles = StyleSheet.create({
   tabs: {borderWidth: 1, borderRadius: 12, padding: 4, flexDirection: "row", gap: 4},
   tab: {flex: 1, borderRadius: 9, paddingVertical: 8, alignItems: "center"},
   tabText: {fontSize: 13, fontWeight: "700"},
+  serviceFilters: {flexDirection: "row", gap: 8, justifyContent: "center"},
+  serviceFilter: {width: 42, height: 42, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center"},
+  filterTotals: {borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row"},
+  filterTotalCell: {flex: 1, alignItems: "center", gap: 2},
+  filterTotalLabel: {fontSize: 10, fontWeight: "600"},
+  filterTotalValue: {fontSize: 12, fontWeight: "800"},
   sectionLabel: {fontSize: 15, fontWeight: "700", marginTop: 4},
   loader: {marginTop: 24},
   errorCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 8},
@@ -203,7 +526,7 @@ const styles = StyleSheet.create({
   payoutSummary: {borderWidth: 1, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "center"},
   payoutSummaryCell: {flex: 1, gap: 4, alignItems: "center"},
   payoutSummaryLabel: {fontSize: 12, fontWeight: "600"},
-  payoutSummaryValue: {fontSize: 16, fontWeight: "700"},
+  payoutSummaryValue: {fontSize: 14, fontWeight: "700"},
   payoutSummaryDivider: {width: 1, alignSelf: "stretch"},
   payoutEmpty: {fontSize: 13, paddingVertical: 6},
   payoutCard: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 6},
@@ -213,4 +536,16 @@ const styles = StyleSheet.create({
   payoutMeta: {fontSize: 12},
   payoutMoneyRow: {gap: 2},
   payoutNet: {fontSize: 13, fontWeight: "700"},
+  accountCard: {borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", gap: 10},
+  accountText: {flex: 1, gap: 2},
+  accountTitle: {fontSize: 14, fontWeight: "700"},
+  smallBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10},
+  withdrawBtn: {borderRadius: 12, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8},
+  withdrawText: {color: "#fff", fontWeight: "700", fontSize: 14},
+  requestRow: {borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", alignItems: "center", gap: 10},
+  notice: {borderWidth: 1, borderRadius: 10, padding: 10},
+  fieldLabel: {fontSize: 13, fontWeight: "700", marginTop: 6},
+  input: {borderWidth: 1, borderRadius: 8, padding: 10},
+  bankWrap: {flexDirection: "row", flexWrap: "wrap", gap: 6},
+  bankChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
 });

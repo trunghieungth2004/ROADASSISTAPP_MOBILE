@@ -18,17 +18,20 @@ type Props = {
   error: string | null;
   initialAmount: number | null;
   initialItems?: WorkItem[] | null;
-  onSubmit: (amount: number, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>) => void;
+  catalog?: CatalogItem[];
+  onSubmit: (amount: number, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice" | "serviceCode">>) => void;
   onClose: () => void;
 };
 
-type ItemDraft = {name: string; qty: string; unitPrice: string};
+type ItemDraft = {name: string; qty: string; unitPrice: string; serviceCode?: string};
+type CatalogItem = {code: string; name: string; displayPrice: number};
 
 function draftsFrom(items: WorkItem[] | null | undefined): ItemDraft[] {
   return (items ?? []).map((item) => ({
     name: item.name,
     qty: String(item.qty),
     unitPrice: formatAmountInput(String(item.unitPrice)),
+    ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
   }));
 }
 
@@ -40,6 +43,7 @@ export default function MobileFixSheet({
   error,
   initialAmount,
   initialItems,
+  catalog,
   onSubmit,
   onClose,
 }: Props) {
@@ -66,6 +70,16 @@ export default function MobileFixSheet({
     setLocalError(null);
   }
 
+  function addCatalogItem(item: CatalogItem): void {
+    setItems((prev) => [...prev, {
+      name: item.name,
+      qty: "1",
+      unitPrice: formatAmountInput(String(item.displayPrice)),
+      serviceCode: item.code,
+    }]);
+    setLocalError(null);
+  }
+
   function itemTotal(): number {
     return items.reduce((sum, item) => {
       const qty = Number.parseInt(item.qty, 10);
@@ -80,6 +94,7 @@ export default function MobileFixSheet({
       name: item.name.trim(),
       qty: Number.parseInt(item.qty, 10),
       unitPrice: parseAmountInput(item.unitPrice),
+      ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
     }));
     const invalid = payloadItems.find((item) =>
       item.name === "" ||
@@ -93,6 +108,7 @@ export default function MobileFixSheet({
       name: item.name,
       qty: item.qty,
       unitPrice: item.unitPrice as number,
+      ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
     }));
     const parsed = cleanItems.length > 0 ? itemTotal() : parseAmountInput(amount);
     if (parsed === null) {
@@ -117,6 +133,25 @@ export default function MobileFixSheet({
       <View style={styles.body}>
         {error ? <Text style={[styles.hint, {color: theme.danger}]}>{error}</Text> : null}
         {localError ? <Text style={[styles.hint, {color: theme.danger}]}>{localError}</Text> : null}
+        {catalog !== undefined && catalog.length > 0 ? (
+          <>
+            <Text style={[styles.label, {color: theme.text}]}>{t.provider.fixItems}</Text>
+            <View style={styles.catalogRow}>
+              {catalog.slice(0, 8).map((item) => (
+                <Pressable
+                  key={item.code}
+                  style={[styles.catalogChip, {borderColor: theme.primary}]}
+                  onPress={() => addCatalogItem(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.name}
+                >
+                  <Text style={{color: theme.primary}}>{item.name}</Text>
+                  <Text style={[styles.catalogPrice, {color: theme.muted}]}>{`${item.displayPrice.toLocaleString()} ₫`}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
         <View style={styles.itemsHead}>
           <Text style={[styles.label, {color: theme.text}]}>{t.provider.invoiceItems}</Text>
           <Pressable onPress={addItem} accessibilityRole="button" accessibilityLabel={t.provider.addItem}>
@@ -190,6 +225,9 @@ const styles = StyleSheet.create({
   itemName: {flex: 1, minWidth: 0},
   itemQty: {width: 46, textAlign: "center"},
   itemPrice: {width: 96},
+  catalogRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
+  catalogChip: {flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10},
+  catalogPrice: {fontSize: 11},
   totalRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, paddingTop: 8},
   total: {fontSize: 16, fontWeight: "700"},
 });

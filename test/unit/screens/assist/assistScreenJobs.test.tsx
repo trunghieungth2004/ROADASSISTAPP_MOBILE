@@ -10,6 +10,8 @@ import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
 }));
@@ -113,14 +115,14 @@ export function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/mine") return envelope(mockMine);
-    if (u.pathname === "/dispatch/one") return envelope(mockOne);
-    if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
-    if (u.pathname === "/dispatch/near") return envelope(mockNear);
-    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
-    if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
-    if (u.pathname === "/providers/ratings") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/mine") return envelope(mockMine);
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOne);
+    if (apiPath(u) === "/dispatch/feed") return envelope(mockFeed);
+    if (apiPath(u) === "/dispatch/near") return envelope(mockNear);
+    if (apiPath(u) === "/providers/mine") return envelope(mockOwnProviders);
+    if (apiPath(u) === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
@@ -131,23 +133,23 @@ export function installFetch(): void {
         completedJobs: 7,
       });
     }
-    if (u.pathname === "/vehicleProfiles/all") {
+    if (apiPath(u) === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "BIKE", baseWidth: 0.7, baseHeight: 1.1},
         {id: "v2", type: "CAR", baseWidth: 1.9, baseHeight: 1.5},
       ]);
     }
-    if (u.pathname === "/providers/near") {
+    if (apiPath(u) === "/providers/near") {
       return envelope([
         {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330, ...(mockClosesIn === null ? {} : {closesInMinutes: mockClosesIn})},
       ]);
     }
-    if (u.pathname === "/providers/search") {
+    if (apiPath(u) === "/providers/search") {
       return envelope([
         {id: "s2", kind: "SHOP", name: "Good Shop North", lat: 10.72, lng: 106.62, status: "ACTIVE", accepting: true, openNow: true, distance: 900},
       ]);
     }
-    if (u.pathname === "/routes") {
+    if (apiPath(u) === "/routes") {
       return envelope({cached: false, routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]});
     }
     return envelope([]);
@@ -399,6 +401,12 @@ test("tow destination picks a registered shop from fullscreen search", async () 
       await pick?.props.onPress();
       await flush();
     });
+    const choose = texts(renderer.root, en.shop.useShop).find((n) => typeof n.props?.onPress === "function");
+    expect(choose).toBeDefined();
+    await act(async () => {
+      await choose?.props.onPress();
+      await flush();
+    });
     await act(async () => {
       await sheetAction(renderer, en.assist.request)?.props.onPress();
       await flush();
@@ -430,7 +438,7 @@ test("dual-role operators toggle shop and tow rows", async () => {
     await expandIfCollapsed(renderer);
     await tapTab(renderer, en.assist.sectionRecords);
     expect(hasText(renderer.root, "Walk-in")).toBe(true);
-    const towRows = () => texts(renderer.root, "Tow · Resolved").filter((n) => typeof n.props?.onPress === "function");
+    const towRows = () => texts(renderer.root, "Tow · Completed").filter((n) => typeof n.props?.onPress === "function");
     expect(towRows().length).toBeGreaterThan(0);
     const towChip = texts(renderer.root, en.assist.typeTow).find(
       (n) => typeof n.props?.onPress === "function" && n.props?.accessibilityState !== undefined && n.props?.accessibilityRole !== "tab",
@@ -622,8 +630,8 @@ test("destination decline keeps the sheet open on failure", async () => {
     const prevFetch = globalThis.fetch;
     globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
       const u = new URL(String(url));
-      seen.push({path: u.pathname, body: String(init?.body ?? "")});
-      if (u.pathname === "/dispatch/destination/decline") {
+      seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+      if (apiPath(u) === "/dispatch/destination/decline") {
         return {ok: false, status: 400, text: async () => JSON.stringify({statusCode: 400, status: "ERROR", message: "Nope"})} as Response;
       }
       return (prevFetch as typeof fetch)(url, init);
@@ -738,7 +746,7 @@ test("tower-held tow hides the shop workbench", async () => {
     });
     await expandIfCollapsed(renderer);
     await tapTab(renderer, en.assist.sectionRecords);
-    const row = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const row = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(row).toBeDefined();
     await act(async () => {
       await row?.props.onPress();
@@ -755,7 +763,7 @@ test("shop-held ticket keeps the shop workbench", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t8", userId: "rider9", ticketType: "WALK_IN", lat: 10.71, lng: 106.61, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     expect(texts(renderer.root, en.assist.sendQuote).filter((n) => typeof n.props?.onPress === "function").length).toBeGreaterThan(0);
   } finally {
     teardown(renderer);

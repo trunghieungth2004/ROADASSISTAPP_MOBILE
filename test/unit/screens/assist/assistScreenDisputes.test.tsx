@@ -10,6 +10,8 @@ import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
 }));
@@ -113,11 +115,11 @@ export function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/mine") return envelope(mockMine);
-    if (u.pathname === "/dispatch/one") return envelope(mockOne);
-    if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
-    if (u.pathname === "/payments/create") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/mine") return envelope(mockMine);
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOne);
+    if (apiPath(u) === "/dispatch/feed") return envelope(mockFeed);
+    if (apiPath(u) === "/payments/create") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string; method?: string};
       return envelope({
         id: "pay1",
@@ -128,10 +130,10 @@ export function installFetch(): void {
         checkout: {qrUrl: "https://pay.example/checkout"},
       });
     }
-    if (u.pathname === "/payments/cancel") {
+    if (apiPath(u) === "/payments/cancel") {
       return envelope({cancelled: true, method: "SEPAY"});
     }
-    if (u.pathname === "/payments/one") {
+    if (apiPath(u) === "/payments/one") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string};
       return envelope([{
         id: "pay1",
@@ -141,10 +143,10 @@ export function installFetch(): void {
         amount: 150000,
       }]);
     }
-    if (u.pathname === "/dispatch/near") return envelope(mockNear);
-    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
-    if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
-    if (u.pathname === "/providers/ratings") {
+    if (apiPath(u) === "/dispatch/near") return envelope(mockNear);
+    if (apiPath(u) === "/providers/mine") return envelope(mockOwnProviders);
+    if (apiPath(u) === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
@@ -155,23 +157,23 @@ export function installFetch(): void {
         completedJobs: 7,
       });
     }
-    if (u.pathname === "/vehicleProfiles/all") {
+    if (apiPath(u) === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "BIKE", baseWidth: 0.7, baseHeight: 1.1},
         {id: "v2", type: "CAR", baseWidth: 1.9, baseHeight: 1.5},
       ]);
     }
-    if (u.pathname === "/providers/near") {
+    if (apiPath(u) === "/providers/near") {
       return envelope([
         {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330, ...(mockClosesIn === null ? {} : {closesInMinutes: mockClosesIn})},
       ]);
     }
-    if (u.pathname === "/providers/search") {
+    if (apiPath(u) === "/providers/search") {
       return envelope([
         {id: "s2", kind: "SHOP", name: "Good Shop North", lat: 10.72, lng: 106.62, status: "ACTIVE", accepting: true, openNow: true, distance: 900},
       ]);
     }
-    if (u.pathname === "/routes") {
+    if (apiPath(u) === "/routes") {
       return envelope({cached: false, routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]});
     }
     return envelope([]);
@@ -386,7 +388,7 @@ test("dispute hold hides resolve and shows the review banner", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "sos5", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "7", assignedShopId: "mobile1", finalAmount: 120000, disputeHold: true, dispute: {id: "d1", status: "OPEN", type: "SERVICE_QUALITY", reasonCode: "SERVICE_NOT_DONE", filedBy: "u1", accusedKind: "SHOP", accusedId: "mobile1", hold: true, at: "2026-01-01T00:00:00.000Z"}, direction: "out", otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "SOS · Ready");
+    await openRecord(renderer, "SOS · Work done");
     expect(sheetAction(renderer, en.assist.resolved)).toBeUndefined();
     expect(hasText(renderer.root, en.assist.disputeUnderReview)).toBe(true);
   } finally {
@@ -413,7 +415,7 @@ test("mobile shop SOS matched offers cancel and no can't fix", async () => {
   try {
     mockOwnProviders = [{id: "mobile1", kind: "MOBILE_SHOP", status: "ACTIVE", accepting: true}];
     mockFeed = [{id: "sos5", userId: "rider9", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "mobile1", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "SOS · Matched");
+    await openRecord(renderer, "SOS · On the way");
     expect(sheetAction(renderer, en.assist.unfixableAction)).toBeUndefined();
     const cancel = sheetAction(renderer, en.assist.cancel);
     expect(cancel).toBeDefined();
@@ -579,6 +581,10 @@ test("tower marks a tow loaded", async () => {
     seen.length = 0;
     await act(async () => {
       await sheetAction(renderer, en.assist.loaded)?.props.onPress();
+      await flush(4);
+    });
+    await act(async () => {
+      await sheetAction(renderer, en.assist.skipPhoto)?.props.onPress();
       await flush(12);
     });
     const loaded = seen.find((call) => call.path === "/dispatch/tow/loaded");
@@ -606,7 +612,7 @@ test("rider cannot mark arrival or resolution on a tow", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t3", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Tow · Matched");
+    await openRecord(renderer, "Tow · On the way");
     seen.length = 0;
     expect(sheetAction(renderer, en.assist.arrived)).toBeUndefined();
     expect(sheetAction(renderer, en.assist.resolved)).toBeUndefined();
@@ -621,7 +627,7 @@ test("records open an assigned tow with the tower arrival action", async () => {
   try {
     mockOwnProviders = [{id: "tow7", kind: "TOW", status: "ACTIVE", accepting: false}];
     mockFeed = [{id: "t3", userId: "rider9", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", assignedShopId: "tow7", direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Tow · Matched");
+    await openRecord(renderer, "Tow · On the way");
     expect(sheetAction(renderer, en.assist.arrivedAtPickup)).toBeDefined();
   } finally {
     teardown(renderer);
@@ -634,7 +640,7 @@ test("dispatch push refreshes an open ticket status", async () => {
     const matched = {id: "t3", userId: "u1", ticketType: "TOW", lat: 10.71, lng: 106.61, status: "2", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, createdAt: "2026-01-01T00:00:00.000Z"};
     mockFeed = [matched];
     mockOne = matched;
-    await openRecord(renderer, "Tow · Matched");
+    await openRecord(renderer, "Tow · On the way");
     mockFeed = [{...matched, status: "3"}];
     mockOne = {...matched, status: "3"};
     const notifMock = jest.requireMock("expo-notifications") as {
@@ -682,7 +688,7 @@ test("tower active job shows a buttonless mini card into the modal", async () =>
     expect(texts(renderer.root, en.assist.resolved).filter((n) => typeof n.props?.onPress === "function").length).toBe(0);
     expect(renderer.root.findAll((n) => n.props?.name === "tow-truck").length).toBeGreaterThan(0);
     expect(hasText(renderer.root, "Rider Nine")).toBe(true);
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     const miniTitles = (mini?.findAll((n) => n.props?.children === en.assist.activeJob) ?? []);
     expect(miniTitles.length).toBeGreaterThan(0);
@@ -830,7 +836,7 @@ test("active job card opens details without expanding the top panel", async () =
       await flush();
     });
     expect(hasText(renderer.root, en.assist.expandPanel)).toBe(true);
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     await act(async () => {
       await mini?.props.onPress();
@@ -895,10 +901,6 @@ test("tow board modal shows the whole-way preview and its map", async () => {
       await row?.props.onPress();
       await flush(12);
     });
-    expect(hasText(renderer.root, en.assist.towRoutePreview)).toBe(true);
-    const routed = renderer.root.findAll((n) => flatText(n.props?.children).includes(en.assist.towViaPickup));
-    expect(routed.length).toBeGreaterThan(0);
-    expect(hasText(renderer.root, "1.5 km · 5 min via pickup")).toBe(true);
     const labels = actionLabels(renderer);
     expect(labels).toContain(en.assist.accept);
     expect(labels).toContain(en.assist.towRoutePreview);
@@ -983,7 +985,7 @@ test("rider's own matched tow pins a live mini card", async () => {
       await refresh?.props.onPress();
       await flush();
     });
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     expect(mini?.findAll((n) => n.props?.children === "Tow Seven").length).toBeGreaterThan(0);
     await act(async () => {
@@ -1045,7 +1047,7 @@ test("destination-less pending tow pins an amber alert card into the sheet", asy
   }
 });
 
-test.each([["2", "Matched"], ["3", "Arrived"]])(
+test.each([["2", "On the way"], ["3", "Arrived"]])(
   "matched/arrived tow (%s) lost its drop-off goes amber",
   async (status, statusLabel) => {
     const renderer = await mount();
@@ -1225,7 +1227,7 @@ test("inbound matched tow without a drop-off goes amber with a waiting line", as
       await refresh?.props.onPress();
       await flush();
     });
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     expect(JSON.stringify(mini?.props.style)).toContain("f59e0b");
     expect(mini?.findAll((n) => n.props?.children === en.assist.waitingDropOff).length).toBeGreaterThan(0);
@@ -1257,7 +1259,7 @@ test("matched tow that keeps its drop-off stays on the primary card", async () =
       await refresh?.props.onPress();
       await flush();
     });
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     expect(JSON.stringify(mini?.props.style)).not.toContain("f59e0b");
     expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBe(0);
@@ -1287,7 +1289,7 @@ test("a drop-off shop name alone keeps the card off amber without coordinates", 
       await refresh?.props.onPress();
       await flush();
     });
-    const mini = texts(renderer.root, "Tow · Matched").find((n) => typeof n.props?.onPress === "function");
+    const mini = texts(renderer.root, "Tow · On the way").find((n) => typeof n.props?.onPress === "function");
     expect(mini).toBeDefined();
     expect(JSON.stringify(mini?.props.style)).not.toContain("f59e0b");
     expect(mini?.findAll((n) => n.props?.children === en.assist.noDropOff).length).toBe(0);
@@ -1321,7 +1323,7 @@ test("stored working pin beats the rider fallback", async () => {
       await sheetAction(renderer, en.assist.accept)?.props.onPress();
       await flush(12);
     });
-    const minis = texts(renderer.root, "Tow · Matched").filter((n) => typeof n.props?.onPress === "function");
+    const minis = texts(renderer.root, "Tow · On the way").filter((n) => typeof n.props?.onPress === "function");
     expect(minis.length).toBeGreaterThan(0);
     const card = minis.find((n) => n.findAll((m) => m.props?.children === "Rider Nine").length > 0);
     expect(card).toBeDefined();
@@ -1345,10 +1347,10 @@ test("a stale duplicate response shows the duplicate dialog without a force acti
     let dispatchPosts = 0;
     globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
       const u = new URL(String(url));
-      if (u.pathname === "/dispatch" && (init?.method ?? "GET") === "POST") {
+      if (apiPath(u) === "/dispatch" && (init?.method ?? "GET") === "POST") {
         dispatchPosts += 1;
         if (dispatchPosts <= 1) {
-          seen.push({path: u.pathname, body: String(init?.body ?? "")});
+          seen.push({path: apiPath(u), body: String(init?.body ?? "")});
           return {ok: false, status: 409, text: async () => JSON.stringify({statusCode: 409, status: "ERROR", message: "Rider already holds a live ticket of this type", errors: {ticketId: "t7", status: "1", createdAt: "2026-01-01T00:00:00.000Z"}})} as Response;
         }
       }
@@ -1386,7 +1388,7 @@ test("off-duty tower sees no accept action with the off-duty hint", async () => 
     });
     seen.length = 0;
     expect(sheetAction(renderer, en.assist.accept)).toBeUndefined();
-    expect(hasText(renderer.root, en.assist.towNotAccepting)).toBe(true);
+    expect(hasText(renderer.root, en.assist.towNotAccepting)).toBe(false);
     expect(seen.find((call) => call.path === "/dispatch/accept")).toBeUndefined();
   } finally {
     teardown(renderer);

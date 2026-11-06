@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {Alert, AppState, BackHandler, Keyboard} from "react-native";
+import {Alert, AppState, BackHandler, Keyboard, Share} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 
 
@@ -9,10 +9,12 @@ import {useFocusEffect, useIsFocused, useNavigation} from "@react-navigation/nat
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {CameraRef} from "@maplibre/maplibre-react-native";
 import {safeCameraCall, safeCameraReady} from "../../components/map/safeCamera";
-import {acceptTicket, approveFinalQuote, approveEstimate, approveInvoice, approveMobileFix, approveQuote, cancelPayment, cancelTowerSearch, confirmTowReceived, declineMobileFix, declineQuote, markTowLoaded, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fetchTicketPayments, fileDispute, getTicket, isTerminal, nearTickets, offerMobileShopTow, continueSos, refreshTowEta, refreshWaiting, reportUnfixable, respondMobileShopTow, respondReturnTow, sendEstimate, sendQuote, setMobileShopFix, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../../api/dispatch";
+import {acceptTicket, beatShareLocation, clearDispatchHold, setDispatchHold, approveFinalQuote, approveEstimate, approveInvoice, approveMobileFix, approveQuote, cancelPayment, cancelTowerSearch, confirmTowReceived, declineMobileFix, declineQuote, markTowLoaded, bustTicketCaches, cancelTicket, confirmCashReceipt, createPayment, createTicket, declineDestination, declineEstimate, declineTicket, estimateTowFare, feedTickets, fetchTicketPayments, fileDispute, getTicket, isTerminal, nearTickets, offerMobileShopTow, continueSos, refreshTowEta, refreshWaiting, reportUnfixable, respondMobileShopTow, respondReturnTow, sendEstimate, sendQuote, shareTicket, quickFix, releaseTicket, setMobileShopFix, updateTicketDestination, updateTicketStatus, updateWorkOrder, DISPATCH_STATUS, type DeclineReason, type DispatchTicket, type FeedTicket, type TicketPayment, type TicketType} from "../../api/dispatch";
+import {config} from "../../config";
 import {payeeBills} from "../../api/bills";
 import {normalizeVehicleType} from "../../api/vehicles";
 import {myProviders, pingProviderLocation, providerRatings, reportProvider, searchProviders, type Provider, type ProviderRating, type ReportReason} from "../../api/providers";
+import {myBookings} from "../../api/bookings";
 import {ratingsByTicket, replyRating, submitRating, type UserRating} from "../../api/ratings";
 import {findRoute, type RouteOption} from "../../api/routes";
 import {toMessage, ApiError} from "../../api/client";
@@ -36,6 +38,8 @@ import {getFix} from "../../services/geo";
 import {ticketStatusLabel} from "./ticketLabels";
 import {announcesShopPush, canSeeRequestPhotos, returnTowPending} from "./recordActions";
 import {vehicleClassOf} from "./vehicleClass";
+import {profileHasProviderRole} from "./providerRole";
+import {providerFromParty} from "./shopParty";
 import {type AssistSection} from "./AssistSectionTabs";
 
 
@@ -49,6 +53,10 @@ import {reverseLabel} from "../../api/places";
 
 
 import RecordDetailSheet from "./RecordDetailSheet";
+import QuickFixSheet from "./QuickFixSheet";
+import DelaySheet from "./DelaySheet";
+import type {DelayReason} from "./delayReasons";
+import ReturnTowSheet, {type ReturnTowPoint} from "./ReturnTowSheet";
 import CancelReasonSheet from "./CancelReasonSheet";
 import {SHOP_DECLINE_REASONS, TOWER_CANCEL_REASONS, shopDeclineReasonLabel, towerCancelReasonLabel} from "./cancelReasons";
 
@@ -104,6 +112,9 @@ export default function useAssistController() {
   const provider = ownProviders.some((p) =>
     (p.kind === "TOW" || p.kind === "MOBILE_SHOP") &&
     p.status === "ACTIVE");
+  const hasProviderRole =
+    profileHasProviderRole(bundle?.user.services) ||
+    ownProviders.length > 0;
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -118,6 +129,21 @@ export default function useAssistController() {
   const pendingCenterRef = useRef<{lat: number; lng: number} | null>(null);
   const [ticketType, setTicketType] = useState<TicketType | null>(null);
   const [note, setNote] = useState("");
+  const [symptom, setSymptom] = useState<string | null>(null);
+  const [quickFixFor, setQuickFixFor] = useState<FeedTicket | null>(null);
+  const [delayFor, setDelayFor] = useState<FeedTicket | null>(null);
+  const [handoverFor, setHandoverFor] = useState<{
+    ticket: FeedTicket;
+    kind: "loaded" | "received";
+  } | null>(null);
+  const [handoverError, setHandoverError] = useState<string | null>(null);
+  const [delayBusy, setDelayBusy] = useState(false);
+  const [delayError, setDelayError] = useState<string | null>(null);
+  const [returnTowFor, setReturnTowFor] = useState<{ticket: FeedTicket; origin: ReturnTowPoint | null; destination: ReturnTowPoint | null} | null>(null);
+  const [returnTowBusy, setReturnTowBusy] = useState(false);
+  const [returnTowError, setReturnTowError] = useState<string | null>(null);
+  const [quickFixBusy, setQuickFixBusy] = useState(false);
+  const [quickFixError, setQuickFixError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [photosBusy, setPhotosBusy] = useState(false);
@@ -166,6 +192,7 @@ export default function useAssistController() {
   const [ticketRatings, setTicketRatings] = useState<Record<string, UserRating[]>>({});
   const [recBusy, setRecBusy] = useState(false);
   const [detailFor, setDetailFor] = useState<FeedTicket | null>(null);
+  const [paymentDetailFor, setPaymentDetailFor] = useState<{ticketId: string; scope?: "payee"; ticket: FeedTicket} | null>(null);
   const [detailContext, setDetailContext] = useState<"auto" | "shop" | "tow">("auto");
   const [boardDetail, setBoardDetail] = useState<FeedTicket | null>(null);
   const [editDestFor, setEditDestFor] = useState<FeedTicket | null>(null);
@@ -321,7 +348,7 @@ export default function useAssistController() {
     status: activeFeed.status,
     route: jobRoute && jobRoute.ticketId === activeFeed.id ? jobRoute.route : null,
   } : null;
-  const jobRouteKey = jobRouteKeyFor(activeFeed, sosProviderPoint);
+  const jobRouteKey = jobRouteKeyFor(activeFeed, sosProviderPoint, gps);
   useEffect(() => {
     if (!jobRouteKey || !liveTow || !activeFeed || !token) {
       if (!jobRouteKey) setJobRoute(null);
@@ -332,7 +359,8 @@ export default function useAssistController() {
     const ticket = activeFeed;
     const key = jobRouteKey;
     let alive = true;
-    if (ticket.ticketType === "SOS" && ticket.status === "7") {
+    if (ticket.ticketType === "SOS" &&
+      (ticket.status === "7" || ticket.status === "9")) {
       setJobRoute({ticketId: ticket.id, key, route: null});
       return;
     }
@@ -399,7 +427,7 @@ export default function useAssistController() {
   useEffect(() => {
     if (hasJobCard && cardCollapsed) setCardH(0);
   }, [hasJobCard, cardCollapsed]);
-  useLocationBeat(!!token && (towOnDuty || mobileShopOnDuty) && assistFocused, active ? 60 * 1000 : 5 * 60 * 1000, async () => {
+  useLocationBeat(!!token && (towOnDuty || mobileShopOnDuty) && assistFocused, active ? 15 * 1000 : 5 * 60 * 1000, async () => {
     if (!token) return;
     const pos = await capturePosition();
     if (!pos) return;
@@ -407,6 +435,71 @@ export default function useAssistController() {
     await pingProviderLocation(pos.lat, pos.lng, token);
     markBeat("tower");
   });
+  async function onSaveDelay(reason: DelayReason, note: string, etaAt?: string): Promise<void> {
+    if (!token || !delayFor || delayBusy) return;
+    setDelayBusy(true);
+    setDelayError(null);
+    try {
+      await setDispatchHold(delayFor.id, reason, token, note || undefined, etaAt);
+      setDelayFor(null);
+      setNotice(t.assist.delaySaved);
+      await reloadAll();
+    } catch (err) {
+      setDelayError(toMessage(err));
+    } finally {
+      setDelayBusy(false);
+    }
+  }
+
+  async function onReleaseDelay(ticket: FeedTicket): Promise<void> {
+    if (!token || delayBusy) return;
+    setDelayBusy(true);
+    setDelayError(null);
+    try {
+      await clearDispatchHold(ticket.id, token);
+      setDetailFor((prev) =>
+        prev && prev.id === ticket.id ? {...prev, hold: null} : prev);
+      setBoardDetail((prev) =>
+        prev && prev.id === ticket.id ? {...prev, hold: null} : prev);
+      setActive((prev) =>
+        prev && prev.id === ticket.id ? {...prev, hold: null} : prev);
+      setNotice(t.assist.delayCleared);
+      await reloadAll();
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setDelayBusy(false);
+    }
+  }
+
+  async function onClearDelay(): Promise<void> {
+    if (!token || !delayFor || delayBusy) return;
+    setDelayBusy(true);
+    setDelayError(null);
+    try {
+      await clearDispatchHold(delayFor.id, token);
+      setDelayFor(null);
+      setNotice(t.assist.delayCleared);
+      await reloadAll();
+    } catch (err) {
+      setDelayError(toMessage(err));
+    } finally {
+      setDelayBusy(false);
+    }
+  }
+
+  useLocationBeat(
+    !!token && !!active && !!uid && active.userId === uid &&
+      !isTerminal(active.status) && assistFocused,
+    60 * 1000,
+    async () => {
+      if (!token || !active) return;
+      const pos = await capturePosition();
+      if (!pos) return;
+      await beatShareLocation(active.id, pos.lat, pos.lng, token);
+    },
+  );
+
   async function onReport(): Promise<void> {
     if (!token || !reportFor || reportBusy) return;
     setReportBusy(true);
@@ -460,9 +553,6 @@ export default function useAssistController() {
   const workspaceTouchedRef = useRef(false);
   const isRider = (bundle?.user.services ?? []).includes("RIDER");
   useEffect(() => {
-    if (provider) setWorkspace("provider");
-  }, [provider]);
-  useEffect(() => {
     let alive = true;
     void (async () => {
       const saved = await AsyncStorage.getItem(WORKSPACE_KEY).catch(() => null);
@@ -471,21 +561,22 @@ export default function useAssistController() {
       if (savedTab === "request" || savedTab === "records") {
         setSection(savedTab);
       }
-      if (!isRider && provider) {
+      if (workspaceTouchedRef.current) return;
+      if (!isRider && hasProviderRole) {
         setWorkspace("provider");
         return;
       }
-      if (!provider) {
+      if (!hasProviderRole) {
         setWorkspace("rider");
         return;
       }
       if (saved === "rider") setWorkspace("rider");
-      else setWorkspace(provider ? "provider" : "rider");
+      else setWorkspace("provider");
     })();
     return () => {
       alive = false;
     };
-  }, [isRider, provider]);
+  }, [isRider, hasProviderRole]);
   useEffect(() => {
     if (!workspaceTouchedRef.current) return;
     void AsyncStorage.setItem(WORKSPACE_KEY, workspace).catch(() => undefined);
@@ -558,7 +649,8 @@ export default function useAssistController() {
     }
     try {
       const ticket = await getTicket(id, key);
-      if (ticket.status === "2" || ticket.status === "3" || ticket.status === "6" || ticket.status === "7") {
+      if (ticket.status === "2" || ticket.status === "3" || ticket.status === "6" ||
+        ticket.status === "7" || ticket.status === "9") {
         setActive(ticket);
       } else {
         setActive(null);
@@ -686,12 +778,18 @@ export default function useAssistController() {
           () => undefined,
         );
       }
-      void feedTickets(undefined, token).then((rows) => setFeed(rows), () => undefined);
-    }, 15000);
+      void feedTickets(undefined, token)
+        .then((rows) => setFeed(rows))
+        .catch((err: unknown) => {
+          console.warn("[assist] live feed refresh failed", err);
+        });
+    }, 10000);
     return () => clearInterval(timer);
   }, [liveTow, assistFocused, token, activeId]);
+  const activeTowOut = liveTow && activeIsOut &&
+    activeFeed?.ticketType === "TOW";
   useEffect(() => {
-    if (!liveTow || !activeIsOut || !activeId || !token) return;
+    if (!activeTowOut || !activeId || !token) return;
     const timer = setInterval(() => {
       void (async () => {
         try {
@@ -699,11 +797,15 @@ export default function useAssistController() {
         } catch {
           return;
         }
-        void feedTickets(undefined, token).then((rows) => setFeed(rows), () => undefined);
+        void feedTickets(undefined, token)
+          .then((rows) => setFeed(rows))
+          .catch((err: unknown) => {
+            console.warn("[assist] tow ETA feed refresh failed", err);
+          });
       })();
     }, 180000);
     return () => clearInterval(timer);
-  }, [liveTow, activeIsOut, activeId, token]);
+  }, [activeTowOut, activeId, token]);
   useEffect(() => {
     void ensurePushConfigured();
     const applyLaunch = (data: {ticketId: string; ticketType?: string; status?: string; action?: string} | null): void => {
@@ -794,7 +896,7 @@ export default function useAssistController() {
     const filterClass = filterTicket ?
       vehicleClassOf(filterTicket.vehicleType) :
       vehicleClass;
-    return fetchShopPlaces(q, token, gps, filterClass ?? undefined, towMode ? 20000 : undefined, towMode, {
+    return fetchShopPlaces(q, token, gps, filterClass ?? undefined, towMode ? 20000 : undefined, true, {
       sortBy: "distance",
       acceptingOnly: true,
       ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
@@ -929,31 +1031,8 @@ export default function useAssistController() {
       setNavBusy(false);
     }
   }
-  function providerOf(party: unknown, fallback: {lat: number; lng: number} | null): Provider | null {
-    if (typeof party !== "object" || party === null) return null;
-    const record = party as {id?: unknown; name?: unknown; kind?: unknown; lat?: unknown; lng?: unknown; label?: unknown; openNow?: unknown; ratingAvg?: unknown; ratingCount?: unknown; phone?: unknown};
-    if (typeof record.id !== "string" || record.id === "" || typeof record.name !== "string") return null;
-    const coords = typeof record.lat === "number" && typeof record.lng === "number" ?
-      {lat: record.lat, lng: record.lng} :
-      fallback;
-    if (!coords) return null;
-    return {
-      id: record.id,
-      kind: record.kind === "TOW" ? "TOW" : record.kind === "MOBILE_SHOP" ? "MOBILE_SHOP" : "SHOP",
-      name: record.name,
-      lat: coords.lat,
-      lng: coords.lng,
-      status: "ACTIVE",
-      accepting: true,
-      ...(typeof record.label === "string" ? {label: record.label} : {}),
-      ...(typeof record.openNow === "boolean" ? {openNow: record.openNow} : {}),
-      ...(typeof record.ratingAvg === "number" ? {ratingAvg: record.ratingAvg} : {}),
-      ...(typeof record.ratingCount === "number" ? {ratingCount: record.ratingCount} : {}),
-      ...(typeof record.phone === "string" ? {phone: record.phone} : {}),
-    } as Provider;
-  }
   function onOpenShopCard(ticket: FeedTicket): void {
-    const shop = providerOf(ticket.otherParty, null);
+    const shop = providerFromParty(ticket.otherParty, null);
     if (!shop) {
       setError(t.assist.alreadyGone);
       return;
@@ -970,7 +1049,7 @@ export default function useAssistController() {
       lat: typeof snap.lat === "number" ? snap.lat : null,
       lng: typeof snap.lng === "number" ? snap.lng : null,
     } : null);
-    const shop = providerOf(party, fallback);
+    const shop = providerFromParty(party, fallback);
     if (!shop) {
       setError(t.assist.alreadyGone);
       return;
@@ -979,10 +1058,12 @@ export default function useAssistController() {
   }
   function boardToFeed(item: DispatchTicket): FeedTicket {
     const riderName = typeof item.riderName === "string" && item.riderName !== "" ? item.riderName : t.assist.unassigned;
+    const party = item.riderParty ?? {id: item.userId, name: riderName, kind: "RIDER"};
     return {
       ...item,
       direction: "in",
-      otherParty: {id: item.userId, name: riderName, kind: "RIDER"},
+      otherParty: party,
+      riderParty: party,
     };
   }
   function onOpenBoardTicket(id: string): void {
@@ -1165,6 +1246,13 @@ export default function useAssistController() {
         onOpenWork={(item) => { setWorkFor({ticket: item, mode: "done"}); setWorkError(null); }}
         onOpenMobileFix={(item) => { setMobileFixFor(item); setMobileFixError(null); }}
         onOpenChat={(item) => setChatFor(item)}
+        onDelay={(item) => { setDelayFor(item); setDelayError(null); }}
+        onClearDelay={(item) => void onReleaseDelay(item)}
+        delayBusy={delayBusy}
+        isAdmin={bundle?.user.role === "1"}
+        onShare={(item) => void onShareTicket(item)}
+        onQuickFix={(item) => onOpenQuickFix(item)}
+        onRelease={(item) => onRelease(item)}
         onOfferMobileTow={(item) => void onOfferMobileTow(item)}
         canOfferMobileTow={ticket.mobileTowAvailable === true}
         mobileTowShopOff={ticket.mobileTowAvailable === true && ownShopProviderId !== null && !ownShopAccepting}
@@ -1178,7 +1266,7 @@ export default function useAssistController() {
           setContinuationError(null);
         }}
         onRespondMobileTow={(item, accept) => void onRespondMobileTow(item, accept)}
-        onRespondReturnTow={ticket.ticketType === "WALK_IN" && returnTowPending(ticket) && !cashBlocksReturnTow(ticket) && gps !== null && distBetween(gps, {lat: ticket.lat, lng: ticket.lng}) > 1000 ? (item, accept) => void onRespondReturnTow(item, accept) : null}
+        onRespondReturnTow={ticket.ticketType === "WALK_IN" && returnTowPending(ticket) && !cashBlocksReturnTow(ticket) ? (item, accept) => void onRespondReturnTow(item, accept) : null}
         onOpenQuote={(item) => { setWorkFor({ticket: item, mode: "quote"}); setWorkError(null); }}
         onOpenEstimate={(item) => {
           setEstimateFor(item);
@@ -1437,11 +1525,12 @@ export default function useAssistController() {
           return;
         }
       }
-      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, ...(description.trim() ? {description: description.trim().slice(0, 1000)} : {}), ...(photoUrls && photoUrls.length > 0 ? {photoUrls} : {}), destinationShopId: kind === "TOW" ? destShopId ?? undefined : undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleId: activeVehicle.id, vehicleType: normalizeVehicleType(activeVehicle.type) ?? undefined, vehicleWidth: activeVehicle.baseWidth}, token);
+      await createTicket({ticketType: kind, lat: point.lat, lng: point.lng, note: note.trim() || undefined, ...(kind === "SOS" && symptom !== null ? {symptom} : {}), ...(description.trim() ? {description: description.trim().slice(0, 1000)} : {}), ...(photoUrls && photoUrls.length > 0 ? {photoUrls} : {}), destinationShopId: kind === "TOW" ? destShopId ?? undefined : undefined, destinationPoint: kind === "TOW" && dest ? {lat: dest.lat, lng: dest.lng, label: dest.label} : undefined, vehicleId: activeVehicle.id, vehicleType: normalizeVehicleType(activeVehicle.type) ?? undefined, vehicleWidth: activeVehicle.baseWidth}, token);
       setPendingTicket(null);
       setDuplicateFor(null);
       setNotice(t.assist.requested);
       setNote("");
+      setSymptom(null);
       setDescription("");
       setPhotos([]);
       setTowDestError(null);
@@ -1730,7 +1819,7 @@ export default function useAssistController() {
   function openBill(ticket: FeedTicket): void {
     const payee = ticket.direction === "in" && billForTicket(ticket) !== null && payeeBillList.some((row) => row.ticketId === ticket.id || row.items.some((item) => item.ticketId === ticket.id));
     setDetailFor(null);
-    navigation.navigate("BillDetail", payee ? {ticketId: ticket.id, scope: "payee"} : {ticketId: ticket.id, ...(ticket.direction === "in" ? {readOnly: true} : {})});
+    setPaymentDetailFor({ticketId: ticket.id, ticket, ...(payee ? {scope: "payee" as const} : {})});
   }
   async function onFileDispute(reason: string, noteText: string, photoUri: string | null): Promise<void> {
     if (!token || !disputeFor || disputeBusy) return;
@@ -1896,6 +1985,59 @@ export default function useAssistController() {
       setRecBusy(false);
     }
   }
+  function onOpenQuickFix(ticket: FeedTicket): void {
+    setQuickFixFor(ticket);
+    setQuickFixError(null);
+  }
+
+  async function onSubmitQuickFix(items: Array<{name: string; qty: number; unitPrice: number}>): Promise<void> {
+    if (!token || !quickFixFor || quickFixBusy) return;
+    setQuickFixBusy(true);
+    setQuickFixError(null);
+    try {
+      await quickFix(quickFixFor.id, items, token);
+      setQuickFixFor(null);
+      setNotice(t.provider.quickFixStarted);
+      await reloadAll();
+    } catch (err) {
+      setQuickFixError(toMessage(err));
+    } finally {
+      setQuickFixBusy(false);
+    }
+  }
+
+  function onRelease(ticket: FeedTicket): void {
+    Alert.alert(t.assist.releaseTitle, t.assist.releaseMessage, [
+      {text: t.common.cancel, style: "cancel"},
+      {
+        text: t.assist.release,
+        style: "destructive",
+        onPress: () => {
+          if (!token) return;
+          void releaseTicket(ticket.id, undefined, token)
+            .then(() => {
+              setDetailFor(null);
+              setNotice(t.assist.released);
+              return reloadAll();
+            })
+            .catch((err: unknown) => setError(toMessage(err)));
+        },
+      },
+    ]);
+  }
+
+  async function onShareTicket(ticket: FeedTicket): Promise<void> {
+    if (!token) return;
+    try {
+      const link = await shareTicket(ticket.id, token);
+      await Share.share({
+        message: `${t.assist.shareMessage} ${config.webBaseUrl}/track/${link.token}`,
+      });
+    } catch (err) {
+      setError(toMessage(err));
+    }
+  }
+
   async function onSubmitWork(value: WorkFormValue): Promise<void> {
     if (!token || !workFor || workBusy) return;
     if (workFor.mode === "quote" && value.amount === null) {
@@ -1913,6 +2055,7 @@ export default function useAssistController() {
           ticketId: workFor.ticket.id,
           ...(value.workType ? {workType: value.workType} : {}),
           ...(value.invoiceRef ? {invoiceRef: value.invoiceRef} : {}),
+          ...(value.warrantyDays !== undefined ? {warrantyDays: value.warrantyDays} : {}),
           ...(value.items !== undefined ? {items: value.items} : {}),
         }, token);
         setNotice(t.provider.workSaved);
@@ -1936,35 +2079,45 @@ export default function useAssistController() {
     setCancelReasonError(null);
     setCancelReasonFor({ticket, kind: "QUOTE"});
   }
-  async function onMarkTowLoaded(ticket: FeedTicket): Promise<void> {
+  async function doTowHandover(
+    ticket: FeedTicket,
+    kind: "loaded" | "received",
+    photos: string[],
+  ): Promise<void> {
     if (!token || recBusy) return;
     setRecBusy(true);
-    setError(null);
+    setHandoverError(null);
     try {
-      await markTowLoaded(ticket.id, token);
-      setNotice(t.assist.loadedNotice);
+      const uploaded = photos.length > 0 ?
+        await uploadPhotoPaths(`dispatch/handover-${ticket.id}`, photos) :
+        [];
+      if (uploaded.length !== photos.length) {
+        throw new Error(t.photos.uploadFailed);
+      }
+      if (kind === "loaded") {
+        await markTowLoaded(ticket.id, token, uploaded);
+        setNotice(t.assist.loadedNotice);
+      } else {
+        await confirmTowReceived(ticket.id, token, uploaded);
+        setNotice(t.assist.receivedNotice);
+      }
+      setHandoverFor(null);
       await reloadAll();
     } catch (err) {
-      setError(toMessage(err));
+      setHandoverError(toMessage(err));
     } finally {
       setRecBusy(false);
     }
   }
-  async function onConfirmTowReceived(ticket: FeedTicket): Promise<void> {
-    if (!token || recBusy) return;
-    setRecBusy(true);
-    setError(null);
-    try {
-      await confirmTowReceived(ticket.id, token);
-      setNotice(t.assist.receivedNotice);
-      await reloadAll();
-    } catch (err) {
-      setError(toMessage(err));
-    } finally {
-      setRecBusy(false);
-    }
+  function onMarkTowLoaded(ticket: FeedTicket): void {
+    setHandoverError(null);
+    setHandoverFor({ticket, kind: "loaded"});
   }
-  async function onSaveMobileFix(amount: number, items?: Array<{name: string; qty: number; unitPrice: number}>): Promise<void> {
+  function onConfirmTowReceived(ticket: FeedTicket): void {
+    setHandoverError(null);
+    setHandoverFor({ticket, kind: "received"});
+  }
+  async function onSaveMobileFix(amount: number, items?: Array<{name: string; qty: number; unitPrice: number; serviceCode?: string}>): Promise<void> {
     if (!token || !mobileFixFor || mobileFixBusy) return;
     setMobileFixBusy(true);
     setMobileFixError(null);
@@ -2099,12 +2252,24 @@ export default function useAssistController() {
     setError(null);
     try {
       if (accept) {
-        const point = await getFix();
-        const label = await reverseLabel(point.lat, point.lng, lang);
-        await respondReturnTow(ticket.id, true, token, {...point, label});
-      } else {
-        await respondReturnTow(ticket.id, false, token);
+        let origin: ReturnTowPoint | null = null;
+        if (ticket.bookingId) {
+          const bookings = await myBookings(token).catch(() => null);
+          const booking = bookings?.bookings.find((row) =>
+            row.id === ticket.bookingId);
+          if (booking?.origin) {
+            origin = {
+              lat: booking.origin.lat,
+              lng: booking.origin.lng,
+              label: booking.origin.label ?? null,
+            };
+          }
+        }
+        setReturnTowFor({ticket, origin, destination: null});
+        setReturnTowError(null);
+        return;
       }
+      await respondReturnTow(ticket.id, false, token);
       setDetailFor(null);
       await reloadAll();
     } catch (err) {
@@ -2113,6 +2278,27 @@ export default function useAssistController() {
       setRecBusy(false);
     }
   }
+  async function onConfirmReturnTow(point: ReturnTowPoint): Promise<void> {
+    if (!token || !returnTowFor || returnTowBusy) return;
+    setReturnTowBusy(true);
+    setReturnTowError(null);
+    try {
+      await respondReturnTow(returnTowFor.ticket.id, true, token, {
+        lat: point.lat,
+        lng: point.lng,
+        ...(point.label ? {label: point.label} : {}),
+      });
+      setReturnTowFor(null);
+      setDetailFor(null);
+      setNotice(t.assist.returnTowRequested);
+      await reloadAll();
+    } catch (err) {
+      setReturnTowError(toMessage(err));
+    } finally {
+      setReturnTowBusy(false);
+    }
+  }
+
   async function onSendEstimate(amount: number, note: string): Promise<void> {
     if (!token || !estimateFor || estimateBusy) return;
     setEstimateBusy(true);
@@ -2182,7 +2368,25 @@ export default function useAssistController() {
       if (cancelReasonFor.kind === "TOWER") {
         await cancelTowerSearch(cancelReasonFor.ticket.id, reason, token, gps?.lat, gps?.lng);
       } else if (cancelReasonFor.kind === "QUOTE") {
-        await declineQuote(cancelReasonFor.ticket.id, reason, token);
+        const declined = await declineQuote(
+          cancelReasonFor.ticket.id,
+          reason,
+          token,
+        );
+        const patch = <T extends FeedTicket | DispatchTicket>(row: T | null): T | null =>
+          row && row.id === cancelReasonFor.ticket.id ? {
+            ...row,
+            status: declined.status,
+            shopQuotedAmount: null,
+            quoteItems: null,
+            invoiceItems: null,
+            invoiceAmount: null,
+            invoiceApproval: null,
+          } : row;
+        setFeed((prev) => prev.map((row) => patch(row) as FeedTicket));
+        setDetailFor(patch);
+        setBoardDetail(patch);
+        setActive(patch);
       } else if (cancelReasonFor.kind === "FIX") {
         await declineMobileFix(cancelReasonFor.ticket.id, reason, token);
       } else {
@@ -2301,5 +2505,7 @@ export default function useAssistController() {
       setLocateBusy(false);
     }
   }
-  return {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, provider, providerLiveJob, providerOf, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef};
+  return {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, symptom, setSymptom, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentDetailFor, setPaymentDetailFor, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, hasProviderRole, provider, providerLiveJob, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef, quickFixFor, delayFor, setDelayFor, delayBusy, delayError, onSaveDelay, onClearDelay,
+  handoverFor, handoverError, doTowHandover, closeHandover: () => setHandoverFor(null),
+  setReturnTowDestination: (point: ReturnTowPoint) => setReturnTowFor((prev) => prev ? {...prev, destination: point} : prev), returnTowFor, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor};
 }

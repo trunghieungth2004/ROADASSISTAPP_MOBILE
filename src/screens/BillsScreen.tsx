@@ -11,6 +11,7 @@ import {useThemeMode} from "../context/ThemeContext";
 import {darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import BillRow from "./bills/BillRow";
+import PaymentDetailSheet from "./bills/PaymentDetailSheet";
 
 export default function BillsScreen() {
   const {t} = useStrings();
@@ -21,6 +22,7 @@ export default function BillsScreen() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailFor, setDetailFor] = useState<string | null>(null);
   const load = useCallback(async (): Promise<void> => {
     if (!token) {
       setBills([]);
@@ -43,7 +45,7 @@ export default function BillsScreen() {
     void load();
   }, [load]));
   const openBill = (bill: Bill): void => {
-    navigation.navigate("BillDetail", {ticketId: bill.ticketId});
+    setDetailFor(bill.ticketId);
   };
   return (
     <ScreenContainer>
@@ -74,6 +76,13 @@ export default function BillsScreen() {
           />
         ))}
       </ScrollView>
+      {detailFor ? (
+        <PaymentDetailSheet
+          ticketId={detailFor}
+          onClose={() => setDetailFor(null)}
+          onChanged={() => void load()}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }

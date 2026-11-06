@@ -11,6 +11,8 @@ import {uploadPhotoPaths} from "../../../../src/services/photos";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../../src/services/photos", () => {
   const actual = jest.requireActual("../../../../src/services/photos") as Record<string, unknown>;
   return {
@@ -123,14 +125,14 @@ export function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/mine") return envelope(mockMine);
-    if (u.pathname === "/dispatch/one") return envelope(mockOne);
-    if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
-    if (u.pathname === "/dispatch/near") return envelope(mockNear);
-    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
-    if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
-    if (u.pathname === "/providers/ratings") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/mine") return envelope(mockMine);
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOne);
+    if (apiPath(u) === "/dispatch/feed") return envelope(mockFeed);
+    if (apiPath(u) === "/dispatch/near") return envelope(mockNear);
+    if (apiPath(u) === "/providers/mine") return envelope(mockOwnProviders);
+    if (apiPath(u) === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
@@ -141,23 +143,23 @@ export function installFetch(): void {
         completedJobs: 7,
       });
     }
-    if (u.pathname === "/vehicleProfiles/all") {
+    if (apiPath(u) === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "BIKE", baseWidth: 0.7, baseHeight: 1.1},
         {id: "v2", type: "CAR", baseWidth: 1.9, baseHeight: 1.5},
       ]);
     }
-    if (u.pathname === "/providers/near") {
+    if (apiPath(u) === "/providers/near") {
       return envelope([
         {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330, ...(mockClosesIn === null ? {} : {closesInMinutes: mockClosesIn})},
       ]);
     }
-    if (u.pathname === "/providers/search") {
+    if (apiPath(u) === "/providers/search") {
       return envelope([
         {id: "s2", kind: "SHOP", name: "Good Shop North", lat: 10.72, lng: 106.62, status: "ACTIVE", accepting: true, openNow: true, distance: 900},
       ]);
     }
-    if (u.pathname === "/routes") {
+    if (apiPath(u) === "/routes") {
       return envelope({cached: false, routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]});
     }
     return envelope([]);
@@ -782,9 +784,9 @@ test("refresh shows a spinner and disables while reloading", async () => {
     });
     globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
       const u = new URL(String(url));
-      seen.push({path: u.pathname, body: String(init?.body ?? "")});
-      if (u.pathname === "/dispatch/feed") return feedPending;
-      if (u.pathname === "/providers/near") {
+      seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+      if (apiPath(u) === "/dispatch/feed") return feedPending;
+      if (apiPath(u) === "/providers/near") {
         return envelope([
           {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330},
         ]);
@@ -897,6 +899,16 @@ test("shop search fires on a debounced non-empty query", async () => {
     expect(search).toBeDefined();
     expect(JSON.parse(search?.body ?? "{}")).toMatchObject({query: "Good", vehicleClass: "SOLO_BIKE"});
     expect(hasText(renderer.root, "Good Shop North")).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("a dual-role profile shows the workspace switch without a provider fetch", async () => {
+  const renderer = await mount(false, ["RIDER", "SHOP"]);
+  try {
+    expect(hasText(renderer.root, en.assist.recordRider)).toBe(true);
+    expect(hasText(renderer.root, en.assist.recordProvider)).toBe(true);
   } finally {
     teardown(renderer);
   }

@@ -1,4 +1,5 @@
 import {api} from "./client";
+import type {ProviderService} from "./providers";
 import {CACHE_TTL_MS, cacheClear, cacheDel, withCache} from "../services/cache";
 
 export type TicketType = "SOS" | "TOW" | "MECHANIC" | "WALK_IN";
@@ -46,6 +47,7 @@ export type FeedTicket = DispatchTicket & {
     ratingAvg?: number;
     ratingCount?: number;
     phone?: string;
+    services?: ProviderService[] | null;
   } | null;
   statusHistory?: {status: string; at: string; by: string}[];
   destinationParty?: {
@@ -59,6 +61,7 @@ export type FeedTicket = DispatchTicket & {
     ratingAvg?: number;
     ratingCount?: number;
     phone?: string;
+    services?: ProviderService[] | null;
   } | null;
   etaPickupAt?: string | null;
   etaDropoffAt?: string | null;
@@ -104,9 +107,12 @@ export type TowFare = {
   deadheadKm: number;
   loadedKm: number;
   night: boolean;
+  nightMultiplier?: number | null;
   vehicleClass?: string | null;
   baseFee?: number | null;
   perKmFee?: number | null;
+  includedKm?: number | null;
+  billableKm?: number | null;
   waitingFee?: number | null;
   waitingMinutes?: number | null;
 };
@@ -116,12 +122,26 @@ export type WorkItem = {
   qty: number;
   unitPrice: number;
   amount?: number;
+  kind?: string;
+  serviceCode?: string;
+  note?: string;
+  listPrice?: number;
+  warrantyDays?: number;
+  warrantyUntil?: string | null;
 };
 
 export type DispatchTicket = {
   id: string;
   userId: string;
   riderName?: string | null;
+  riderParty?: {
+    id: string;
+    name: string;
+    kind: string;
+    phone?: string;
+    ratingAvg?: number;
+    ratingCount?: number;
+  } | null;
   distance?: number;
   ticketType: string;
   lat: number;
@@ -133,6 +153,8 @@ export type DispatchTicket = {
   vehicleWidth?: number | null;
   vehicleClass?: string | null;
   vehicleLabel?: string | null;
+  vehiclePlate?: string | null;
+  vehicleHeight?: number | null;
   providerId?: string | null;
   providerSnapshot?: {id: string; name: string; lat: number; lng: number; kind: string; closed?: boolean} | null;
   expiresAt?: string | null;
@@ -193,14 +215,32 @@ export type DispatchTicket = {
   commission?: number | null;
   payout?: number | null;
   waitingFee?: number | null;
+  hold?: {
+    reason: string;
+    note?: string | null;
+    etaAt?: string | null;
+    by: string;
+    at: string;
+  } | null;
+  loadedPhotos?: string[];
+  receivedPhotos?: string[];
   unfixable?: boolean | {reason?: string; photoUrls?: string[]; by?: string; at?: string} | null;
   sosAttempt?: number;
+  bookingId?: string | null;
+  warrantyOfTicketId?: string | null;
+  warrantyClaimId?: string | null;
+  acceptByAt?: string | null;
+  dispatchRound?: number | null;
+  dispatchRadiusMeters?: number | null;
+  slaBreachedAt?: string | null;
   continuedFromTicketId?: string | null;
   continuationTicketId?: string | null;
   sourceTicketId?: string | null;
   mobileCallOutFee?: number | null;
   mobileCallOutWaived?: boolean | null;
   mobileTravelFee?: number | null;
+  mobileTravelKm?: number | null;
+  mobileTravelRate?: number | null;
   mobileFeeHistory?: Array<{
     shopId: string;
     shopName?: string | null;
@@ -273,6 +313,7 @@ export type CreateTicketPayload = {
   lat: number;
   lng: number;
   note?: string;
+  symptom?: string;
   description?: string;
   photoUrls?: string[];
   declinedShopIds?: string[];
@@ -283,6 +324,7 @@ export type CreateTicketPayload = {
   vehicleType?: string;
   vehicleWidth?: number;
   vehicleLabel?: string;
+  vehiclePlate?: string;
 };
 
 export async function createTicket(payload: CreateTicketPayload, token: string): Promise<DispatchTicket> {
@@ -346,8 +388,29 @@ export type WorkOrderPayload = {
   quotedAmount?: number;
   finalAmount?: number;
   invoiceRef?: string;
-  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>;
+  warrantyDays?: number;
+  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice" | "serviceCode">>;
 };
+
+export function quickFix(ticketId: string, items: Array<{name: string; qty: number; unitPrice: number}>, token: string): Promise<{quickFix: boolean; amount: number}> {
+  const call = api.post<{quickFix: boolean; amount: number}>("/dispatch/quick-fix", {ticketId, items}, token);
+  bustTicketCaches(token);
+  return call;
+}
+
+export function releaseTicket(ticketId: string, reason: string | undefined, token: string): Promise<{released: boolean}> {
+  const call = api.post<{released: boolean}>("/dispatch/release", {ticketId, ...(reason ? {reason} : {})}, token);
+  bustTicketCaches(token);
+  return call;
+}
+
+export function beatShareLocation(ticketId: string, lat: number, lng: number, token: string): Promise<{recorded: boolean}> {
+  return api.post<{recorded: boolean}>("/dispatch/share/beat", {ticketId, lat, lng}, token);
+}
+
+export function shareTicket(ticketId: string, token: string): Promise<{token: string; expiresAt: string}> {
+  return api.post<{token: string; expiresAt: string}>("/dispatch/share", {ticketId}, token);
+}
 
 export async function updateWorkOrder(payload: WorkOrderPayload, token: string): Promise<{updated: number}> {
   const res = await api.post<{updated: number}>("/dispatch/work", payload, token);
@@ -373,20 +436,43 @@ export async function declineMobileFix(ticketId: string, reason: string | undefi
   return res;
 }
 
-export async function declineQuote(ticketId: string, reason: string | undefined, token: string): Promise<{declined: boolean}> {
-  const res = await api.post<{declined: boolean}>("/dispatch/quote/decline", {ticketId, ...(reason ? {reason} : {})}, token);
+export async function declineQuote(ticketId: string, reason: string | undefined, token: string): Promise<{declined: boolean; status: string}> {
+  const res = await api.post<{declined: boolean; status: string}>("/dispatch/quote/decline", {ticketId, ...(reason ? {reason} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
 
-export async function markTowLoaded(ticketId: string, token: string): Promise<{loaded: boolean}> {
-  const res = await api.post<{loaded: boolean}>("/dispatch/tow/loaded", {ticketId}, token);
+export async function setDispatchHold(
+  ticketId: string,
+  reason: "PARTS" | "RIDER_UNREACHABLE" | "ACCESS" | "WEATHER" | "TRAFFIC" | "OTHER",
+  token: string,
+  note?: string,
+  etaAt?: string,
+): Promise<DispatchTicket> {
+  const res = await api.post<DispatchTicket>("/dispatch/hold", {
+    ticketId,
+    reason,
+    ...(note ? {note} : {}),
+    ...(etaAt ? {etaAt} : {}),
+  }, token);
   bustTicketCaches(token);
   return res;
 }
 
-export async function confirmTowReceived(ticketId: string, token: string): Promise<{received: boolean}> {
-  const res = await api.post<{received: boolean}>("/dispatch/tow/received", {ticketId}, token);
+export async function clearDispatchHold(ticketId: string, token: string): Promise<DispatchTicket> {
+  const res = await api.post<DispatchTicket>("/dispatch/hold/clear", {ticketId}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function markTowLoaded(ticketId: string, token: string, photoUrls?: string[]): Promise<{loaded: boolean}> {
+  const res = await api.post<{loaded: boolean}>("/dispatch/tow/loaded", {ticketId, ...(photoUrls && photoUrls.length > 0 ? {photoUrls} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
+export async function confirmTowReceived(ticketId: string, token: string, photoUrls?: string[]): Promise<{received: boolean}> {
+  const res = await api.post<{received: boolean}>("/dispatch/tow/received", {ticketId, ...(photoUrls && photoUrls.length > 0 ? {photoUrls} : {})}, token);
   bustTicketCaches(token);
   return res;
 }
@@ -516,7 +602,7 @@ export async function declineEstimate(ticketId: string, token: string): Promise<
   return res;
 }
 
-export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>): Promise<{quoted: boolean; version?: number}> {
+export async function sendQuote(ticketId: string, quotedAmount: number, workType: string | undefined, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice" | "serviceCode">>): Promise<{quoted: boolean; version?: number}> {
   const res = await api.post<{quoted: boolean; version?: number}>("/dispatch/quote", {ticketId, quotedAmount, ...(workType ? {workType} : {}), ...(items && items.length > 0 ? {items} : {})}, token);
   bustTicketCaches(token);
   return res;
@@ -569,7 +655,7 @@ export async function respondReturnTow(ticketId: string, accept: boolean, token:
   return res;
 }
 
-export async function setMobileShopFix(ticketId: string, fixAmount: number, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>): Promise<{updated: number}> {
+export async function setMobileShopFix(ticketId: string, fixAmount: number, token: string, items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice" | "serviceCode">>): Promise<{updated: number}> {
   const res = await api.post<{updated: number}>("/dispatch/mobile-shop/fix", {ticketId, fixAmount, ...(items && items.length > 0 ? {items} : {})}, token);
   bustTicketCaches(token);
   return res;

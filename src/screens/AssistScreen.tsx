@@ -1,3 +1,4 @@
+import {useState} from "react";
 
 import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View} from "react-native";
 
@@ -12,7 +13,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {isTerminal} from "../api/dispatch";
 
 
-import {REPORT_REASONS} from "../api/providers";
+import {REPORT_REASONS, type Provider} from "../api/providers";
 
 
 
@@ -50,12 +51,18 @@ import RecordsSection from "./assist/RecordsSection";
 
 import BillStrip from "./assist/BillStrip";
 import TicketSheet from "./assist/TicketSheet";
+import QuickFixSheet from "./assist/QuickFixSheet";
+import DelaySheet from "./assist/DelaySheet";
+import ReturnTowSheet from "./assist/ReturnTowSheet";
+import {hasChannel, matchesVehicleClass} from "../services/serviceChannels";
+import {normalizeVehicleType} from "../api/vehicles";
 import DisputeSheet from "./assist/DisputeSheet";
 import EstimateSheet from "./assist/EstimateSheet";
 import WorkSheet from "./assist/WorkSheet";
 import UnfixableSheet from "./assist/UnfixableSheet";
 import CancelReasonSheet from "./assist/CancelReasonSheet";
 import PaymentMethodSheet from "./assist/PaymentMethodSheet";
+import HandoverPhotoSheet from "./assist/HandoverPhotoSheet";
 import SePayCheckoutSheet from "./assist/SePayCheckoutSheet";
 import {QUOTE_DECLINE_REASONS, SHOP_DECLINE_REASONS, TOWER_CANCEL_REASONS, quoteDeclineReasonLabel, shopDeclineReasonLabel, towerCancelReasonLabel} from "./assist/cancelReasons";
 import SosContinuationSheet from "./assist/SosContinuationSheet";
@@ -74,13 +81,18 @@ import {declinedShopIds} from "./assist/towDest";
 import TowRoutePreview from "./assist/TowRoutePreview";
 
 import ShopDetailSheet from "./assist/ShopDetailSheet";
+import ProviderDetailsSheet from "./more/ProviderDetailsSheet";
+import PaymentDetailSheet from "./bills/PaymentDetailSheet";
 import {IM_HERE_RADIUS_M, TOW_RADII, WALK_RADII} from "./assist/walkShop";
 
 const ACTIVE_KEY = "roadassist.activeTicket";
 import useAssistController from "./assist/useAssistController";
 
 export default function AssistScreen() {
-  const {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, provider, providerLiveJob, providerOf, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef} = useAssistController();  return (
+  const {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, fittedJobRef, fundedForApproval, gps, hasJobCard, hasProviderRole, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, symptom, setSymptom, quickFixFor, delayFor, setDelayFor, delayBusy, delayError, onSaveDelay, onClearDelay, handoverFor, handoverError, doTowHandover, closeHandover, returnTowFor, setReturnTowDestination, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentDetailFor, setPaymentDetailFor, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, providerLiveJob, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef} = useAssistController();
+  const [returnTowSearchOpen, setReturnTowSearchOpen] = useState(false);
+  const [manageProvider, setManageProvider] = useState<Provider | null>(null);
+  return (
     <View style={styles.root}>
       <AssistMapView
         theme={theme}
@@ -93,13 +105,46 @@ export default function AssistScreen() {
         jobLayers={jobLayers}
         onMapReady={() => { mapReadyRef.current = true; applyCenter(); }}
       />
+      {(() => {
+        const candidate = pendingOwnTow ?? pendingOwnSos ?? (active && uid && active.userId === uid ? active : null);
+        if (!candidate || candidate.status !== "1" || candidate.hold) return null;
+        const breached = typeof candidate.slaBreachedAt === "string" && candidate.slaBreachedAt !== "";
+        const round = typeof candidate.dispatchRound === "number" ? candidate.dispatchRound : 1;
+        if (!breached && round <= 1) return null;
+        return (
+          <View style={[styles.holdBanner, {top: insets.top + (active?.hold ? 84 : 8), backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <MaterialIcons name={breached ? "search-off" : "sync"} size={18} color={breached ? theme.danger : theme.primary} />
+            <View style={styles.holdTextWrap}>
+              <Text style={[styles.holdTitle, {color: breached ? theme.danger : theme.text}]}>
+                {breached ? t.assist.slaNone : t.assist.slaFinding.replace("{n}", String(round))}
+              </Text>
+            </View>
+          </View>
+        );
+      })()}
+      {active?.hold ? (
+        <View style={[styles.holdBanner, {top: insets.top + 8, backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <MaterialIcons name="schedule" size={18} color={theme.primary} />
+          <View style={styles.holdTextWrap}>
+            <Text style={[styles.holdTitle, {color: theme.text}]}>
+              {active.hold.reason === "PARTS" ? t.assist.holdParts :
+                active.hold.reason === "RIDER_UNREACHABLE" ? t.assist.holdRider :
+                  active.hold.reason === "ACCESS" ? t.assist.holdAccess :
+                    active.hold.reason === "WEATHER" ? t.assist.holdWeather :
+                      t.assist.holdOther}
+            </Text>
+            {active.hold.note ? <Text style={[styles.holdNote, {color: theme.muted}]} numberOfLines={2}>{active.hold.note}</Text> : null}
+            {active.hold.etaAt ? <Text style={[styles.holdNote, {color: theme.primary}]}>{t.assist.holdUntil}: {new Date(active.hold.etaAt).toLocaleTimeString()}</Text> : null}
+          </View>
+        </View>
+      ) : null}
       {liveTow && activeFeed ? (
         <View style={[styles.bottomContainer, {bottom: insets.bottom + 12}]}>
           <ActiveJobCard
             t={t}
             theme={theme}
             ticket={activeFeed}
-            title={activeFeed.ticketType === "SOS" || activeFeed.towKind === "RETURN" ? `${t.assist.activeJob} · ${ticketTypeLabel(activeFeed.ticketType, t, activeFeed.towKind)}` : t.assist.activeJob}
+            title={activeFeed.ticketType === "SOS" ? `${t.assist.activeJob} · ${ticketTypeLabel(activeFeed.ticketType, t, activeFeed.towKind)}` : t.assist.activeJob}
             line={activeName}
             pills={activeJobPills()}
             icon={activeFeed.ticketType === "SOS" ? "sos" : "tow"}
@@ -127,8 +172,8 @@ export default function AssistScreen() {
             t={t}
             theme={theme}
             ticket={pendingOwnTow}
-            title={`${t.assist.activeJob} · ${ticketTypeLabel(pendingOwnTow.ticketType, t, pendingOwnTow.towKind)}`}
-            line={`${t.assist.towRequested} · ${t.assist.findingTower} · ${pendingDropName(pendingOwnTow)}`}
+            title={t.assist.activeJob}
+            line={`${t.assist.findingTower} · ${pendingDropName(pendingOwnTow)}`}
             icon="tow"
             tone={theme.border}
             iconTone={theme.primary}
@@ -171,7 +216,7 @@ export default function AssistScreen() {
         billStrip={<BillStrip t={t} theme={theme} bills={bills} dueCount={dueCount} dueTotal={dueTotal} onOpen={() => navigation.navigate("Bills" as never)} />}
         onLayoutHeight={setCardH}
       >
-            {isRider && provider && detailFor === null && boardDetail === null ? (
+            {isRider && hasProviderRole && detailFor === null && boardDetail === null ? (
               <View style={[styles.workspaceSwitch, {borderColor: theme.border}]}>
                 {(["rider", "provider"] as const).map((mode) => {
                   const selected = workspace === mode;
@@ -281,7 +326,7 @@ export default function AssistScreen() {
               <RecordsSection
                 t={t}
                 theme={theme}
-                tickets={provider ? (workspace === "provider" ? providerRecords : riderRecords) : feed}
+                tickets={hasProviderRole ? (workspace === "provider" ? providerRecords : riderRecords) : feed}
                 loading={loading}
                 shopKinds={new Map(
                   ownProviders
@@ -311,6 +356,7 @@ export default function AssistScreen() {
           walkBusy={walkBusy}
           navBusy={navBusy}
           imHereBusy={imHereBusy}
+          serviceChannel="ASSIST"
           jobs={shopJobs[shopSheet.id] ?? null}
           reviews={shopReviews[shopSheet.id] ?? null}
           onReport={() => {
@@ -322,7 +368,23 @@ export default function AssistScreen() {
           }}
           onWalkHere={() => void onWalkPreview(shopSheet)}
           onRouteFromHere={() => void onNavigateToShop(shopSheet)}
+          onChoose={browsing ? () => void onWalkPreview(shopSheet) : null}
           onImHere={shopSheet && gps && distBetween(gps, {lat: shopSheet.lat, lng: shopSheet.lng}) <= IM_HERE_RADIUS_M ? () => void onImHere(shopSheet) : null}
+          onBook={shopSheet ? () => {
+            const picked = shopSheet;
+            closeShopSheet();
+            navigation.navigate("Booking" as never, {
+              providerId: picked.id,
+              providerName: picked.name,
+              services: picked.services ?? [],
+              at: Date.now(),
+            } as never);
+          } : null}
+          onManage={shopSheet && ownProviders.some((provider) => provider.id === shopSheet.id) ? () => {
+            const picked = shopSheet;
+            closeShopSheet();
+            setManageProvider(picked);
+          } : null}
           onClose={() => closeShopSheet()}
         />
       ) : null}
@@ -344,6 +406,8 @@ export default function AssistScreen() {
           ticketType={pendingTicket}
           note={note}
           onNote={setNote}
+          symptom={symptom}
+          onSymptom={setSymptom}
           towDest={
             <View style={{gap: 8}}>
               <Pressable
@@ -434,7 +498,8 @@ export default function AssistScreen() {
             shops={fetchAssistShops}
             filters={{sortBy: "distance", ...(editDestFor ? {ticketId: editDestFor.id} : {})}}
             sources={shopSearchMode === "tow" ? ["saved", "shop", "directory", "map"] : ["shop", "map"]}
-            mapFilter={isRepairPlace}
+            {...(shopSearchMode === "tow" ? {shopPreviewChannel: "ASSIST" as const} : {})}
+            mapFilter={shopSearchMode === "tow" ? undefined : isRepairPlace}
             query={query}
             onQuery={setQuery}
             onPick={(place) => onPickSearchPlace(place, shopSearchMode)}
@@ -589,7 +654,7 @@ export default function AssistScreen() {
           uid={uid}
           scope="TICKET"
           refId={chatFor.id}
-          title={ticketTitle(chatFor, t)}
+          title={ticketTypeLabel(chatFor.ticketType, t, chatFor.towKind)}
           ticketType={chatFor.ticketType}
           status={chatFor.status}
           otherName={chatFor.otherParty?.name ?? null}
@@ -616,12 +681,17 @@ export default function AssistScreen() {
       {mobileFixFor ? (
         <MobileFixSheet
           t={t}
-          ticketLabel={ticketTitle(mobileFixFor, t)}
+          ticketLabel={ticketTypeLabel(mobileFixFor.ticketType, t, mobileFixFor.towKind)}
           status={mobileFixFor.status}
           busy={mobileFixBusy}
           error={mobileFixError}
           initialAmount={typeof mobileFixFor.finalAmount === "number" ? mobileFixFor.finalAmount : null}
           initialItems={mobileFixFor.invoiceItems ?? null}
+          catalog={(ownProviders.find((provider) => provider.id === mobileFixFor.assignedShopId)?.services ?? [])
+            .filter((service) => hasChannel(service, "ASSIST") &&
+              matchesVehicleClass(service, mobileFixFor.vehicleClass ??
+                (normalizeVehicleType(mobileFixFor.vehicleType) === "CAR" ? "CAR" : "SOLO_BIKE")))
+            .map((service) => ({code: service.code, name: service.name, displayPrice: service.displayPrice}))}
           onSubmit={(amount, items) => void onSaveMobileFix(amount, items)}
           onClose={() => {
             setMobileFixFor(null);
@@ -632,7 +702,7 @@ export default function AssistScreen() {
       {workFor ? (
         <WorkSheet
           t={t}
-          ticketLabel={ticketTitle(workFor.ticket, t)}
+          ticketLabel={ticketTypeLabel(workFor.ticket.ticketType, t, workFor.ticket.towKind)}
           mode={workFor.mode}
           status={workFor.ticket.status}
           busy={workBusy}
@@ -640,7 +710,18 @@ export default function AssistScreen() {
           initialWorkType={typeof workFor.ticket.workType === "string" ? workFor.ticket.workType : null}
           initialInvoiceRef={typeof workFor.ticket.invoiceRef === "string" ? workFor.ticket.invoiceRef : null}
           initialItems={workFor.mode === "quote" ? workFor.ticket.quoteItems ?? null : workFor.ticket.invoiceItems ?? workFor.ticket.quoteItems ?? null}
-          catalog={ownProviders.find((item) => item.kind === "SHOP")?.services ?? []}
+          catalog={(ownProviders.find((item) => item.kind === "SHOP")?.services ?? [])
+            .filter((service) => matchesVehicleClass(service, workFor.ticket.vehicleClass))
+            .map((service) => ({
+              code: service.code,
+              name: service.name,
+              displayPrice: service.displayPrice,
+              quoteRequired: service.quoteRequired,
+              warrantyDays: service.warrantyDays,
+              category: service.category,
+              channels: service.channels,
+              vehicleClasses: service.vehicleClasses,
+            }))}
           onSubmit={(value) => void onSubmitWork(value)}
           onClose={() => {
             setWorkFor(null);
@@ -651,7 +732,7 @@ export default function AssistScreen() {
       {disputeFor ? (
         <DisputeSheet
           t={t}
-          ticketLabel={ticketTitle(disputeFor, t)}
+          ticketLabel={ticketTypeLabel(disputeFor.ticketType, t, disputeFor.towKind)}
           ticketType={disputeFor.ticketType}
           status={disputeFor.status}
           viewer={disputeFor.direction === "out" ? "RIDER" : "PROVIDER"}
@@ -664,7 +745,7 @@ export default function AssistScreen() {
       {continuationFor ? (
         <SosContinuationSheet
           t={t}
-          ticketLabel={ticketTitle(continuationFor.ticket, t)}
+          ticketLabel={ticketTypeLabel(continuationFor.ticket.ticketType, t, continuationFor.ticket.towKind)}
           status={continuationFor.ticket.status}
           attempt={continuationFor.nextAttempt}
           callOutTotal={continuationFor.callOutTotal}
@@ -677,7 +758,7 @@ export default function AssistScreen() {
       {unfixableFor ? (
         <UnfixableSheet
           t={t}
-          ticketLabel={ticketTitle(unfixableFor, t)}
+          ticketLabel={ticketTypeLabel(unfixableFor.ticketType, t, unfixableFor.towKind)}
           status={unfixableFor.status}
           busy={unfixableBusy}
           error={unfixableError}
@@ -726,6 +807,114 @@ export default function AssistScreen() {
           onSwitchToCash={onSwitchToCash}
         />
       ) : null}
+      {returnTowSearchOpen ? (
+        <Overlay
+          visible
+          variant="fullScreen"
+          closeLabel={t.common.cancel}
+          onClose={() => setReturnTowSearchOpen(false)}
+        >
+          <PlaceSearchScreen
+            t={t}
+            lang={lang}
+            title={t.assist.returnTowDropOff}
+            placeholder={t.assist.returnTowChoosePlace}
+            sources={["saved", "map", "directory"]}
+            onPick={(place) => {
+              setReturnTowDestination({
+                lat: place.lat,
+                lng: place.lng,
+                label: place.label,
+              });
+              setReturnTowSearchOpen(false);
+            }}
+            onClose={() => setReturnTowSearchOpen(false)}
+          />
+        </Overlay>
+      ) : null}
+      {returnTowFor ? (
+        <ReturnTowSheet
+          t={t}
+          current={gps}
+          origin={returnTowFor.origin}
+          destination={returnTowFor.destination}
+          onOpenSearch={() => setReturnTowSearchOpen(true)}
+          busy={returnTowBusy}
+          error={returnTowError}
+          onConfirm={(point) => void onConfirmReturnTow(point)}
+          onClose={() => { setReturnTowFor(null); setReturnTowSearchOpen(false); }}
+        />
+      ) : null}
+      {delayFor ? (
+        <DelaySheet
+          t={t}
+          ticket={delayFor}
+          busy={delayBusy}
+          error={delayError}
+          onSubmit={(reason, note, etaAt) => void onSaveDelay(reason, note, etaAt)}
+          onClear={() => void onClearDelay()}
+          canClear={delayFor.hold?.by === uid || bundle?.user.role === "1"}
+          onClose={() => setDelayFor(null)}
+        />
+      ) : null}
+      {handoverFor ? (
+        <HandoverPhotoSheet
+          t={t}
+          theme={theme}
+          kind={handoverFor.kind}
+          busy={recBusy}
+          error={handoverError}
+          onConfirm={(photos) => void doTowHandover(handoverFor.ticket, handoverFor.kind, photos)}
+          onSkip={() => void doTowHandover(handoverFor.ticket, handoverFor.kind, [])}
+          onClose={closeHandover}
+        />
+      ) : null}
+      {quickFixFor ? (
+        <QuickFixSheet
+          t={t}
+          theme={theme}
+          ticketLabel={quickFixFor.ticketType === "MECHANIC" ? t.assist.mechanic : t.assist.walkIn}
+          catalog={(ownProviders.find((provider) => provider.id === quickFixFor.assignedShopId)?.services ?? [])
+            .filter((service) => !service.quoteRequired && hasChannel(service, "ASSIST") &&
+              matchesVehicleClass(service, quickFixFor.vehicleClass))
+            .map((service) => ({code: service.code, name: service.name, displayPrice: service.displayPrice}))}
+          busy={quickFixBusy}
+          error={quickFixError}
+          onSubmit={(items) => void onSubmitQuickFix(items)}
+          onClose={() => setQuickFixFor(null)}
+        />
+      ) : null}
+      {paymentDetailFor ? (
+        <PaymentDetailSheet
+          ticketId={paymentDetailFor.ticketId}
+          scope={paymentDetailFor.scope}
+          ticket={paymentDetailFor.ticket}
+          onClose={() => setPaymentDetailFor(null)}
+          onChanged={() => void reloadAll()}
+        />
+      ) : null}
+      {manageProvider ? (
+        <ProviderDetailsSheet
+          t={t}
+          theme={theme}
+          token={token}
+          provider={manageProvider}
+          onClose={() => setManageProvider(null)}
+          onWarranty={() => {
+            setManageProvider(null);
+            navigation.navigate("Warranty" as never);
+          }}
+          onEdit={() => {
+            setManageProvider(null);
+            navigation.navigate("Providers" as never);
+          }}
+          onRemove={() => {
+            setManageProvider(null);
+            navigation.navigate("Providers" as never);
+          }}
+          onChanged={() => void reloadAll()}
+        />
+      ) : null}
       {error ? (
         <Snack message={error} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setError(null)} />
       ) : (
@@ -736,6 +925,11 @@ export default function AssistScreen() {
 }
 
 const styles = StyleSheet.create({
+  holdBanner: {position: "absolute", left: 12, right: 12, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", gap: 10, zIndex: 20, elevation: 4},
+  holdTextWrap: {flex: 1, gap: 2},
+  holdTitle: {fontSize: 14, fontWeight: "700"},
+  holdNote: {fontSize: 12},
+
   root: {flex: 1},
   bottomContainer: {position: "absolute", left: 12, right: 12},
   stack: {gap: 8},

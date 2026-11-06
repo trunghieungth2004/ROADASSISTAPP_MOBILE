@@ -8,7 +8,7 @@ import {darkTheme, lightTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
-import {ticketTitle} from "./ticketLabels";
+import {ticketTypeLabel} from "./ticketLabels";
 
 type Props = {
   t: Strings;
@@ -29,7 +29,7 @@ export default function RatingSheet({t, ticket, initialScore, initialComment, bu
     <Overlay
       visible
       variant="dialog"
-      title={`${t.rating.title} · ${ticketTitle(ticket, t)}`}
+      title={`${t.rating.title} · ${ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}`}
       right={<TicketStatusPill t={t} theme={theme} status={ticket.status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}

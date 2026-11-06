@@ -5,6 +5,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
+import {delayReasonLabel} from "./delayReasons";
 import {darkTheme, lightTheme, onColor, type AppTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {chatMessages, openChat, sendChatMessage, type ChatMessage, type ChatScope} from "../../api/chat";
@@ -31,7 +32,7 @@ type Props = {
   onClose: () => void;
 };
 
-type IconName = "chat-bubble-outline" | "info-outline" | "check-circle" | "cancel" | "local-shipping" | "build" | "lock-outline" | "error-outline" | "request-quote";
+type IconName = "chat-bubble-outline" | "info-outline" | "check-circle" | "cancel" | "local-shipping" | "build" | "lock-outline" | "error-outline" | "request-quote" | "schedule";
 
 function clockTime(iso: string): string {
   const at = Date.parse(iso);
@@ -106,6 +107,19 @@ function systemText(message: ChatMessage, t: Props["t"]): string {
   if (event === "MOBILE_FIX_QUOTED") return t.assist.fixQuoteSent;
   if (event === "MOBILE_FIX_APPROVED") return t.assist.fixQuoteApproved;
   if (event === "MOBILE_FIX_DECLINED") return t.assist.fixQuoteDeclined;
+  if (event === "DELAY_REPORTED") {
+    const reason = typeof params.reason === "string" ?
+      delayReasonLabel(params.reason, t) :
+      t.assist.holdOther;
+    const note = typeof params.note === "string" && params.note !== "" ?
+      ` · ${params.note}` :
+      "";
+    const eta = typeof params.etaAt === "string" && params.etaAt !== "" ?
+      ` · ${t.assist.holdUntil} ${new Date(params.etaAt).toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"})}` :
+      "";
+    return `${t.assist.delayActive}: ${reason}${note}${eta}`;
+  }
+  if (event === "DELAY_CLEARED") return t.assist.delayCleared;
   return message.text ?? "";
 }
 
@@ -124,6 +138,8 @@ function systemIcon(event?: string): IconName {
   if (event === "QUOTE_DECLINED" || event === "MOBILE_FIX_DECLINED") {
     return "cancel";
   }
+  if (event === "DELAY_REPORTED") return "schedule";
+  if (event === "DELAY_CLEARED") return "check-circle";
   return "info-outline";
 }
 
@@ -138,6 +154,7 @@ function systemColor(message: ChatMessage, theme: AppTheme): string {
     message.event === "MOBILE_FIX_DECLINED") return theme.danger;
   if (message.event === "QUOTE_APPROVED" ||
     message.event === "MOBILE_FIX_APPROVED") return theme.success;
+  if (message.event === "DELAY_CLEARED") return theme.success;
   return theme.primary;
 }
 

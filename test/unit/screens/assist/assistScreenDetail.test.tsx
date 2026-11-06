@@ -10,6 +10,8 @@ import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
 import {lightTheme} from "../../../../src/theme";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
 }));
@@ -113,11 +115,11 @@ export function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/mine") return envelope(mockMine);
-    if (u.pathname === "/dispatch/one") return envelope(mockOne);
-    if (u.pathname === "/dispatch/feed") return envelope(mockFeed);
-    if (u.pathname === "/payments/create") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/mine") return envelope(mockMine);
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOne);
+    if (apiPath(u) === "/dispatch/feed") return envelope(mockFeed);
+    if (apiPath(u) === "/payments/create") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string; method?: string};
       return envelope({
         id: "pay1",
@@ -128,10 +130,10 @@ export function installFetch(): void {
         checkout: {qrUrl: "https://pay.example/checkout"},
       });
     }
-    if (u.pathname === "/payments/cancel") {
+    if (apiPath(u) === "/payments/cancel") {
       return envelope({cancelled: true, method: "SEPAY"});
     }
-    if (u.pathname === "/payments/one") {
+    if (apiPath(u) === "/payments/one") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {ticketId?: string};
       return envelope([{
         id: "pay1",
@@ -141,10 +143,10 @@ export function installFetch(): void {
         amount: 150000,
       }]);
     }
-    if (u.pathname === "/dispatch/near") return envelope(mockNear);
-    if (u.pathname === "/providers/mine") return envelope(mockOwnProviders);
-    if (u.pathname === "/ratings/by-ticket") return envelope(mockTicketRatings);
-    if (u.pathname === "/providers/ratings") {
+    if (apiPath(u) === "/dispatch/near") return envelope(mockNear);
+    if (apiPath(u) === "/providers/mine") return envelope(mockOwnProviders);
+    if (apiPath(u) === "/ratings/by-ticket") return envelope(mockTicketRatings);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},
@@ -155,23 +157,23 @@ export function installFetch(): void {
         completedJobs: 7,
       });
     }
-    if (u.pathname === "/vehicleProfiles/all") {
+    if (apiPath(u) === "/vehicleProfiles/all") {
       return envelope([
         {id: "v1", type: "BIKE", baseWidth: 0.7, baseHeight: 1.1},
         {id: "v2", type: "CAR", baseWidth: 1.9, baseHeight: 1.5},
       ]);
     }
-    if (u.pathname === "/providers/near") {
+    if (apiPath(u) === "/providers/near") {
       return envelope([
         {id: "s1", kind: "SHOP", name: "Good Shop", lat: 10.71, lng: 106.61, status: "ACTIVE", accepting: true, openNow: true, distance: 330, ...(mockClosesIn === null ? {} : {closesInMinutes: mockClosesIn})},
       ]);
     }
-    if (u.pathname === "/providers/search") {
+    if (apiPath(u) === "/providers/search") {
       return envelope([
         {id: "s2", kind: "SHOP", name: "Good Shop North", lat: 10.72, lng: 106.62, status: "ACTIVE", accepting: true, openNow: true, distance: 900},
       ]);
     }
-    if (u.pathname === "/routes") {
+    if (apiPath(u) === "/routes") {
       return envelope({cached: false, routes: [{source: "test", geometry: {type: "LineString", coordinates: [[106.6, 10.7], [106.61, 10.71]]}, distanceMeters: 1500, durationSeconds: 300}]});
     }
     return envelope([]);
@@ -480,7 +482,7 @@ test("tapping the drop-off card opens the shop modal", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t9", userId: "u1", ticketType: "TOW", lat: 10.7, lng: 106.6, status: "2", providerId: "tow7", assignedShopId: "tow7", destinationShopId: "shop-1", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}, destinationSnapshot: {id: "shop-1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP"}, destinationParty: {id: "shop-1", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65, label: "12 Le Loi", openNow: true}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Tow · Matched");
+    await openRecord(renderer, "Tow · On the way");
     expect(hasText(renderer.root, en.assist.dropOffPoint)).toBe(true);
     const card = renderer.root
       .findAll((n) => n.props?.accessibilityLabel === "Fix Shop" && typeof n.props?.onPress === "function")
@@ -500,7 +502,7 @@ test("tapping the party shop card opens the shop modal", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t8", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", lat: 10.75, lng: 106.65, label: "12 Le Loi", openNow: true}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     const card = renderer.root
       .findAll((n) => n.props?.accessibilityLabel === "Fix Shop" && typeof n.props?.onPress === "function")
       .pop();
@@ -519,7 +521,7 @@ test("record sheet shows the shop block from enriched parties", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t1", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", label: "12 Le Loi", openNow: true, ratingAvg: 4.5, ratingCount: 12, phone: "+84111"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     expect(hasText(renderer.root, "12 Le Loi")).toBe(true);
     expect(hasText(renderer.root, en.shop.open)).toBe(true);
     expect(hasText(renderer.root, "+84111")).toBe(true);
@@ -536,7 +538,7 @@ test("record sheet renders the status history strip", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t2", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z", statusHistory: [{status: "1", at: "2026-01-01T00:00:00.000Z", by: "u1"}, {status: "2", at: "2026-01-01T01:00:00.000Z", by: "op1"}]}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     expect(hasText(renderer.root, en.assist.statusAccepted)).toBe(true);
     const history = renderer.root.findAll((n) => typeof n.props?.accessibilityLabel === "string" && (n.props.accessibilityLabel as string).includes(en.assist.statusPending));
     expect(history.length).toBeGreaterThan(0);
@@ -601,7 +603,7 @@ test("shop jobs quote before work starts", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     expect(sheetAction(renderer, en.assist.startWork)).toBeUndefined();
     expect(sheetAction(renderer, en.assist.sendQuote)).toBeDefined();
   } finally {
@@ -614,7 +616,7 @@ test("operator marks in-progress jobs ready from the sheet", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · In progress");
+    await openRecord(renderer, "Walk-in · Repairing");
     expect(sheetAction(renderer, en.assist.markReady)).toBeDefined();
     expect(sheetAction(renderer, en.assist.startWork)).toBeUndefined();
     seen.length = 0;
@@ -634,7 +636,7 @@ test("shop sends a binding quote from the work sheet", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     const open = sheetAction(renderer, en.assist.sendQuote);
     expect(open).toBeDefined();
     await act(async () => {
@@ -661,34 +663,14 @@ test("shop sends a binding quote from the work sheet", async () => {
   }
 });
 
-test("shop records work-done details from the sheet", async () => {
+test("shop no longer exposes the work-order sheet", async () => {
   const renderer = await mount();
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · In progress");
-    expect(sheetAction(renderer, en.assist.sendQuote)).toBeUndefined();
-    const open = sheetAction(renderer, en.provider.workDone);
-    expect(open).toBeDefined();
-    await act(async () => {
-      await open?.props.onPress();
-      await flush();
-    });
-    const invoice = renderer.root.findAll((n) => typeof n.props?.onChangeText === "function" && n.props?.placeholder === en.provider.invoicePlaceholder)[0];
-    expect(invoice).toBeDefined();
-    await act(async () => {
-      await invoice?.props.onChangeText("INV-9");
-      await flush();
-    });
-    seen.length = 0;
-    const submits = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.provider.saveWork && typeof n.props?.onPress === "function");
-    await act(async () => {
-      await submits.pop()?.props.onPress();
-      await flush();
-    });
-    const posted = seen.find((call) => call.path === "/dispatch/work");
-    expect(posted).toBeDefined();
-    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ticketId: "t2", invoiceRef: "INV-9"});
+    await openRecord(renderer, "Walk-in · Repairing");
+    expect(sheetAction(renderer, en.provider.workDone)).toBeUndefined();
+    expect(seen.find((call) => call.path === "/dispatch/work")).toBeUndefined();
   } finally {
     teardown(renderer);
   }
@@ -699,7 +681,7 @@ test("destination shop sends an estimate from the modal", async () => {
   try {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t4", userId: "rider4", ticketType: "TOW", lat: 10.7, lng: 106.6, status: "2", destinationShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Tow · Matched");
+    await openRecord(renderer, "Tow · On the way");
     const open = sheetAction(renderer, en.assist.sendEstimate);
     expect(open).toBeDefined();
     await act(async () => {
@@ -835,7 +817,7 @@ test("rider resolves a ready ticket from the sheet", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t9", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "7", assignedShopId: "shop9", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "SOS · Ready");
+    await openRecord(renderer, "SOS · Work done");
     expect(sheetAction(renderer, en.assist.resolved)).toBeDefined();
     expect(sheetAction(renderer, en.assist.rate)).toBeUndefined();
     seen.length = 0;
@@ -854,7 +836,7 @@ test("quoted amounts lock in the work form", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", shopQuotedAmount: 150000, direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · In progress");
+    await openRecord(renderer, "Walk-in · Repairing");
     const edit = sheetAction(renderer, en.provider.saveWork);
     await act(async () => {
       await edit?.props.onPress();
@@ -871,7 +853,7 @@ test("shop block opens the modal where routing to the shop lives", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t1", userId: "u1", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "out", providerSnapshot: {id: "shop9", name: "Fix Shop", lat: 10.71, lng: 106.61, kind: "SHOP"}, otherParty: {id: "shop9", name: "Fix Shop", kind: "SHOP", lat: 10.71, lng: 106.61, label: "12 Le Loi"}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     const card = renderer.root
       .findAll((n) => n.props?.accessibilityLabel === "Fix Shop" && typeof n.props?.onPress === "function")
       .pop();
@@ -899,7 +881,7 @@ test("rated tickets offer edit rating with comment", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t9", userId: "u1", ticketType: "SOS", lat: 10.7, lng: 106.6, status: "4", assignedShopId: "shop9", direction: "out", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "SOS · Resolved");
+    await openRecord(renderer, "SOS · Completed");
     await act(async () => {
       await sheetAction(renderer, en.assist.rate)?.props.onPress();
       await flush();
@@ -917,7 +899,7 @@ test("rated tickets offer edit rating with comment", async () => {
     });
     const rated = seen.find((call) => call.path === "/ratings");
     expect(JSON.parse(rated?.body ?? "{}")).toMatchObject({ticketId: "t9", score: 5, text: "Great help"});
-    await openRecord(renderer, "SOS · Resolved");
+    await openRecord(renderer, "SOS · Completed");
     expect(sheetAction(renderer, en.rating.editRating)).toBeDefined();
     expect(sheetAction(renderer, en.assist.rate)).toBeUndefined();
   } finally {
@@ -933,7 +915,7 @@ test("reply affordance hides on own ratings", async () => {
       {id: "r1", targetId: "shop9", targetKind: "SHOP", byUserId: "u1", byUserName: "Me", score: 5, text: "Fixed fast", reply: null, repliedAt: null},
       {id: "r2", targetId: "shop9", targetKind: "SHOP", byUserId: "rider9", byUserName: "Rider Nine", score: 4, text: null, reply: null, repliedAt: null},
     ];
-    await openRecord(renderer, "Walk-in · Resolved");
+    await openRecord(renderer, "Walk-in · Completed");
     expect(hasText(renderer.root, "Fixed fast")).toBe(true);
     const replies = texts(renderer.root, en.rating.sendReply).filter((n) => typeof n.props?.onPress === "function");
     expect(replies).toHaveLength(1);
@@ -978,7 +960,7 @@ test("rating rows show author faces and names", async () => {
     mockTicketRatings = [
       {id: "r1", targetId: "shop9", targetKind: "SHOP", byUserId: "rider9", byUserName: "Rider Nine", score: 5, text: "Fixed fast", reply: "Thanks", repliedByName: "Fix Shop", repliedAt: null},
     ];
-    await openRecord(renderer, "Walk-in · Resolved");
+    await openRecord(renderer, "Walk-in · Completed");
     expect(hasText(renderer.root, en.rating.yourRating)).toBe(true);
     expect(hasText(renderer.root, "Rider Nine")).toBe(true);
     expect(hasText(renderer.root, "R")).toBe(true);
@@ -992,7 +974,7 @@ test("inbound sheet shows the rider stars", async () => {
   const renderer = await mount();
   try {
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "2", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: {id: "rider2", name: "Rider Two", kind: "RIDER", ratingAvg: 4, ratingCount: 5}, createdAt: "2026-01-01T00:00:00.000Z"}];
-    await openRecord(renderer, "Walk-in · Matched");
+    await openRecord(renderer, "Walk-in · On the way");
     const joined = renderer.root
       .findAll((n) => Array.isArray(n.props?.children))
       .map((n) => (n.props.children as unknown[]).join(""));
@@ -1008,7 +990,7 @@ test("shop side rates the rider under its own label", async () => {
     mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
     mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "4", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: {id: "rider2", name: "Rider Two", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     mockTicketRatings = [];
-    await openRecord(renderer, "Walk-in · Resolved");
+    await openRecord(renderer, "Walk-in · Completed");
     expect(sheetAction(renderer, en.assist.rateRider)).toBeDefined();
   } finally {
     teardown(renderer);

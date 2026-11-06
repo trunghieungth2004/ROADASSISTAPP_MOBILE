@@ -1,23 +1,40 @@
 import {useCallback, useEffect, useState} from "react";
-import {ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {ActivityIndicator, Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation, useRoute} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {toMessage} from "../api/client";
-import {fetchBill, type Bill, type BillItem} from "../api/bills";
+import {fetchBill, requestInvoice, type Bill, type BillItem} from "../api/bills";
+import {requestRefund} from "../api/refunds";
 import {cancelPayment, confirmCashReceipt, createPayment, fetchTicketPayments, type TicketPayment} from "../api/dispatch";
-import {paymentMethodLabel} from "../api/payments";
 import {useAuth} from "../context/AuthContext";
 import {useBills} from "../context/BillsContext";
 import {useStrings} from "../context/LanguageContext";
+import type {Strings} from "../i18n/en";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {darkTheme, lightTheme, type AppTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import SePayCheckoutSheet from "./assist/SePayCheckoutSheet";
-import {billDateLabel, billItemCount, billItemLabel, billItemStatusColor, billItemStatusLabel, billPayeeLabel, billStatusColor, billStatusLabel, billTitle, itemNetPayout, itemPayoutStatus, payeeSummary, payoutStatusColor, payoutStatusLabel} from "./bills/billLabels";
+import WarrantyClaimDialog from "./bills/WarrantyClaimDialog";
+import {ActionFooter, type OverlayAction} from "../components/overlay/Overlay";
+import {
+  billDateTimeLabel,
+  billItemCount,
+  billPayeeLabel,
+  billTitle,
+  payeeSummary,
+} from "./bills/billLabels";
+import {
+  BillChargesCard,
+  BillPartiesCard,
+  BillPaymentCard,
+  BillStatusPill,
+  BillTotalsCard,
+  billHeroStatus,
+} from "./bills/BillSections";
 
 type BillParams = {
   ticketId?: string;
@@ -29,8 +46,165 @@ type BillParams = {
 
 const RECEIVED = new Set(["HELD", "CONFIRMED", "PARTIAL"]);
 
+function BillHeroCard({bill, payeeMode, header, meta, t, theme}: {
+  bill: Bill;
+  payeeMode: boolean;
+  header: {label: string; color: string} | null;
+  meta: string;
+  t: Strings;
+  theme: AppTheme;
+}) {
+  const summary = payeeMode ? payeeSummary(bill) : null;
+  return (
+    <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+      <View style={styles.rowBetween}>
+        <Text style={[styles.cardTitle, {color: theme.text}]}>{billTitle(bill, t)}</Text>
+        {header !== null ? <BillStatusPill label={header.label} color={header.color} theme={theme} /> : null}
+      </View>
+      <Text style={[styles.muted, {color: theme.muted}]}>{meta}</Text>
+      <View style={[styles.hero, {borderColor: theme.border}]}>
+        <Text style={[styles.heroLabel, {color: theme.muted}]}>{summary !== null ? t.payments.netPayout : t.bills.due}</Text>
+        <Text style={[styles.heroAmount, {color: theme.text}]}>{`${(summary?.net ?? bill.due).toLocaleString()} VND`}</Text>
+      </View>
+    </View>
+  );
+}
+
+function BillExtras({item, payeeMode, payerMode, theme, t, onRefund, onClaim}: {
+  item: BillItem;
+  payeeMode: boolean;
+  payerMode: boolean;
+  theme: AppTheme;
+  t: Strings;
+  onRefund: () => void;
+  onClaim: (line: NonNullable<BillItem["services"]>[number]) => void;
+}) {
+  return (
+    <>
+      {item.deposit ? (
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <DepositLine item={item} theme={theme} t={t} />
+        </View>
+      ) : null}
+      {item.refundRequest ? (
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <RefundLine request={item.refundRequest} theme={theme} label={t.bills.refund} />
+        </View>
+      ) : null}
+      <WarrantyLinks item={item} theme={theme} t={t} canClaim={payerMode} onClaim={onClaim} />
+      {payerMode ? <RefundAction item={item} theme={theme} label={t.bills.refundRequest} onPress={onRefund} /> : null}
+      {payeeMode && !item.payment ? <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.notCollected}</Text> : null}
+      {payeeMode && item.payment?.status === "PENDING" && item.payment.method === "CASH" && !item.payment.canConfirmCash ? (
+        <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.cashPending}</Text>
+      ) : null}
+      {payerMode && item.status === "PENDING" && item.payment?.method === "CASH" ? (
+        <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.cashArmed}</Text>
+      ) : null}
+      {payerMode && item.status === "PENDING" && item.payment?.method === "SEPAY" ? (
+        <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text>
+      ) : null}
+    </>
+  );
+}
+
+function billActionsFor({bill, actionItem, payerMode, payeeMode, readOnly, busyTicket, invoiceBusy, t, onPay, onSwitchToCash, onConfirmCash, onInvoice}: {
+  bill: Bill;
+  actionItem: BillItem | null;
+  payerMode: boolean;
+  payeeMode: boolean;
+  readOnly: boolean;
+  busyTicket: string | null;
+  invoiceBusy: boolean;
+  t: Strings;
+  onPay: (item: BillItem, method: "SEPAY" | "CASH") => void;
+  onSwitchToCash: (item: BillItem) => void;
+  onConfirmCash: (item: BillItem) => void;
+  onInvoice: () => void;
+}): OverlayAction[] {
+  const actions: OverlayAction[] = [];
+  if (actionItem !== null && payerMode && bill.canPay) {
+    const busy = busyTicket === actionItem.ticketId;
+    if (actionItem.status === "UNPAID") {
+      actions.push({label: t.bills.paySepay, tone: "primary", busy, onPress: () => onPay(actionItem, "SEPAY")});
+      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onPay(actionItem, "CASH")});
+    } else if (actionItem.status === "PENDING" && actionItem.payment?.method === "SEPAY") {
+      actions.push({label: t.bills.openQr, tone: "primary", busy, onPress: () => onPay(actionItem, "SEPAY")});
+      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onSwitchToCash(actionItem)});
+    }
+  }
+  if (actionItem !== null && payeeMode && !readOnly && actionItem.payment?.canConfirmCash === true) {
+    actions.push({label: t.assist.cashConfirmReceipt, tone: "primary", busy: busyTicket === actionItem.ticketId, onPress: () => onConfirmCash(actionItem)});
+  }
+  if (bill.status === "PAID") {
+    actions.push({
+      label: t.bills.invoicePdf,
+      tone: "neutral",
+      outline: actions.length > 0,
+      busy: invoiceBusy,
+      onPress: onInvoice,
+    });
+  }
+  return actions;
+}
+
+function RefundAction({item, theme, label, onPress}: {item: BillItem; theme: AppTheme; label: string; onPress: () => void}) {
+  if (item.refundRequest || !item.payment || !RECEIVED.has(item.payment.status)) return null;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Text style={[styles.link, {color: theme.primary}]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function RefundLine({request, theme, label}: {request: BillItem["refundRequest"]; theme: AppTheme; label: string}) {
+  if (!request) return null;
+  return (
+    <Text style={[styles.muted, {color: theme.success}]}>
+      {`${label}: ${request.status} · ${request.amount.toLocaleString()} VND`}
+    </Text>
+  );
+}
+
+function DepositLine({item, theme, t}: {item: BillItem; theme: {muted: string; text: string}; t: Strings}) {
+  const deposit = item.deposit;
+  if (!deposit) return null;
+  const label = deposit.status === "DUE" || deposit.status === "REQUESTED" ?
+    t.provider.depositDue :
+    deposit.status === "NONE" || deposit.status === "WAIVED" ?
+      t.provider.depositWaived :
+      t.provider.depositCollected;
+  return (
+    <View style={styles.rowBetween}>
+      <Text style={[styles.muted, {color: theme.muted}]}>{label}</Text>
+      <Text style={[styles.itemStatus, {color: theme.text}]}>{`${deposit.amount.toLocaleString()} VND`}</Text>
+    </View>
+  );
+}
+
+function WarrantyLinks({item, theme, t, canClaim, onClaim}: {
+  item: BillItem;
+  theme: AppTheme;
+  t: Strings;
+  canClaim: boolean;
+  onClaim: (line: NonNullable<BillItem["services"]>[number]) => void;
+}) {
+  const lines = canClaim ? (item.services ?? []).filter((line) => line.warrantyUntil &&
+    Date.parse(line.warrantyUntil) > Date.now()) : [];
+  if (lines.length === 0) return null;
+  return (
+    <View style={[styles.card, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+      <Text style={[styles.cardTitle, {color: theme.text}]}>{t.bills.warranty}</Text>
+      {lines.map((line, index) => (
+        <Pressable key={line.lineId ?? `claim-${index}`} onPress={() => onClaim(line)} accessibilityRole="button" accessibilityLabel={t.bills.claimWarranty}>
+          <Text style={[styles.link, {color: theme.primary}]}>{`${t.bills.claimWarranty} · ${line.name}`}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export default function BillDetailScreen() {
-  const {t} = useStrings();
+  const {t, lang} = useStrings();
   const {token} = useAuth();
   const {refresh: refreshBills} = useBills();
   const {mode} = useThemeMode();
@@ -43,6 +217,7 @@ export default function BillDetailScreen() {
   const billId = params.billId;
   const payeeMode = params.scope === "payee";
   const readOnly = params.readOnly === true;
+  const payerMode = !payeeMode && !readOnly;
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyTicket, setBusyTicket] = useState<string | null>(null);
@@ -51,6 +226,40 @@ export default function BillDetailScreen() {
   const [sepayError, setSepayError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [warrantyFor, setWarrantyFor] = useState<{lineId: string; name: string} | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+
+  async function openInvoice(): Promise<void> {
+    if (!token || !bill || invoiceBusy) return;
+    setInvoiceBusy(true);
+    setError(null);
+    try {
+      const invoice = await requestInvoice(bill.ticketId, token);
+      await Linking.openURL(invoice.url);
+    } catch (err) {
+      setError(toMessage(err));
+    } finally {
+      setInvoiceBusy(false);
+    }
+  }
+  const requestItemRefund = (item: BillItem): void => {
+    if (!token || !item.payment) return;
+    Alert.alert(t.bills.refundRequest, t.bills.refundHint, [
+      {text: t.common.cancel, style: "cancel"},
+      {
+        text: t.bills.refundSubmit,
+        onPress: () => {
+          void requestRefund({paymentId: item.payment?.id ?? ""}, token)
+            .then(() => {
+              setNotice(t.bills.refundRequested);
+              void load();
+            })
+            .catch((err: unknown) => setError(toMessage(err)));
+        },
+      },
+    ]);
+  };
+
   const load = useCallback(async (): Promise<void> => {
     if (!token) return;
     try {
@@ -183,220 +392,92 @@ export default function BillDetailScreen() {
       setBusyTicket(null);
     }
   }
-  const summary = bill && payeeMode ? payeeSummary(bill) : null;
-  const payeeLabel = bill ? billPayeeLabel(bill) : null;
+  const item = bill?.items[0] ?? null;
+  const header = bill ? billHeroStatus(bill, payeeMode, t, theme) : null;
   const meta = bill ? [
-    billDateLabel(bill.createdAt),
+    billDateTimeLabel(bill.createdAt),
     billItemCount(bill, t),
-    payeeMode ? null : payeeLabel,
+    payeeMode ? null : billPayeeLabel(bill),
   ].filter((value) => typeof value === "string" && value !== "").join(" · ") : "";
-  const headerLabel = summary !== null ? payoutStatusLabel(summary.payout, t) : bill ? billStatusLabel(bill.status, t) : "";
-  const headerColor = summary !== null ? payoutStatusColor(summary.payout, theme) : bill ? billStatusColor(bill.status, theme) : theme.muted;
+  const actionItem = bill?.items.find((row) => row.status === "UNPAID" && bill.canPay) ??
+    bill?.items.find((row) => row.status === "PENDING") ?? bill?.items[0] ?? null;
+  const actions: OverlayAction[] = bill ? billActionsFor({
+    bill,
+    actionItem,
+    payerMode,
+    payeeMode,
+    readOnly,
+    busyTicket,
+    invoiceBusy,
+    t,
+    onPay: (row, method) => void pay(row, method),
+    onSwitchToCash: (row) => switchToCash(row),
+    onConfirmCash: (row) => void confirmCash(row),
+    onInvoice: () => void openInvoice(),
+  }) : [];
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
-        {loading && !bill ? <ActivityIndicator style={styles.loader} color={theme.primary} /> : null}
-        {params.payFirst === true && !readOnly && !payeeMode ? (
-          <View style={[styles.banner, {borderColor: theme.primary, backgroundColor: theme.paper}]}>
-            <MaterialIcons name="info-outline" size={18} color={theme.primary} />
-            <Text style={[styles.bannerText, {color: theme.primary}]}>{t.bills.payFirst}</Text>
-          </View>
-        ) : null}
-        {readOnly ? (
-          <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-            <MaterialIcons name="visibility" size={18} color={theme.muted} />
-            <Text style={[styles.bannerText, {color: theme.muted}]}>{t.bills.readOnly}</Text>
-          </View>
-        ) : null}
-        {payeeMode ? (
-          <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-            <MaterialIcons name="lock-outline" size={18} color={theme.muted} />
-            <Text style={[styles.bannerText, {color: theme.muted}]}>{t.payments.payeeOnly}</Text>
-          </View>
-        ) : null}
-        {error ? (
-          <View style={[styles.errorCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-            <Text style={[styles.hint, {color: theme.danger}]}>{error}</Text>
-            <Pressable style={[styles.retryBtn, {borderColor: theme.primary}]} onPress={() => void load()} accessibilityRole="button" accessibilityLabel={t.common.retry}>
-              <Text style={{color: theme.primary}}>{t.common.retry}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {bill ? (
-          <>
-            <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-              <View style={styles.rowBetween}>
-                <Text style={[styles.cardTitle, {color: theme.text}]}>{billTitle(bill, t)}</Text>
-                <View style={[styles.pill, {backgroundColor: headerColor}]}>
-                  <Text style={styles.pillText}>{headerLabel}</Text>
-                </View>
-              </View>
-              <Text style={[styles.muted, {color: theme.muted}]}>{meta}</Text>
-              {summary !== null ? (
-                <>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.yourItems}</Text>
-                    <Text style={[styles.totalText, {color: theme.text}]}>{`${bill.total.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.collected}</Text>
-                    <Text style={[styles.totalText, {color: theme.text}]}>{`${summary.collected.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.commission}</Text>
-                    <Text style={[styles.totalText, {color: "#d97706"}]}>{`${summary.commission.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.netPayout}</Text>
-                    <Text style={[styles.totalText, {color: theme.success}]}>{`${summary.net.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={[styles.totalRow, styles.payoutRow, {borderTopColor: theme.divider}]}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.payout}</Text>
-                    <Text style={[styles.itemStatus, {color: payoutStatusColor(summary.payout, theme)}]}>{payoutStatusLabel(summary.payout, t)}</Text>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.bills.total}</Text>
-                    <Text style={[styles.totalText, {color: theme.text}]}>{`${bill.total.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.bills.paid}</Text>
-                    <Text style={[styles.totalText, {color: theme.success}]}>{`${bill.paid.toLocaleString()} VND`}</Text>
-                  </View>
-                  <View style={styles.totalRow}>
-                    <Text style={[styles.muted, {color: theme.muted}]}>{t.bills.due}</Text>
-                    <Text style={[styles.totalText, {color: bill.due > 0 ? "#d97706" : theme.muted}]}>{`${bill.due.toLocaleString()} VND`}</Text>
-                  </View>
-                  {bill.due === 0 ? <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.nothingDue}</Text> : null}
-                </>
-              )}
+      <View style={styles.root}>
+        <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
+          {loading && !bill ? <ActivityIndicator style={styles.loader} color={theme.primary} /> : null}
+          {params.payFirst === true && payerMode ? (
+            <View style={[styles.banner, {borderColor: theme.primary, backgroundColor: theme.paper}]}>
+              <MaterialIcons name="info-outline" size={18} color={theme.primary} />
+              <Text style={[styles.bannerText, {color: theme.primary}]}>{t.bills.payFirst}</Text>
             </View>
-            {bill.items.map((item) => {
-              const label = billItemLabel(item, t);
-              const busy = busyTicket === item.ticketId;
-              const itemPayment = item.payment;
-              const received = itemPayment !== null && RECEIVED.has(itemPayment.status);
-              const payout = itemPayoutStatus(item);
-              return (
-                <View key={item.ticketId} style={[styles.item, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-                  <View style={styles.rowBetween}>
-                    <Text style={[styles.itemTitle, {color: theme.text}]}>{label}</Text>
-                    <Text style={[styles.itemAmount, {color: theme.text}]}>{`${item.amount.toLocaleString()} VND`}</Text>
-                  </View>
-                  {item.waitingFee > 0 ? (
-                    <Text style={[styles.muted, {color: theme.muted}]}>{`${t.bills.waiting}: ${item.waitingFee.toLocaleString()} VND`}</Text>
-                  ) : null}
-                  {Array.isArray(item.items) && item.items.length > 0 ? (
-                    <View style={styles.itemLines}>
-                      {item.items.map((line, index) => (
-                        <View key={`${line.name}-${index}`} style={styles.rowBetween}>
-                          <Text style={[styles.muted, {color: theme.muted, flex: 1}]} numberOfLines={2}>{`${line.name} × ${line.qty}`}</Text>
-                          <Text style={[styles.muted, {color: theme.text}]}>{`${line.amount.toLocaleString()} VND`}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                  {item.payeeName ? <Text style={[styles.muted, {color: theme.muted}]}>{item.payeeName}</Text> : null}
-                  <View style={styles.rowBetween}>
-                    <Text style={[styles.itemStatus, {color: billItemStatusColor(item.status, theme)}]}>{billItemStatusLabel(item.status, t)}</Text>
-                    {itemPayment ? <Text style={[styles.muted, {color: theme.muted}]}>{paymentMethodLabel(itemPayment.method)}</Text> : null}
-                  </View>
-                  {payeeMode ? (
-                    <>
-                      {itemPayment === null ? <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.notCollected}</Text> : null}
-                      {received ? (
-                        <>
-                          <View style={styles.rowBetween}>
-                            <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.commission}</Text>
-                            <Text style={[styles.itemStatus, {color: "#d97706"}]}>{`${(itemPayment.commissionAmount ?? 0).toLocaleString()} VND`}</Text>
-                          </View>
-                          <View style={styles.rowBetween}>
-                            <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.netPayout}</Text>
-                            <Text style={[styles.itemStatus, {color: theme.success}]}>{`${itemNetPayout(item).toLocaleString()} VND`}</Text>
-                          </View>
-                          <View style={styles.rowBetween}>
-                            <Text style={[styles.muted, {color: theme.muted}]}>{t.payments.payout}</Text>
-                            <Text style={[styles.itemStatus, {color: payoutStatusColor(payout, theme)}]}>{payoutStatusLabel(payout, t)}</Text>
-                          </View>
-                        </>
-                      ) : null}
-                      {itemPayment?.status === "PENDING" && itemPayment.method === "CASH" && !readOnly && itemPayment.canConfirmCash ? (
-                        <Pressable
-                          style={[styles.payBtn, {backgroundColor: theme.primary}, busy && styles.disabled]}
-                          disabled={busy}
-                          onPress={() => void confirmCash(item)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${t.assist.cashConfirmReceipt} ${label}`}
-                        >
-                          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.payText}>{t.assist.cashConfirmReceipt}</Text>}
-                        </Pressable>
-                      ) : null}
-                      {itemPayment?.status === "PENDING" && itemPayment.method === "CASH" && !itemPayment.canConfirmCash ? (
-                        <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.cashPending}</Text>
-                      ) : null}
-                      {itemPayment?.status === "PENDING" && itemPayment.method === "SEPAY" ? (
-                        <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {!payeeMode && item.status === "UNPAID" && !readOnly && bill.canPay ? (
-                    <>
-                      <View style={styles.payRow}>
-                        <Pressable
-                          style={[styles.payBtn, {backgroundColor: theme.primary}, busy && styles.disabled]}
-                          disabled={busy}
-                          onPress={() => void pay(item, "SEPAY")}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${t.bills.paySepay} ${label}`}
-                        >
-                          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.payText}>{t.bills.paySepay}</Text>}
-                        </Pressable>
-                        <Pressable
-                          style={[styles.payBtn, styles.cashBtn, {borderColor: theme.primary}, busy && styles.disabled]}
-                          disabled={busy}
-                          onPress={() => void pay(item, "CASH")}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${t.bills.payCash} ${label}`}
-                        >
-                          <Text style={[styles.cashText, {color: theme.primary}]}>{t.bills.payCash}</Text>
-                        </Pressable>
-                      </View>
-                      <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.payCashHint}</Text>
-                    </>
-                  ) : null}
-                  {!payeeMode && item.status === "PENDING" && itemPayment?.method === "SEPAY" && !readOnly && bill.canPay ? (
-                    <View style={styles.payRow}>
-                      <Pressable
-                        style={[styles.payBtn, {backgroundColor: theme.primary}, busy && styles.disabled]}
-                        disabled={busy}
-                        onPress={() => void pay(item, "SEPAY")}
-                        accessibilityRole="button"
-                        accessibilityLabel={t.bills.openQr}
-                      >
-                        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.payText}>{t.bills.openQr}</Text>}
-                      </Pressable>
-                      <Pressable
-                        style={[styles.payBtn, styles.cashBtn, {borderColor: theme.primary}, busy && styles.disabled]}
-                        disabled={busy}
-                        onPress={() => switchToCash(item)}
-                        accessibilityRole="button"
-                        accessibilityLabel={t.bills.payCash}
-                      >
-                        <Text style={[styles.cashText, {color: theme.primary}]}>{t.bills.payCash}</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                  {!payeeMode && item.status === "PENDING" && itemPayment?.method === "CASH" ? (
-                    <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.cashArmed}</Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </>
+          ) : null}
+          {readOnly ? (
+            <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+              <MaterialIcons name="visibility" size={18} color={theme.muted} />
+              <Text style={[styles.bannerText, {color: theme.muted}]}>{t.bills.readOnly}</Text>
+            </View>
+          ) : null}
+          {payeeMode ? (
+            <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+              <MaterialIcons name="lock-outline" size={18} color={theme.muted} />
+              <Text style={[styles.bannerText, {color: theme.muted}]}>{t.payments.payeeOnly}</Text>
+            </View>
+          ) : null}
+          {error ? (
+            <View style={[styles.errorCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+              <Text style={[styles.hint, {color: theme.danger}]}>{error}</Text>
+              <Pressable style={[styles.retryBtn, {borderColor: theme.primary}]} onPress={() => void load()} accessibilityRole="button" accessibilityLabel={t.common.retry}>
+                <Text style={{color: theme.primary}}>{t.common.retry}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {bill ? (
+            <>
+              <BillHeroCard bill={bill} payeeMode={payeeMode} header={header} meta={meta} t={t} theme={theme} />
+              {item ? (
+                <>
+                  <BillPartiesCard item={item} t={t} theme={theme} lang={lang} />
+                  <BillChargesCard item={item} t={t} theme={theme} />
+                  <BillTotalsCard bill={bill} payee={payeeMode} t={t} theme={theme} />
+                  <BillPaymentCard item={item} payee={payeeMode} t={t} theme={theme} />
+                  <BillExtras
+                    item={item}
+                    payeeMode={payeeMode}
+                    payerMode={payerMode}
+                    theme={theme}
+                    t={t}
+                    onRefund={() => requestItemRefund(item)}
+                    onClaim={(line) => {
+                      if (!line.lineId) return;
+                      setWarrantyFor({lineId: line.lineId, name: line.name});
+                    }}
+                  />
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </ScrollView>
+        {actions.length > 0 ? (
+          <View style={[styles.footer, {backgroundColor: theme.paper, borderTopColor: theme.border, paddingBottom: insets.bottom + 12}]}>
+            <ActionFooter actions={actions} layout="ticket" />
+          </View>
         ) : null}
-      </ScrollView>
+      </View>
       {sepayCheckout ? (
         <SePayCheckoutSheet
           t={t}
@@ -412,11 +493,26 @@ export default function BillDetailScreen() {
         />
       ) : null}
       <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
+      <WarrantyClaimDialog
+        visible={warrantyFor !== null}
+        ticketId={bill?.ticketId ?? ""}
+        line={warrantyFor}
+        token={token}
+        theme={theme}
+        t={t}
+        onClose={() => setWarrantyFor(null)}
+        onFiled={async () => {
+          setWarrantyFor(null);
+          setNotice(t.bills.warrantyClaimed);
+          await load();
+        }}
+      />
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {flex: 1},
   scroll: {padding: 16, gap: 10, flexGrow: 1},
   loader: {marginTop: 24},
   banner: {borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", alignItems: "center", gap: 8},
@@ -425,23 +521,13 @@ const styles = StyleSheet.create({
   retryBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center"},
   card: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 6},
   cardTitle: {fontWeight: "700", fontSize: 17},
-  item: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 6},
-  itemTitle: {fontWeight: "700", fontSize: 15},
-  itemAmount: {fontWeight: "700", fontSize: 15},
-  itemStatus: {fontSize: 12, fontWeight: "700"},
-  rowBetween: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
+  hero: {borderWidth: 1, borderRadius: 14, padding: 12, gap: 2, marginTop: 4},
+  heroLabel: {fontSize: 11, fontWeight: "600"},
+  heroAmount: {fontSize: 26, fontWeight: "800"},
+  link: {fontSize: 13, fontWeight: "700"},
   muted: {fontSize: 12},
   hint: {fontSize: 12},
-  itemLines: {gap: 3},
-  totalRow: {flexDirection: "row", justifyContent: "space-between", alignItems: "center"},
-  payoutRow: {borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, marginTop: 2},
-  totalText: {fontWeight: "700", fontSize: 14},
-  payRow: {flexDirection: "row", gap: 8, marginTop: 4},
-  payBtn: {flex: 1, borderRadius: 8, padding: 10, alignItems: "center"},
-  cashBtn: {borderWidth: 1, backgroundColor: "transparent"},
-  payText: {color: "#fff", fontWeight: "700"},
-  cashText: {fontWeight: "700"},
-  pill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8},
-  pillText: {color: "#fff", fontSize: 11, fontWeight: "700"},
-  disabled: {opacity: 0.6},
+  itemStatus: {fontSize: 12, fontWeight: "700"},
+  rowBetween: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
+  footer: {borderTopWidth: 1, padding: 12},
 });

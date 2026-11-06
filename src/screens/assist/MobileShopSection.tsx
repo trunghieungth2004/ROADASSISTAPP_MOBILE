@@ -24,10 +24,12 @@ function toFeed(ticket: DispatchTicket, t: Strings): FeedTicket {
   const riderName = typeof ticket.riderName === "string" && ticket.riderName !== "" ?
     ticket.riderName :
     t.assist.unassigned;
+  const party = ticket.riderParty ?? {id: ticket.userId, name: riderName, kind: "RIDER"};
   return {
     ...ticket,
     direction: "in",
-    otherParty: {id: ticket.userId, name: riderName, kind: "RIDER"},
+    otherParty: party,
+    riderParty: party,
   } as FeedTicket;
 }
 
