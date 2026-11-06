@@ -1,4 +1,4 @@
-import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
+import {Pressable, StyleSheet, View} from "react-native";
 import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../../components/ui/AppText";
 import type {Strings} from "../../../i18n/en";
@@ -14,16 +14,6 @@ export type DestinationShop = {
   count: number | null;
   phone: string | null;
   openNow: boolean | null;
-};
-
-export type JourneyPreview = {
-  title: string;
-  loadingLabel: string;
-  fareLabel: string;
-  busy: boolean;
-  error: string | null;
-  summary: string | null;
-  fareEstimate: number | null;
 };
 
 type Props = {
@@ -42,8 +32,6 @@ type Props = {
   destLabel: string | null;
   onOpenDestination: (() => void) | null;
   etaText: string | null;
-  preview: JourneyPreview | null;
-  busy: boolean;
 };
 
 function partyIconOf(party: Party): {set: "material" | "community"; name: string} {
@@ -53,7 +41,7 @@ function partyIconOf(party: Party): {set: "material" | "community"; name: string
   return {set: "material", name: "person"};
 }
 
-export default function JourneyCard({t, lang, theme, ticket, inbound, party, partyOnPress, placeHeader, destShop, destLat, destLng, destName, destLabel, onOpenDestination, etaText, preview, busy}: Props) {
+export default function JourneyCard({t, lang, theme, ticket, inbound, party, partyOnPress, placeHeader, destShop, destLat, destLng, destName, destLabel, onOpenDestination, etaText}: Props) {
   const partyStateColor = party.openNow === true ? theme.primary : theme.danger;
   const destStateColor = destShop !== null && destShop.openNow === true ? theme.primary : theme.danger;
   const hasDropoff = destShop !== null || (destLat !== null && destLng !== null);
@@ -174,24 +162,6 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
           <Text style={[detailStyles.muted, {color: theme.primary}]}>{etaText}</Text>
         </View>
       ) : null}
-      {preview !== null ? (
-        <View style={[detailStyles.inset, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-          <Text style={[detailStyles.muted, {color: theme.muted}]}>{preview.title}</Text>
-          {preview.busy ? (
-            <View style={styles.previewRow}>
-              <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={[detailStyles.muted, {color: theme.muted}]}>{preview.loadingLabel}</Text>
-            </View>
-          ) : preview.error !== null ? (
-            <Text style={[detailStyles.muted, {color: theme.danger}]}>{preview.error}</Text>
-          ) : preview.summary !== null ? (
-            <Text style={[detailStyles.muted, {color: theme.text}]}>{preview.summary}</Text>
-          ) : null}
-          {preview.fareEstimate !== null ? (
-            <Text style={[detailStyles.muted, {color: theme.text}]}>{`${preview.fareLabel}: ${preview.fareEstimate.toLocaleString()} VND`}</Text>
-          ) : null}
-        </View>
-      ) : null}
     </DetailCard>
   );
 }
@@ -207,5 +177,4 @@ const styles = StyleSheet.create({
   partyIcon: {width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center"},
   emptyDropoff: {flexDirection: "row", alignItems: "center", gap: 6},
   etaRow: {flexDirection: "row", alignItems: "center", gap: 6},
-  previewRow: {flexDirection: "row", alignItems: "center", gap: 8},
 });

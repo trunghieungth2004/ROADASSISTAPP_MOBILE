@@ -20,8 +20,14 @@ export default function StatusCard({t, theme, ticket}: {t: Strings; theme: AppTh
   const seen = new Set(cycle.map((h) => h.status));
   const atOf = new Map(cycle.map((h) => [h.status, h.at] as [string, string]));
   const current = ticket.status;
+  const currentIndex = stages.indexOf(current);
   const trailing = !stages.includes(current) ? [current] : [];
-  const rows = [...stages.filter((s) => seen.has(s) || s === current), ...trailing];
+  const rows = [
+    ...stages.filter((s, index) =>
+      s === current ||
+      (seen.has(s) && currentIndex >= 0 && index <= currentIndex)),
+    ...trailing,
+  ];
   const currentAt = atOf.get(current) ?? cycle[cycle.length - 1]?.at ?? null;
   const tint = statusPillColor(current, theme);
   const summary = rows.map((status) => {

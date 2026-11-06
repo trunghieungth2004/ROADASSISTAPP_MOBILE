@@ -103,6 +103,43 @@ test("itemized quote computes the total from line items", async () => {
   }
 });
 
+test("catalog items keep their service code", async () => {
+  const catalog = [{
+    code: "AAA",
+    name: "AAA",
+    displayPrice: 123456,
+    quoteRequired: false,
+  }];
+  const {renderer, onSubmit} = await render({catalog});
+  try {
+    await act(async () => {
+      submitAction(renderer, en.provider.addServices)?.props.onPress();
+    });
+    await act(async () => {
+      submitAction(renderer, "AAA")?.props.onPress();
+    });
+    await act(async () => {
+      submitAction(renderer, en.provider.addSelected.replace("{n}", "1"))?.props.onPress();
+    });
+    await act(async () => {
+      submitAction(renderer, en.assist.sendQuote)?.props.onPress();
+    });
+    expect(onSubmit).toHaveBeenCalledWith({
+      workType: "",
+      amount: 123456,
+      invoiceRef: "",
+      items: [{
+        name: "AAA",
+        qty: 1,
+        unitPrice: 123456,
+        serviceCode: "AAA",
+      }],
+    });
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("quote mode blocks submit without an amount", async () => {
   const {renderer, onSubmit} = await render();
   try {

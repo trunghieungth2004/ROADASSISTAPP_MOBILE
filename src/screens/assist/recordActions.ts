@@ -13,6 +13,22 @@ export function canCancelSosShop(ticketType: string, status: string, assigned: b
   return assigned && ticketType === "SOS" && status === DISPATCH_STATUS.MATCHED;
 }
 
+const HOLDABLE_STATUSES = new Set<string>([
+  DISPATCH_STATUS.MATCHED,
+  DISPATCH_STATUS.ARRIVED,
+  DISPATCH_STATUS.IN_PROGRESS,
+  DISPATCH_STATUS.IN_SHOP,
+  DISPATCH_STATUS.QUOTED,
+  DISPATCH_STATUS.FINAL_QUOTED,
+  DISPATCH_STATUS.ESTIMATED,
+  DISPATCH_STATUS.EST_APPROVED,
+  DISPATCH_STATUS.READY,
+]);
+
+export function canReportDelay(status: string): boolean {
+  return HOLDABLE_STATUSES.has(status);
+}
+
 export type ViewerRoleKind = "SHOP" | "TOW";
 
 export type ViewerRole =

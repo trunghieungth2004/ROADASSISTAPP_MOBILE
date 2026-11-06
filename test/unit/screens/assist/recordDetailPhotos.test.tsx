@@ -106,7 +106,7 @@ test("stays hidden without permission and skips downloads", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
   const renderer = await render({showRequestPhotos: false});
   try {
-    expect(texts(renderer)).not.toContain(en.assist.photos);
+    expect(texts(renderer)).not.toContain(`${en.payments.rider} · 2`);
     expect(mockedUsePhotoUrl).not.toHaveBeenCalled();
     expect(placeholders(renderer)).toHaveLength(0);
   } finally {
@@ -120,7 +120,7 @@ test("shows placeholder tiles while ticket photos resolve", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
   const renderer = await render();
   try {
-    expect(texts(renderer)).toContain(en.assist.photos);
+    expect(texts(renderer)).toContain(`${en.payments.rider} · 2`);
     expect(renderer.root.findAll((n) => typeof n.props?.source?.uri === "string")).toHaveLength(0);
     expect(placeholders(renderer).length).toBeGreaterThanOrEqual(2);
   } finally {
@@ -162,8 +162,9 @@ test("shows the unfixable reason and evidence for an SOS", async () => {
   });
   try {
     expect(texts(renderer)).toContain(en.assist.unfixableNoParts);
-    expect(texts(renderer)).toContain(en.assist.unfixablePhotos);
-    expect(texts(renderer)).toContain(en.assist.mobileCallOut);
+    expect(texts(renderer)).toContain(`${en.roles.mobileShop} · 1`);
+    expect(texts(renderer)).toContain(en.bills.total);
+    expect(texts(renderer)).toContain("50,000 VND");
     expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://evidence.jpg").length).toBeGreaterThan(0);
   } finally {
     await act(async () => {

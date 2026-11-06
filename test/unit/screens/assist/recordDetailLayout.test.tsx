@@ -94,6 +94,145 @@ function flatStyle(style: unknown): Record<string, unknown> {
   return Object.assign({}, ...flat.filter(Boolean));
 }
 
+test("the delay action is compact and hidden before matching", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onDelay = jest.fn();
+  const renderer = await render({
+    ticket: ticket({status: "2"}),
+    onDelay,
+  });
+  try {
+    const action = renderer.root.findAll((node) =>
+      node.props?.accessibilityLabel === en.assist.reportDelay &&
+      typeof node.props?.onPress === "function")[0];
+    expect(action).toBeDefined();
+    expect(texts(renderer)).not.toContain(en.assist.reportDelay);
+    await act(async () => {
+      action?.props.onPress();
+    });
+    expect(onDelay).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+  const pending = await render({
+    ticket: ticket({status: "1"}),
+    onDelay,
+  });
+  try {
+    expect(pending.root.findAll((node) =>
+      node.props?.accessibilityLabel === en.assist.reportDelay)[0]).toBeUndefined();
+  } finally {
+    pending.unmount();
+  }
+});
+
+test("an active delay is shown in the ticket detail", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const etaAt = new Date(Date.now() + 3600000).toISOString();
+  const renderer = await render({
+    ticket: ticket({
+      status: "2",
+      hold: {reason: "ACCESS", note: "Gate locked", etaAt, by: "rider1", at: new Date().toISOString()},
+    }),
+  });
+  try {
+    const shown = texts(renderer);
+    expect(shown).toContain(en.assist.delayActive);
+    expect(shown.some((text) => text.includes(en.assist.holdAccess) && text.includes("Gate locked") && text.includes(en.assist.holdUntil))).toBe(true);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("the delay banner releases the delay", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onClearDelay = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      status: "2",
+      hold: {reason: "TRAFFIC", note: null, etaAt: null, by: "u1", at: new Date().toISOString()},
+    }),
+    onClearDelay,
+  });
+  try {
+    const clear = renderer.root.findAll((node) =>
+      node.props?.accessibilityLabel === en.assist.clearDelay &&
+      typeof node.props?.onPress === "function")[0];
+    expect(clear).toBeDefined();
+    await act(async () => {
+      clear?.props.onPress();
+    });
+    expect(onClearDelay).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a provider-set delay is read-only for the rider", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const onClearDelay = jest.fn();
+  const renderer = await render({
+    ticket: ticket({
+      status: "2",
+      hold: {
+        reason: "PARTS",
+        note: null,
+        etaAt: null,
+        by: "op1",
+        at: new Date().toISOString(),
+      },
+    }),
+    onClearDelay,
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.delayActive);
+    expect(renderer.root.findAll((node) =>
+      node.props?.accessibilityLabel === en.assist.clearDelay)[0]).toBeUndefined();
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a pending SOS pickup falls back to the rider party", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      direction: "out",
+      status: "1",
+      otherParty: null,
+      riderParty: {id: "rider1", name: "Rider One", kind: "RIDER"},
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain("Rider One");
+    expect(texts(renderer)).not.toContain(en.assist.unassigned);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("a pending SOS ticket without otherParty still shows the rider", async () => {
+  mockedUsePhotoUrl.mockImplementation(() => "");
+  const renderer = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      direction: "in",
+      status: "1",
+      otherParty: null,
+      riderParty: {id: "rider1", name: "Rider Two", kind: "RIDER"},
+    }),
+    ownShopIds: new Set(["mobile-1"]),
+    ownTowId: null,
+  });
+  try {
+    expect(texts(renderer)).toContain("Rider Two");
+    expect(texts(renderer)).not.toContain(en.assist.unassigned);
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("the assigned tower marks arrival and delivery", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
   const arrived = await render({
@@ -276,8 +415,10 @@ test("note, description, work type and photos share one card", async () => {
     expect(all).toContain(en.assist.notesPhotos);
     expect(all).toContain("Bike will not start");
     expect(all).toContain("Dead battery, near the market");
-    expect(all).toContain(`${en.provider.workType}: Battery swap`);
-    expect(all).toContain(en.assist.photos);
+    expect(all).toContain(en.provider.servicesWork);
+    expect(all).toContain(en.provider.workType);
+    expect(all).toContain("Battery swap");
+    expect(all).toContain(`${en.payments.rider} · 1`);
     expect(renderer.root.findAll((n) => n.props?.source?.uri === "file://r1.jpg").length).toBeGreaterThan(0);
   } finally {
     renderer.unmount();
@@ -332,10 +473,12 @@ function historyTexts(renderer: ReturnType<typeof create>): string[] {
     .flatMap((n) => n.findAll((c) => typeof c.props?.children === "string").map((c) => c.props.children as string));
 }
 
-test("destination ETA sits in the header pill", async () => {
-  const eta = new Date(Date.now() + 10 * 60 * 1000 + 500).toISOString();
-  const renderer = await render({ticket: ticket({etaDropoffAt: eta})});
+test("only the destination ETA sits in the header pill", async () => {
+  const pickup = new Date(Date.now() + 5 * 60 * 1000 + 500).toISOString();
+  const dropoff = new Date(Date.now() + 10 * 60 * 1000 + 500).toISOString();
+  const renderer = await render({ticket: ticket({etaPickupAt: pickup, etaDropoffAt: dropoff})});
   try {
+    expect(texts(renderer)).not.toContain(en.shop.etaPickupPill.replace("{n}", "5"));
     expect(texts(renderer)).toContain(en.shop.etaDropoffPill.replace("{n}", "10"));
   } finally {
     renderer.unmount();
@@ -396,7 +539,7 @@ test("status card renders when the ticket has no content", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
   const renderer = await render({ticket: ticket({status: "4"})});
   try {
-    expect(texts(renderer)).toContain(en.assist.notesPhotos);
+    expect(texts(renderer)).not.toContain(en.assist.notesPhotos);
     expect(texts(renderer)).toContain(en.assist.statusTitle);
     expect(historyTexts(renderer)).toContain(en.assist.statusResolved);
   } finally {
@@ -404,7 +547,7 @@ test("status card renders when the ticket has no content", async () => {
   }
 });
 
-test("bill totals and item fees share one payment card", async () => {
+test("bill total and status share one compact payment card", async () => {
   mockedUsePhotoUrl.mockImplementation(() => "");
   const bill: Bill = {
     billId: "t1",
@@ -432,10 +575,11 @@ test("bill totals and item fees share one payment card", async () => {
     const all = texts(renderer);
     expect(all).toContain(en.assist.paymentTitle);
     expect(all).toContain(en.bills.statusPartial);
+    expect(all).toContain(en.bills.total);
     expect(all).toContain("150,000 VND");
-    expect(all).toContain("50,000 VND");
-    expect(all).toContain("100,000 VND");
-    expect(all).toContain(`${en.assist.fareUpTo}: 150,000 VND`);
+    expect(all).not.toContain("50,000 VND");
+    expect(all).not.toContain("100,000 VND");
+    expect(all).not.toContain(en.assist.fareUpTo);
   } finally {
     renderer.unmount();
   }
@@ -554,7 +698,7 @@ test("a mobile fix approval lives in the payment card", async () => {
   }
 });
 
-test("prior mobile and tower partials stay visible in the money block", async () => {
+test("prior mobile and tower partials roll into the total", async () => {
   const mobile = await render({
     ticket: ticket({
       ticketType: "SOS",
@@ -566,7 +710,9 @@ test("prior mobile and tower partials stay visible in the money block", async ()
     }),
   });
   try {
-    expect(texts(mobile)).toContain(en.assist.priorMobileFees);
+    expect(texts(mobile)).toContain(en.bills.total);
+    expect(texts(mobile)).toContain("155,000 VND");
+    expect(texts(mobile)).not.toContain(en.assist.priorMobileFees);
   } finally {
     mobile.unmount();
   }
@@ -580,7 +726,9 @@ test("prior mobile and tower partials stay visible in the money block", async ()
     }),
   });
   try {
-    expect(texts(tow)).toContain(en.assist.priorTowPartial);
+    expect(texts(tow)).toContain(en.bills.total);
+    expect(texts(tow)).toContain("250,000 VND");
+    expect(texts(tow)).not.toContain(en.assist.priorTowPartial);
   } finally {
     tow.unmount();
   }

@@ -18,23 +18,42 @@ export type Party = {
   phone: string | null;
 };
 
-export function partyOf(ticket: FeedTicket, fallback: string): Party {
-  const raw = ticket.otherParty;
-  if (typeof raw !== "object" || raw === null || typeof raw.name !== "string") {
-    return {id: null, name: fallback, kind: null, label: null, lat: null, lng: null, openNow: null, ratingAvg: null, ratingCount: null, phone: null};
+function partyFrom(raw: unknown): Party | null {
+  if (typeof raw !== "object" || raw === null || typeof (raw as {name?: unknown}).name !== "string") {
+    return null;
   }
+  const row = raw as Record<string, unknown>;
   return {
-    id: typeof raw.id === "string" ? raw.id : null,
-    name: raw.name,
-    kind: typeof raw.kind === "string" ? raw.kind : null,
-    label: typeof raw.label === "string" ? raw.label : null,
-    lat: typeof raw.lat === "number" ? raw.lat : null,
-    lng: typeof raw.lng === "number" ? raw.lng : null,
-    openNow: typeof raw.openNow === "boolean" ? raw.openNow : null,
-    ratingAvg: typeof raw.ratingAvg === "number" ? raw.ratingAvg : null,
-    ratingCount: typeof raw.ratingCount === "number" ? raw.ratingCount : null,
-    phone: typeof raw.phone === "string" ? raw.phone : null,
+    id: typeof row.id === "string" ? row.id : null,
+    name: row.name as string,
+    kind: typeof row.kind === "string" ? row.kind : null,
+    label: typeof row.label === "string" ? row.label : null,
+    lat: typeof row.lat === "number" ? row.lat : null,
+    lng: typeof row.lng === "number" ? row.lng : null,
+    openNow: typeof row.openNow === "boolean" ? row.openNow : null,
+    ratingAvg: typeof row.ratingAvg === "number" ? row.ratingAvg : null,
+    ratingCount: typeof row.ratingCount === "number" ? row.ratingCount : null,
+    phone: typeof row.phone === "string" ? row.phone : null,
   };
+}
+
+export function partyOf(ticket: FeedTicket, fallback: string): Party {
+  return partyFrom(ticket.otherParty) ?? {
+    id: null,
+    name: fallback,
+    kind: null,
+    label: null,
+    lat: null,
+    lng: null,
+    openNow: null,
+    ratingAvg: null,
+    ratingCount: null,
+    phone: null,
+  };
+}
+
+export function riderPartyOf(ticket: FeedTicket): Party | null {
+  return partyFrom(ticket.riderParty);
 }
 
 export function Stars({theme, avg, count}: {theme: AppTheme; avg: number | null; count: number | null}) {

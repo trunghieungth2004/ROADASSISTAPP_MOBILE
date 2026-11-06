@@ -1,5 +1,5 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, returnTowPending, viewerRoleOf} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canReportDelay, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, returnTowPending, viewerRoleOf} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
@@ -19,6 +19,15 @@ test("mobile shop can cancel only a matched SOS", () => {
   expect(canCancelSosShop("TOW", "2", true)).toBe(false);
 });
 
+
+test("delay reports only on holdable statuses", () => {
+  for (const s of ["2", "3", "6", "10", "9", "11", "13", "14", "7"]) {
+    expect(canReportDelay(s)).toBe(true);
+  }
+  for (const s of ["1", "4", "5", "8", "12", "15"]) {
+    expect(canReportDelay(s)).toBe(false);
+  }
+});
 
 test("operator takes pending inbound jobs", () => {
   expect(canAccept({kind: "candidate", candidateKind: "SHOP"})).toBe(true);

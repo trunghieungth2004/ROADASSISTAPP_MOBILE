@@ -4,12 +4,27 @@ import {en} from "../../../../src/i18n/en";
 
 test("ticket titles use translated labels", () => {
   expect(ticketTitle({ticketType: "TOW", status: "1"}, en)).toBe("Tow · Pending");
-  expect(ticketTitle({ticketType: "MECHANIC", status: "2"}, en)).toBe("Repair · Matched");
-  expect(ticketTitle({ticketType: "SOS", status: "4"}, en)).toBe("SOS · Resolved");
+  expect(ticketTitle({ticketType: "MECHANIC", status: "2"}, en)).toBe("Repair · On the way");
+  expect(ticketTitle({ticketType: "SOS", status: "4"}, en)).toBe("SOS · Completed");
+});
+
+test("rider matched labels name who is coming", () => {
+  expect(ticketStatusLabel("2", en, {
+    direction: "out",
+    ticketType: "TOW",
+  })).toBe(en.assist.statusTowerOnWay);
+  expect(ticketStatusLabel("2", en, {
+    direction: "out",
+    ticketType: "SOS",
+  })).toBe(en.assist.statusProviderOnWay);
+  expect(ticketStatusLabel("2", en, {
+    direction: "in",
+    ticketType: "TOW",
+  })).toBe(en.assist.statusMatched);
 });
 
 test("return tows use their own type label", () => {
-  expect(ticketTitle({ticketType: "TOW", status: "2", towKind: "RETURN"}, en)).toBe("Return tow · Matched");
+  expect(ticketTitle({ticketType: "TOW", status: "2", towKind: "RETURN"}, en)).toBe("Return tow · On the way");
 });
 
 test("unknown codes fall back without inventing copy", () => {

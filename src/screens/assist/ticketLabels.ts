@@ -1,9 +1,10 @@
 import type {Strings} from "../../i18n/en";
 import {DISPATCH_STATUS, isUnfixableStatus} from "../../api/dispatch";
+import {statusName} from "../../services/statusCache";
 
 export type StatusTone = "active" | "done" | "failed";
 
-export function ticketStatusLabel(status: string, t: Strings): string {
+function fallbackTicketStatus(status: string, t: Strings): string {
   if (status === DISPATCH_STATUS.MATCHED) return t.assist.statusMatched;
   if (status === DISPATCH_STATUS.ARRIVED) return t.assist.statusArrived;
   if (status === DISPATCH_STATUS.RESOLVED) return t.assist.statusResolved;
@@ -19,6 +20,20 @@ export function ticketStatusLabel(status: string, t: Strings): string {
   if (status === DISPATCH_STATUS.UNFIXABLE) return t.assist.statusUnfixable;
   if (status === DISPATCH_STATUS.RESOLVED_UNFIXABLE) return t.assist.statusResolvedUnfixable;
   return t.assist.statusPending;
+}
+
+export function ticketStatusLabel(
+  status: string,
+  t: Strings,
+  context?: {direction?: string; ticketType?: string},
+): string {
+  if (status === DISPATCH_STATUS.MATCHED && context?.direction === "out") {
+    if (context.ticketType === "TOW") return t.assist.statusTowerOnWay;
+    if (context.ticketType === "SOS" || context.ticketType === "MECHANIC") {
+      return t.assist.statusProviderOnWay;
+    }
+  }
+  return statusName("dispatch", status, fallbackTicketStatus(status, t));
 }
 
 export function statusTone(status: string): StatusTone {

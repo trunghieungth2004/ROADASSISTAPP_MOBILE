@@ -15,6 +15,8 @@ type Props = {
   ticketType: TicketType;
   note: string;
   onNote: (s: string) => void;
+  symptom?: string | null;
+  onSymptom?: (value: string | null) => void;
   towDest: ReactNode | null;
   busy: boolean;
   onSubmit: () => void;
@@ -37,7 +39,7 @@ function titleOf(ticketType: TicketType, t: Strings): string {
   return t.assist.sos;
 }
 
-export default function TicketSheet({t, theme, ticketType, note, onNote, towDest, busy, onSubmit, onClose, description, onDescription, photos, photosBusy, onAddPhotos, onRemovePhoto, destError, photoError, onRetryPhotos, onSubmitWithoutPhotos}: Props) {
+export default function TicketSheet({t, theme, ticketType, note, onNote, symptom, onSymptom, towDest, busy, onSubmit, onClose, description, onDescription, photos, photosBusy, onAddPhotos, onRemovePhoto, destError, photoError, onRetryPhotos, onSubmitWithoutPhotos}: Props) {
   const showPhotos = photos !== undefined || onAddPhotos !== undefined;
   const list = photos ?? [];
   const photoViewer = usePhotoViewer(t.common.cancel);
@@ -58,6 +60,27 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, towDest
       actions={actions}
     >
       <View style={styles.body}>
+        {ticketType === "SOS" && onSymptom !== undefined ? (
+          <View style={styles.symptomBlock}>
+            <Text style={[styles.symptomLabel, {color: theme.muted}]}>{t.assist.symptom}</Text>
+            <View style={styles.symptomWrap}>
+              {(Object.keys(t.services.categories) as Array<keyof Strings["services"]["categories"]>).map((category) => {
+                const selected = symptom === category;
+                return (
+                  <Pressable
+                    key={category}
+                    style={[styles.symptomChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]}
+                    onPress={() => onSymptom(selected ? null : category)}
+                    accessibilityRole="button"
+                    accessibilityState={{selected}}
+                  >
+                    <Text style={{color: selected ? theme.primary : theme.text, fontSize: 12}}>{t.services.categories[category]}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         <TextInput
           style={[styles.input, {borderColor: theme.border, color: theme.text}]}
           placeholder={t.assist.note}
@@ -114,6 +137,10 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, towDest
 
 const styles = StyleSheet.create({
   body: {gap: 8, width: "100%"},
+  symptomBlock: {gap: 6},
+  symptomLabel: {fontSize: 12, fontWeight: "700"},
+  symptomWrap: {flexDirection: "row", flexWrap: "wrap", gap: 6},
+  symptomChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   multiline: {minHeight: 72, textAlignVertical: "top"},
   photoBlock: {gap: 6},

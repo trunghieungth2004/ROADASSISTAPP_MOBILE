@@ -497,7 +497,7 @@ test("pending walk-in rows keep the walk-in decline", async () => {
   }
 });
 
-test("stale preview summary never leaks past matched", async () => {
+test("preview summaries stay out of the journey card", async () => {
   const preview = {ready: true, summary: "9.9 km · 99 min", busy: false, error: null};
   const {renderer: resolved} = await render({
     ticket: ticket({ticketType: "TOW", status: "4", direction: "out", otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"}}),
@@ -513,13 +513,13 @@ test("stale preview summary never leaks past matched", async () => {
     towPreview: preview,
   });
   try {
-    expect(texts(matched)).toContain("9.9 km · 99 min");
+    expect(texts(matched)).not.toContain("9.9 km · 99 min");
   } finally {
     matched.unmount();
   }
 });
 
-test("hidden accept keeps the flow hint without the action", async () => {
+test("hidden accept keeps the action out without a tower hint", async () => {
   const {renderer: hidden} = await render({
     ticket: ticket({
       ticketType: "TOW",
@@ -532,7 +532,7 @@ test("hidden accept keeps the flow hint without the action", async () => {
   });
   try {
     expect(actionLabels(hidden)).not.toContain(en.assist.accept);
-    expect(texts(hidden)).toContain(en.assist.towAcceptHint);
+    expect(texts(hidden)).not.toContain(en.assist.towAcceptHint);
   } finally {
     hidden.unmount();
   }
@@ -638,7 +638,7 @@ test("empty drop-off block carries its own add button", async () => {
   }
 });
 
-test("tow ETA pill prefixes the live tower distance", async () => {
+test("tow shows the tower distance without an arrival countdown", async () => {
   const future = new Date(Date.now() + 12 * 60 * 1000).toISOString();
   const {renderer} = await render({
     ticket: ticket({
@@ -651,15 +651,15 @@ test("tow ETA pill prefixes the live tower distance", async () => {
     }),
   });
   try {
-    const pill = texts(renderer).filter((text) => text.includes(en.shop.etaPickup.replace("{n}", "12")));
-    expect(pill.length).toBeGreaterThan(0);
-    expect(pill.every((text) => text.includes(" m "))).toBe(true);
+    const all = texts(renderer);
+    expect(all.some((text) => text.includes(en.shop.etaPickup.replace("{n}", "12")))).toBe(false);
+    expect(all.some((text) => text.endsWith(" m") || text.endsWith(" km"))).toBe(true);
   } finally {
     renderer.unmount();
   }
 });
 
-test("inbound tow sees the same ETA pill as the rider", async () => {
+test("inbound tow also hides the arrival countdown", async () => {
   const future = new Date(Date.now() + 12 * 60 * 1000).toISOString();
   const {renderer} = await render({
     ticket: ticket({
@@ -672,8 +672,7 @@ test("inbound tow sees the same ETA pill as the rider", async () => {
     }),
   });
   try {
-    const pill = texts(renderer).filter((text) => text.includes(en.shop.etaPickup.replace("{n}", "12")));
-    expect(pill.length).toBeGreaterThan(0);
+    expect(texts(renderer).some((text) => text.includes(en.shop.etaPickup.replace("{n}", "12")))).toBe(false);
   } finally {
     renderer.unmount();
   }
@@ -718,7 +717,7 @@ test("inbound empty drop-off stays neutral without a pick nudge", async () => {
   }
 });
 
-test("live tow with a route shows the summary in the sheet", async () => {
+test("live tow with a route keeps the summary out of the journey card", async () => {
   const {renderer} = await render({
     ticket: ticket({
       ticketType: "TOW",
@@ -729,7 +728,7 @@ test("live tow with a route shows the summary in the sheet", async () => {
     towPreview: {ready: true, summary: "1.5 km · 10 min", busy: false, error: null},
   });
   try {
-    expect(texts(renderer)).toContain("1.5 km · 10 min");
+    expect(texts(renderer)).not.toContain("1.5 km · 10 min");
   } finally {
     renderer.unmount();
   }
@@ -779,7 +778,7 @@ test("tower without engagement sees no cancel", async () => {
   }
 });
 
-test("board preview shows the fare estimate beside the summary", async () => {
+test("board preview keeps the estimate out of the journey card", async () => {
   const {renderer} = await render({
     ticket: ticket({
       ticketType: "TOW",
@@ -792,7 +791,7 @@ test("board preview shows the fare estimate beside the summary", async () => {
     towPreview: {ready: true, summary: "1.5 km", fareEstimate: 200000, busy: false, error: null},
   });
   try {
-    expect(texts(renderer)).toContain(`${en.assist.fareEstimate}: 200,000 VND`);
+    expect(texts(renderer)).not.toContain(`${en.assist.fareEstimate}: 200,000 VND`);
   } finally {
     renderer.unmount();
   }
@@ -809,7 +808,8 @@ test("matched tow shows the ceiling as up-to", async () => {
     }),
   });
   try {
-    expect(texts(renderer)).toContain(`${en.assist.fareUpTo}: 220,000 VND`);
+    expect(texts(renderer)).toContain(en.assist.fareUpTo);
+    expect(texts(renderer)).toContain("220,000 VND");
   } finally {
     renderer.unmount();
   }
@@ -826,7 +826,8 @@ test("resolved tow shows the final and cancelled shows the partial", async () =>
     }),
   });
   try {
-    expect(texts(settled.renderer)).toContain(`${en.assist.fareFinal}: 200,000 VND`);
+    expect(texts(settled.renderer)).toContain(en.bills.total);
+    expect(texts(settled.renderer)).toContain("200,000 VND");
   } finally {
     settled.renderer.unmount();
   }
@@ -840,7 +841,8 @@ test("resolved tow shows the final and cancelled shows the partial", async () =>
     }),
   });
   try {
-    expect(texts(cancelled.renderer)).toContain(`${en.assist.farePartial}: 20,000 VND`);
+    expect(texts(cancelled.renderer)).toContain(en.bills.total);
+    expect(texts(cancelled.renderer)).toContain("20,000 VND");
   } finally {
     cancelled.renderer.unmount();
   }

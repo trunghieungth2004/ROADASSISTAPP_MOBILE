@@ -28,6 +28,28 @@ describe("jobRouteKeyFor", () => {
     expect(second).not.toBe(first);
   });
 
+  it("follows the tower's own position on an inbound tow", () => {
+    const inbound = {...base, direction: "in", towerFix: null} as FeedTicket;
+    const first = jobRouteKeyFor(inbound, null, {lat: 10.69, lng: 106.59});
+    const second = jobRouteKeyFor(inbound, null, {lat: 10.7, lng: 106.6});
+    expect(first).not.toBeNull();
+    expect(second).not.toBe(first);
+  });
+
+  it("keeps the key stable while the tower is parked", () => {
+    const inbound = {...base, direction: "in", towerFix: null} as FeedTicket;
+    const first = jobRouteKeyFor(inbound, null, {lat: 10.6912, lng: 106.5912});
+    const parked = jobRouteKeyFor(inbound, null, {lat: 10.6914, lng: 106.5914});
+    expect(parked).toBe(first);
+  });
+
+  it("ignores the local position on the rider's outbound view", () => {
+    const withFix = {...base, towerFix: {lat: 10.69, lng: 106.59, at: "2026-01-01T00:00:00.000Z"}} as FeedTicket;
+    const first = jobRouteKeyFor(withFix, null, {lat: 1, lng: 2});
+    const second = jobRouteKeyFor(withFix, null, {lat: 3, lng: 4});
+    expect(second).toBe(first);
+  });
+
   it("changes when the destination changes", () => {
     const first = jobRouteKeyFor(base, null);
     const second = jobRouteKeyFor({...base, destinationSnapshot: {id: "shop2", name: "Other", lat: 10.8, lng: 106.7, kind: "SHOP"}}, null);

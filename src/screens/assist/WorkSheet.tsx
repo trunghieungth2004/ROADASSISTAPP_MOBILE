@@ -9,6 +9,7 @@ import Overlay from "../../components/overlay/Overlay";
 import {statusPillColor, ticketStatusLabel} from "./ticketLabels";
 import {formatAmountInput, parseAmountInput} from "./money";
 import type {WorkItem} from "../../api/dispatch";
+import ServicePickerSheet, {type PickerService} from "./ServicePickerSheet";
 
 export type WorkFormMode = "quote" | "done";
 
@@ -16,20 +17,17 @@ export type WorkFormValue = {
   workType: string;
   amount: number | null;
   invoiceRef: string;
-  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice">>;
+  warrantyDays?: number;
+  items?: Array<Pick<WorkItem, "name" | "qty" | "unitPrice" | "serviceCode">>;
 };
 
-type CatalogItem = {
-  code: string;
-  name: string;
-  displayPrice: number;
-  quoteRequired: boolean;
-};
+type CatalogItem = PickerService;
 
 type ItemDraft = {
   name: string;
   qty: string;
   unitPrice: string;
+  serviceCode?: string;
 };
 
 type Props = {
@@ -52,6 +50,7 @@ function draftsFrom(items: WorkItem[] | null | undefined): ItemDraft[] {
     name: item.name,
     qty: String(item.qty),
     unitPrice: formatAmountInput(String(item.unitPrice)),
+    ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
   }));
 }
 
@@ -61,8 +60,10 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
   const [workType, setWorkType] = useState(typeof initialWorkType === "string" ? initialWorkType : "");
   const [amount, setAmount] = useState("");
   const [invoiceRef, setInvoiceRef] = useState(typeof initialInvoiceRef === "string" ? initialInvoiceRef : "");
+  const [warrantyDays, setWarrantyDays] = useState("");
   const [items, setItems] = useState<ItemDraft[]>(() => draftsFrom(initialItems));
   const [localError, setLocalError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   function updateItem(index: number, patch: Partial<ItemDraft>): void {
     setItems((prev) => prev.map((item, i) => i === index ? {...item, ...patch} : item));
@@ -79,6 +80,7 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
       name: item.name,
       qty: "1",
       unitPrice: formatAmountInput(String(item.displayPrice)),
+      serviceCode: item.code,
     }]);
     setLocalError(null);
   }
@@ -102,6 +104,7 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
       name: item.name.trim(),
       qty: Number.parseInt(item.qty, 10),
       unitPrice: parseAmountInput(item.unitPrice),
+      ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
     }));
     const invalid = payloadItems.find((item) =>
       item.name === "" ||
@@ -115,6 +118,7 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
       name: item.name,
       qty: item.qty,
       unitPrice: item.unitPrice as number,
+      ...(item.serviceCode ? {serviceCode: item.serviceCode} : {}),
     }));
     if (mode === "quote") {
       const parsed = cleanItems.length > 0 ? itemTotal() : parseAmountInput(amount);
@@ -131,16 +135,25 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
       });
       return;
     }
+    const warranty = warrantyDays.trim() === "" ? null :
+      Number.parseInt(warrantyDays.replace(/[^0-9]/g, ""), 10);
+    if (warranty !== null &&
+      (!Number.isInteger(warranty) || warranty < 0 || warranty > 90)) {
+      setLocalError(t.provider.invalidWarranty);
+      return;
+    }
     setLocalError(null);
     onSubmit({
       workType: workType.trim(),
       amount: null,
       invoiceRef: invoiceRef.trim(),
+      ...(warranty !== null && warranty > 0 ? {warrantyDays: warranty} : {}),
       ...(cleanItems.length > 0 ? {items: cleanItems} : {}),
     });
   }
 
   return (
+    <>
     <Overlay
       visible
       variant="dialog"
@@ -166,18 +179,29 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
           placeholder={t.provider.workPlaceholder}
           placeholderTextColor={theme.muted}
         />
-        {mode === "quote" && catalog !== undefined && catalog.length > 0 ? (
+        {mode === "done" ? (
           <>
-            <Text style={[styles.label, {color: theme.text}]}>{t.provider.fixItems}</Text>
-            <View style={styles.catalogRow}>
-              {catalog.slice(0, 8).map((item) => (
-                <Pressable key={item.code} style={[styles.catalogChip, {borderColor: theme.primary}]} onPress={() => addCatalogItem(item)} accessibilityRole="button" accessibilityLabel={item.name}>
-                  <Text style={{color: theme.primary}}>{item.name}</Text>
-                  <Text style={[styles.catalogPrice, {color: theme.muted}]}>{`${item.displayPrice.toLocaleString()} ₫`}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <Text style={[styles.label, {color: theme.text}]}>{t.provider.warrantyDays}</Text>
+            <TextInput
+              style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+              value={warrantyDays}
+              onChangeText={setWarrantyDays}
+              placeholder="30"
+              placeholderTextColor={theme.muted}
+              keyboardType="number-pad"
+            />
           </>
+        ) : null}
+        {mode === "quote" && catalog !== undefined && catalog.length > 0 ? (
+          <Pressable
+            style={[styles.addServices, {borderColor: theme.primary}]}
+            onPress={() => setPickerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t.provider.addServices}
+          >
+            <MaterialIcons name="playlist-add" size={18} color={theme.primary} />
+            <Text style={{color: theme.primary, fontWeight: "700"}}>{t.provider.addServices}</Text>
+          </Pressable>
         ) : null}
         <View style={styles.itemsHead}>
           <Text style={[styles.label, {color: theme.text}]}>{t.provider.invoiceItems}</Text>
@@ -185,8 +209,18 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
             <Text style={{color: theme.primary, fontWeight: "700"}}>{t.provider.addItem}</Text>
           </Pressable>
         </View>
-        {items.map((item, index) => (
-          <View key={`item-${index}`} style={styles.itemRow}>
+        {items.map((item, index) => {
+          const service = catalog?.find((row) => row.code === item.serviceCode) ?? null;
+          const meta = service === null ? null : [
+            service.quoteRequired ? t.provider.serviceQuote : t.provider.serviceFixedPrice,
+            service.warrantyDays && service.warrantyDays > 0 ? `${service.warrantyDays}d` : null,
+            service.category ?? null,
+            ...(service.vehicleClasses ?? []),
+          ].filter((value): value is string => typeof value === "string" && value !== "").join(" · ");
+          return (
+          <View key={`item-${index}`} style={styles.itemBlock}>
+          {meta !== null ? <Text style={[styles.itemMeta, {color: theme.muted}]}>{meta}</Text> : null}
+          <View style={styles.itemRow}>
             <TextInput
               style={[styles.input, styles.itemName, {borderColor: theme.border, color: theme.text}]}
               value={item.name}
@@ -214,7 +248,9 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
               <MaterialIcons name="close" size={18} color={theme.danger} />
             </Pressable>
           </View>
-        ))}
+          </View>
+          );
+        })}
         {mode === "quote" && items.length === 0 ? (
           <>
             <Text style={[styles.label, {color: theme.text}]}>{t.provider.quotedAmount}</Text>
@@ -253,6 +289,17 @@ export default function WorkSheet({t, ticketLabel, mode, status, busy, error, in
         ) : null}
       </View>
     </Overlay>
+    {pickerOpen ? (
+      <ServicePickerSheet
+        t={t}
+        theme={theme}
+        catalog={catalog ?? []}
+        selectedCodes={items.map((item) => item.serviceCode ?? "").filter((code) => code !== "")}
+        onAdd={(services) => services.forEach(addCatalogItem)}
+        onClose={() => setPickerOpen(false)}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -263,10 +310,10 @@ const styles = StyleSheet.create({
   hint: {fontSize: 13},
   pill: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   pillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
-  catalogRow: {flexDirection: "row", flexWrap: "wrap", gap: 6},
-  catalogChip: {borderWidth: 1, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 8, gap: 1},
-  catalogPrice: {fontSize: 10},
+  addServices: {borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6},
   itemsHead: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
+  itemBlock: {gap: 3},
+  itemMeta: {fontSize: 10},
   itemRow: {flexDirection: "row", alignItems: "center", gap: 6},
   itemName: {flex: 1, minWidth: 0},
   itemQty: {width: 46, textAlign: "center"},

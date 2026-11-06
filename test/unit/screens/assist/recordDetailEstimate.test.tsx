@@ -209,13 +209,39 @@ test("the record opens the journey bill", async () => {
   });
   try {
     expect(texts(renderer)).toContain("120,000 VND");
-    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
     expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
-    const open = tap(renderer, en.bills.openBill);
+    const open = tap(renderer, en.payments.detailTitle);
     await act(async () => {
       open?.props.onPress?.();
     });
     expect(onOpenBill).toHaveBeenCalledTimes(1);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("an active tow opens payment details before a bill exists", async () => {
+  const onOpenBill = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "2",
+      direction: "out",
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+      towFare: {estimate: 300000, ceiling: 330000, final: null, deadheadKm: 1, loadedKm: 8.15, night: false, vehicleClass: "CAR", baseFee: 300000, perKmFee: 10000, includedKm: 10, billableKm: 0},
+    }),
+    onOpenBill,
+  });
+  try {
+    expect(texts(renderer)).toContain(en.assist.fareUpTo);
+    expect(texts(renderer)).toContain("330,000 VND");
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
+    const open = tap(renderer, en.payments.detailTitle);
+    await act(async () => {
+      open?.props.onPress?.();
+    });
+    expect(onOpenBill).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}));
   } finally {
     renderer.unmount();
   }
@@ -229,7 +255,7 @@ test("the bill link survives a payment on file", async () => {
     payment: {method: "SEPAY", status: "HELD"},
   });
   try {
-    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
     expect(actionLabels(renderer)).not.toContain(en.assist.payNow);
   } finally {
     renderer.unmount();
@@ -263,8 +289,8 @@ test("the assigned tow opens the journey bill", async () => {
     onOpenBill,
   });
   try {
-    expect(actionLabels(renderer)).toContain(en.bills.openBill);
-    const open = tap(renderer, en.bills.openBill);
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
+    const open = tap(renderer, en.payments.detailTitle);
     await act(async () => {
       open?.props.onPress?.();
     });
@@ -282,7 +308,7 @@ test("the destination shop opens the journey bill", async () => {
     onOpenBill,
   });
   try {
-    expect(actionLabels(renderer)).toContain(en.bills.openBill);
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
   } finally {
     renderer.unmount();
   }
@@ -294,7 +320,7 @@ test("a candidate and an unrelated viewer do not get the bill link", async () =>
     onOpenBill: jest.fn(),
   });
   try {
-    expect(actionLabels(candidate.renderer)).not.toContain(en.bills.openBill);
+    expect(actionLabels(candidate.renderer)).not.toContain(en.payments.detailTitle);
   } finally {
     candidate.renderer.unmount();
   }
@@ -304,7 +330,7 @@ test("a candidate and an unrelated viewer do not get the bill link", async () =>
     onOpenBill: jest.fn(),
   });
   try {
-    expect(actionLabels(other.renderer)).not.toContain(en.bills.openBill);
+    expect(actionLabels(other.renderer)).not.toContain(en.payments.detailTitle);
   } finally {
     other.renderer.unmount();
   }

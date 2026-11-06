@@ -53,7 +53,7 @@ export default function TicketRow({t, theme, ticket, kind, onPress, subtitle = n
             </View>
           ) : (
             <View style={[styles.pill, {backgroundColor: statusPillColor(ticket.status, theme)}]}>
-              <Text style={styles.pillText}>{ticketStatusLabel(ticket.status, t)}</Text>
+              <Text style={styles.pillText}>{ticketStatusLabel(ticket.status, t, {direction: ticket.direction, ticketType: ticket.ticketType})}</Text>
             </View>
           )}
         </View>
