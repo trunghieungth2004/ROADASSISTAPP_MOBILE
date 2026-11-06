@@ -97,11 +97,11 @@ breaks updates without a compile error anywhere.
 
 ### Current rollout
 
-`v0.2.2` is the current published build. It adds the tower-owned TOW
-arrival/delivery flow, return-tow billing on the journey bill, provider
-pricing and subscriptions, and the walk-in quote-decline fix. Install
-`v0.2.2` over `v0.2.1` with the same signing key to verify the in-app
-updater path.
+`v0.3.0` is the current release candidate. It adds bookings, support,
+refunds, warranty coverage and claims, searchable service selection, vehicle
+service history, role-specific ticket photos, and the warranty stamping fix
+for return-TOW auto-resolved walk-ins. Install it over `v0.2.2` with the same
+signing key to verify the in-app updater path.
 
 ### Verify a published release
 

@@ -7,6 +7,43 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
+### Added
+
+- Booking, support, refund and warranty APIs and screens.
+- Warranty coverage and claim tabs for riders and providers, with claim photos,
+  shop links and accept/decline/rework actions.
+- Vehicle service history with linked shop details and per-service warranty
+  claim buttons.
+- Searchable provider service picker with multi-select, fixed/quote pricing,
+  warranty, category and vehicle-class metadata.
+- TOW handover photos and quick-fix/release flows.
+- Saved-place, current-location and map-pick choices for TOW drop-off.
+- Separate service/work card on ticket details.
+
+### Changed
+
+- Payment details now open as a sheet for all ticket types, with a fare preview
+  for active TOWs.
+- Ticket photos use horizontal role-specific lanes for rider, shop, tow and
+  mobile-shop photos.
+- Provider warranty claims are reachable from More, provider details and
+  settings.
+- Return-TOW active cards use the normal TOW layout.
+- Dropped the separate Work order action; quotes and requotes carry the work.
+
+### Fixed
+
+- Warranty stamping now runs when a linked walk-in is auto-resolved by a
+  return TOW.
+- New tickets retain vehicle id, plate and height snapshots.
+- TOW handling and cancellation recomputes use the assigned provider card.
+- Fare-cap deductions are no longer shown as negative cap charges.
+- Sparse GPS tracks fall back to the quoted loaded distance.
+- Warranty claim photos use the correct Storage path and photo-picker style.
+- TOW route lines follow the tower position on both rider and tower views.
+
 ## [0.2.2] - 2026-11-02
 
 ### Added
