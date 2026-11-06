@@ -15,29 +15,42 @@ type Props = {
   type: VehicleType;
   width: string;
   height: string;
+  label: string;
+  plate: string;
   error: string | null;
+  onLabelChange: (next: string) => void;
+  onPlateChange: (next: string) => void;
   onTypeChange: (next: VehicleType) => void;
   onWidthChange: (next: string) => void;
   onHeightChange: (next: string) => void;
+  showType?: boolean;
 };
 
-export default function VehicleCreateSheet({t, theme, type, width, height, error, onTypeChange, onWidthChange, onHeightChange}: Props) {
+export default function VehicleCreateSheet({t, theme, type, width, height, label, plate, error, onLabelChange, onPlateChange, onTypeChange, onWidthChange, onHeightChange, showType = true}: Props) {
   return (
     <View style={styles.body}>
-      <Text style={[styles.label, {color: theme.text}]}>{t.vehicle.type}</Text>
-      <View style={styles.typeRow}>
-        {VEHICLE_TYPE_CHOICES.map((vt) => {
-          const active = type === vt;
-          return (
-            <Pressable key={vt} style={[styles.typeBtn, {borderColor: active ? theme.primary : theme.border, backgroundColor: active ? `${theme.primary}22` : "transparent"}]} onPress={() => onTypeChange(vt)} accessibilityRole="button">
-              <MaterialCommunityIcons name={vehicleIcon(vt)} size={20} color={active ? theme.primary : theme.muted} />
-              <Text style={[styles.typeText, {color: active ? theme.primary : theme.text}]} numberOfLines={1}>
-                {vehicleTypeName(vt, t)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={[styles.label, {color: theme.text}]}>{t.vehicle.label}</Text>
+      <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={label} onChangeText={onLabelChange} placeholder={t.vehicle.labelPlaceholder} placeholderTextColor={theme.muted} />
+      <Text style={[styles.label, {color: theme.text}]}>{t.vehicle.plate}</Text>
+      <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={plate} onChangeText={onPlateChange} placeholder={t.vehicle.platePlaceholder} placeholderTextColor={theme.muted} autoCapitalize="characters" />
+      {showType ? (
+        <>
+          <Text style={[styles.label, {color: theme.text}]}>{t.vehicle.type}</Text>
+          <View style={styles.typeRow}>
+            {VEHICLE_TYPE_CHOICES.map((vt) => {
+              const active = type === vt;
+              return (
+                <Pressable key={vt} style={[styles.typeBtn, {borderColor: active ? theme.primary : theme.border, backgroundColor: active ? `${theme.primary}22` : "transparent"}]} onPress={() => onTypeChange(vt)} accessibilityRole="button">
+                  <MaterialCommunityIcons name={vehicleIcon(vt)} size={20} color={active ? theme.primary : theme.muted} />
+                  <Text style={[styles.typeText, {color: active ? theme.primary : theme.text}]} numberOfLines={1}>
+                    {vehicleTypeName(vt, t)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
       <View style={styles.fieldRow}>
         <View style={styles.halfCol}>
           <Text style={[styles.label, {color: theme.text}]}>{t.vehicle.widthMeters}</Text>

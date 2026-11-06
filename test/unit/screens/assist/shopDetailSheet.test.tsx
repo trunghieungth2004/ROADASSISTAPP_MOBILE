@@ -24,7 +24,11 @@ function mobileShop(): Provider {
   } as Provider;
 }
 
-async function render(shop: Provider, onImHere: (() => void) | null = null) {
+async function render(
+  shop: Provider,
+  onImHere: (() => void) | null = null,
+  options: {serviceChannel?: "ASSIST" | "BOOKING"; onChoose?: (() => void) | null} = {},
+) {
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
@@ -43,6 +47,8 @@ async function render(shop: Provider, onImHere: (() => void) | null = null) {
           onWalkHere={jest.fn()}
           onRouteFromHere={jest.fn()}
           onImHere={onImHere}
+          serviceChannel={options.serviceChannel}
+          onChoose={options.onChoose}
           onClose={jest.fn()}
         />
       </SafeAreaProvider>,
@@ -63,6 +69,41 @@ function texts(renderer: ReturnType<typeof create>): string[] {
     .findAll((node) => typeof node.props?.children === "string")
     .map((node) => node.props.children as string);
 }
+
+test("service list filters by the requested channel", async () => {
+  const shop = {
+    ...mobileShop(),
+    kind: "SHOP",
+    services: [
+      {code: "BOOK", name: "Bookable service", displayPrice: 50000, quoteRequired: false, channels: ["BOOKING"]},
+      {code: "ASSIST", name: "Assist service", displayPrice: 70000, quoteRequired: false, channels: ["ASSIST"]},
+    ],
+  } as Provider;
+  const assist = await render(shop, null, {serviceChannel: "ASSIST"});
+  try {
+    expect(texts(assist)).toContain("Assist service");
+    expect(texts(assist)).not.toContain("Bookable service");
+  } finally {
+    assist.unmount();
+  }
+  const booking = await render(shop, null, {serviceChannel: "BOOKING"});
+  try {
+    expect(texts(booking)).toContain("Bookable service");
+    expect(texts(booking)).not.toContain("Assist service");
+  } finally {
+    booking.unmount();
+  }
+});
+
+test("the choose action is available when provided", async () => {
+  const onChoose = jest.fn();
+  const renderer = await render(mobileShop(), null, {onChoose});
+  try {
+    expect(actionLabels(renderer)).toContain(en.shop.useShop);
+  } finally {
+    renderer.unmount();
+  }
+});
 
 test("provider detail uses the mobile shop icon", async () => {
   const renderer = await render(mobileShop());

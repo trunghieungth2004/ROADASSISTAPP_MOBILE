@@ -58,12 +58,12 @@ export default function VehiclePickerSheet({t, theme, token, activeId, onPick, o
         </View>
       ) : null}
       {profiles.map((v) => (
-        <Pressable key={v.id} style={styles.vehicleRow} onPress={() => onPick(v.id)} accessibilityRole="button">
+        <Pressable key={v.id} style={styles.vehicleRow} onPress={() => onPick(v.id)} accessibilityRole="button" accessibilityLabel={v.label || v.plate || vehicleTypeName(v.type, t)}>
           <MaterialIcons name={activeId === v.id ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={activeId === v.id ? theme.primary : theme.muted} />
           <MaterialCommunityIcons name={vehicleIcon(v.type)} size={20} color={theme.primary} />
           <View style={styles.vehicleMain}>
-            <Text style={[styles.vehicleName, {color: theme.text}]}>{vehicleTypeName(v.type, t)}</Text>
-            <Text style={[styles.vehicleMeta, {color: theme.muted}]}>{vehicleMeta(v.baseWidth, v.baseHeight)}</Text>
+            <Text style={[styles.vehicleName, {color: theme.text}]}>{v.label || v.plate || t.vehicle.myVehicle}</Text>
+            <Text style={[styles.vehicleMeta, {color: theme.muted}]}>{[v.plate, vehicleMeta(v.baseWidth, v.baseHeight)].filter((value) => typeof value === "string" && value !== "").join(" · ")}</Text>
           </View>
         </Pressable>
       ))}

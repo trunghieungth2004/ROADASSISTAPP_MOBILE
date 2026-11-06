@@ -15,6 +15,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import {missingKinds, providerPill, providerRowSubtitle, switchEnabled} from "./more/providerUi";
 import {myProviders, revokeProvider, updateProvider, type Provider} from "../api/providers";
 import ProviderFormDialog from "../components/providers/ProviderFormDialog";
+import ProviderDetailsSheet from "./more/ProviderDetailsSheet";
 import Overlay from "../components/overlay/Overlay";
 
 export default function ProvidersScreen() {
@@ -28,6 +29,7 @@ export default function ProvidersScreen() {
   const [providerBusy, setProviderBusy] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | "MOBILE_SHOP" | null>(null);
+  const [providerDetail, setProviderDetail] = useState<Provider | null>(null);
   const [providerEdit, setProviderEdit] = useState<Provider | null>(null);
   const [revokeFor, setRevokeFor] = useState<Provider | null>(null);
   const [revokeBusy, setRevokeBusy] = useState(false);
@@ -130,7 +132,7 @@ export default function ProvidersScreen() {
                 {index === 0 ? null : <View style={[styles.divider, {backgroundColor: theme.divider}]} />}
                 <View style={styles.listRow}>
                   <MaterialIcons name={provider.kind === "TOW" ? "local-shipping" : provider.kind === "MOBILE_SHOP" ? "build" : "storefront"} size={20} color={theme.primary} />
-                  <Pressable style={styles.permText} onPress={() => setProviderEdit(provider)} accessibilityRole="button" accessibilityLabel={`${provider.name}, ${pill.label}`}>
+                  <Pressable style={styles.permText} onPress={() => setProviderDetail(provider)} accessibilityRole="button" accessibilityLabel={`${provider.name}, ${pill.label}`}>
                     <Text style={[styles.listText, {color: theme.text}]}>{provider.name}</Text>
                     <Text style={[styles.permHint, {color: theme.muted}]}>{providerRowSubtitle(provider, t)}</Text>
                     {note ? <Text style={[styles.permHint, {color: theme.muted}]}>{note}</Text> : null}
@@ -173,6 +175,29 @@ export default function ProvidersScreen() {
         ) : null}
         {providerCreate ? (
           <ProviderFormDialog t={t} token={token} kind={providerCreate} provider={null} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); }} onSaved={() => { setProviderCreate(null); setNotice(t.provider.saved); void loadProviders(); }} />
+        ) : null}
+        {providerDetail ? (
+          <ProviderDetailsSheet
+            t={t}
+            theme={theme}
+            token={token}
+            provider={providerDetail}
+            onClose={() => setProviderDetail(null)}
+            onWarranty={() => {
+              setProviderDetail(null);
+              navigation.navigate("Warranty" as never);
+            }}
+            onEdit={() => {
+              setProviderEdit(providerDetail);
+              setProviderDetail(null);
+            }}
+            onRemove={() => {
+              setRevokeFor(providerDetail);
+              setRevokeError(null);
+              setProviderDetail(null);
+            }}
+            onChanged={() => void loadProviders()}
+          />
         ) : null}
         {providerEdit ? (
           <ProviderFormDialog t={t} token={token} kind={providerEdit.kind} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />

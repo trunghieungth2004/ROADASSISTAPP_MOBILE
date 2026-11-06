@@ -17,6 +17,8 @@ type Props = {
 
 export default function VehicleCreateDialog({t, theme, token, onClose, onCreated}: Props) {
   const [type, setType] = useState<VehicleType>("BIKE");
+  const [label, setLabel] = useState("");
+  const [plate, setPlate] = useState("");
   const [width, setWidth] = useState("0.7");
   const [height, setHeight] = useState("1.1");
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,13 @@ export default function VehicleCreateDialog({t, theme, token, onClose, onCreated
     setBusy(true);
     setError(null);
     try {
-      const created = await createProfile({type, baseWidth: w, baseHeight: h}, token);
+      const created = await createProfile({
+        type,
+        baseWidth: w,
+        baseHeight: h,
+        ...(label.trim() !== "" ? {label: label.trim()} : {}),
+        ...(plate.trim() !== "" ? {plate: plate.trim()} : {}),
+      }, token);
       await addRideConfig({profileId: created.id, configType: "SOLO"}, token);
       onCreated();
     } catch (err) {
@@ -63,7 +71,11 @@ export default function VehicleCreateDialog({t, theme, token, onClose, onCreated
         type={type}
         width={width}
         height={height}
+        label={label}
+        plate={plate}
         error={error}
+        onLabelChange={setLabel}
+        onPlateChange={setPlate}
         onTypeChange={onTypeChange}
         onWidthChange={setWidth}
         onHeightChange={setHeight}

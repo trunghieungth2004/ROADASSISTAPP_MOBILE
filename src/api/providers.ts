@@ -2,6 +2,39 @@ import {api} from "./client";
 import {CACHE_TTL_MS, cacheClear, cacheDel, withCache} from "../services/cache";
 
 export type ProviderKind = "SHOP" | "TOW" | "MOBILE_SHOP";
+
+export type ServiceChannel = "BOOKING" | "ASSIST";
+
+export type ProviderService = {
+  code: string;
+  name: string;
+  displayPrice: number;
+  quoteRequired: boolean;
+  category?: string;
+  warrantyDays?: number;
+  warrantyParts?: "LABOR_ONLY" | "PARTS_AND_LABOR";
+  channels?: ServiceChannel[];
+  vehicleClasses?: string[];
+};
+
+export type ServiceCategory = "FLAT_TIRE" | "FLUID_LEAK" | "CHAIN_SLACK" | "SPARK_CAP" | "ELECTRICAL" | "ENGINE" | "BRAKES" | "OTHER";
+
+export const SERVICE_CATEGORIES: ServiceCategory[] = ["FLAT_TIRE", "FLUID_LEAK", "CHAIN_SLACK", "SPARK_CAP", "ELECTRICAL", "ENGINE", "BRAKES", "OTHER"];
+
+export type ProviderStats = {
+  providers: Array<{
+    id: string;
+    kind: ProviderKind;
+    name: string;
+    status: ProviderStatus;
+    accepting: boolean;
+    suspended: boolean;
+    ratingAvg: number;
+    ratingCount: number;
+    completedJobs: number;
+  }>;
+  payouts: {batches: number; gross: number; net: number; commissionOwed: number};
+};
 export type ProviderStatus = "ACTIVE" | "PENDING" | "DENIED";
 
 export type Provider = {
@@ -21,18 +54,26 @@ export type Provider = {
   vehicleWidth?: number | null;
   vehicleProfileId?: string | null;
   serviceFee?: number | null;
-  services?: Array<{
-    code: string;
-    name: string;
-    displayPrice: number;
-    quoteRequired: boolean;
-  }> | null;
+  services?: ProviderService[] | null;
+  serviceUsage?: Record<string, number> | null;
+  taxCode?: string | null;
+  bookingEnabled?: boolean;
+  bookingSlotMinutes?: number | null;
+  bookingCapacity?: number | null;
+  bookingLeadMinutes?: number | null;
+  bookingHorizonDays?: number | null;
+  bookingHours?: string | null;
+  bookingAlwaysOpen?: boolean;
+  depositPolicy?: "NONE" | "FIXED" | "PERCENT" | null;
+  depositAmount?: number | null;
+  depositPercent?: number | null;
   callOutFee?: number | null;
   travelPerKmFee?: number | null;
   licenseNumber?: string | null;
   licensePhotoUrl?: string | null;
   towBaseFee?: number | null;
   towPerKmFee?: number | null;
+  waitingRatePer15Min?: number | null;
   status: ProviderStatus;
   suspended?: boolean;
   suspendedReason?: string | null;
@@ -55,6 +96,7 @@ export type NearProvidersOptions = {
   acceptingOnly?: boolean;
   openOnly?: boolean;
   vehicleClass?: string;
+  serviceCategory?: ServiceCategory;
   limit?: number;
   minRating?: number;
   sortBy?: ProviderSort;
@@ -73,7 +115,7 @@ function normalizeProvider(raw: Provider): Provider {
 }
 
 export async function nearProviders(lat: number, lng: number, token: string, options?: NearProvidersOptions): Promise<Provider[]> {
-  const key = `providersNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${options?.kind ?? "-"},${options?.radiusMeters ?? "-"},${options?.acceptingOnly === true ? "1" : "0"},${options?.openOnly === true ? "1" : "0"},${options?.vehicleClass ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
+  const key = `providersNear:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${options?.kind ?? "-"},${options?.radiusMeters ?? "-"},${options?.acceptingOnly === true ? "1" : "0"},${options?.openOnly === true ? "1" : "0"},${options?.vehicleClass ?? "-"},${options?.serviceCategory ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
   const rows = await withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/near", {lat, lng, ...options}, token));
   return (rows ?? []).map(normalizeProvider);
 }
@@ -81,6 +123,7 @@ export async function nearProviders(lat: number, lng: number, token: string, opt
 export type SearchProvidersOptions = {
   kind?: string;
   vehicleClass?: string;
+  serviceCategory?: ServiceCategory;
   radiusMeters?: number;
   limit?: number;
   minRating?: number;
@@ -89,7 +132,7 @@ export type SearchProvidersOptions = {
 };
 
 export async function searchProviders(lat: number, lng: number, query: string, token: string, options?: SearchProvidersOptions): Promise<Provider[]> {
-  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.kind ?? "-"},${options?.vehicleClass ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
+  const key = `providersSearch:${token}:${lat.toFixed(3)},${lng.toFixed(3)},${query.trim().toLowerCase()},${options?.kind ?? "-"},${options?.vehicleClass ?? "-"},${options?.serviceCategory ?? "-"},${options?.radiusMeters ?? "-"},${options?.limit ?? "-"},${options?.minRating ?? "-"},${options?.sortBy ?? "-"},${options?.ticketId ?? "-"}`;
   const rows = await withCache(key, CACHE_TTL_MS.providersNear, () => api.post<Provider[]>("/providers/search", {lat, lng, query, ...options}, token));
   return (rows ?? []).map(normalizeProvider);
 }
@@ -147,6 +190,8 @@ export type CreateShopProviderPayload = {
   openHours?: string;
   vehicleClasses?: string[];
   serviceFee?: number;
+  services?: ProviderService[];
+  taxCode?: string;
 };
 
 export type CreateTowProviderPayload = {
@@ -160,6 +205,7 @@ export type CreateTowProviderPayload = {
   vehicleWidth?: number;
   towBaseFee?: number;
   towPerKmFee?: number;
+  waitingRatePer15Min?: number;
 };
 
 export type CreateMobileShopProviderPayload = {
@@ -174,6 +220,7 @@ export type CreateMobileShopProviderPayload = {
   licensePhotoUrl?: string;
   callOutFee?: number;
   travelPerKmFee?: number;
+  services?: ProviderService[];
 };
 
 export async function createProvider(payload: CreateShopProviderPayload | CreateTowProviderPayload | CreateMobileShopProviderPayload, token: string): Promise<Provider> {
@@ -192,6 +239,7 @@ export type UpdateProviderPayload = {
   openHours?: string | null;
   vehicleClasses?: string[];
   serviceFee?: number;
+  services?: ProviderService[];
   callOutFee?: number;
   travelPerKmFee?: number;
   licenseNumber?: string;
@@ -201,6 +249,18 @@ export type UpdateProviderPayload = {
   vehicleWidth?: number;
   towBaseFee?: number;
   towPerKmFee?: number;
+  waitingRatePer15Min?: number;
+  taxCode?: string | null;
+  bookingEnabled?: boolean;
+  bookingSlotMinutes?: number;
+  bookingCapacity?: number;
+  bookingLeadMinutes?: number;
+  bookingHorizonDays?: number;
+  bookingHours?: string | null;
+  bookingAlwaysOpen?: boolean;
+  depositPolicy?: "NONE" | "FIXED" | "PERCENT";
+  depositAmount?: number;
+  depositPercent?: number;
   accepting?: boolean;
 };
 
@@ -225,4 +285,8 @@ export function reportProvider(payload: {providerId: string; reason: ReportReaso
 
 export function pingProviderLocation(lat: number, lng: number, token: string): Promise<{updated: number; providerId: string}> {
   return api.post<{updated: number; providerId: string}>("/providers/location", {lat, lng}, token);
+}
+
+export function providerStats(token: string): Promise<ProviderStats> {
+  return api.post<ProviderStats>("/providers/stats", {}, token);
 }
