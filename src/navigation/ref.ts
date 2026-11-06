@@ -1,13 +1,14 @@
 import {createNavigationContainerRef} from "@react-navigation/native";
 
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: {screen?: string} | undefined;
   Navigation: undefined;
   Diagnostics: undefined;
   Settings: undefined;
   About: undefined;
   Permissions: undefined;
   Providers: undefined;
+  Warranty: undefined;
   Bills: undefined;
   Payments: {tab?: "pay" | "receive"; payoutId?: string} | undefined;
   BillDetail: {

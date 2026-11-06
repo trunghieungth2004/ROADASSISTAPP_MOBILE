@@ -25,6 +25,8 @@ type DirectoryHit = {
   distanceMeters?: number;
   declined?: boolean;
   openNow?: boolean;
+  providerKind?: "SHOP" | "TOW" | "MOBILE_SHOP";
+  bookingEnabled?: boolean;
 };
 
 type MaptilerFeature = {
@@ -243,6 +245,7 @@ export type DirectorySearchOptions = {
   minRating?: number;
   sortBy?: "distance" | "rating";
   ticketId?: string;
+  kind?: "SHOP" | "TOW" | "MOBILE_SHOP";
 };
 
 export async function searchDirectory(query: string, token: string, limit = 5, options?: DirectorySearchOptions): Promise<Place[]> {
@@ -255,7 +258,15 @@ export async function searchDirectory(query: string, token: string, limit = 5, o
       lng: h.lng,
       source: "directory" as const,
       id: h.id,
-      category: h.kind === "shop" ? "store" : "landmark",
+      category: h.providerKind === "TOW" ?
+        "tow" :
+        h.providerKind === "MOBILE_SHOP" ?
+          "mobile" :
+          h.kind === "shop" ? "repair" : "landmark",
+      ...(h.providerKind !== undefined ? {providerKind: h.providerKind} : {}),
+      ...(typeof h.bookingEnabled === "boolean" ?
+        {bookingEnabled: h.bookingEnabled} :
+        {}),
       ...(typeof h.ratingAvg === "number" ? {ratingAvg: h.ratingAvg} : {}),
       ...(typeof h.ratingCount === "number" ? {ratingCount: h.ratingCount} : {}),
       ...(typeof h.distanceMeters === "number" ? {distanceMeters: h.distanceMeters} : {}),

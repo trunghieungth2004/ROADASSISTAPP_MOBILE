@@ -90,7 +90,7 @@ test("every api call hits its registered method and path", async () => {
   const seen: {method: string; path: string}[] = [];
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({method: init?.method ?? "GET", path: u.pathname});
+    seen.push({method: init?.method ?? "GET", path: u.pathname.replace(/^\/api/, "")});
     throw new Error("down");
   }) as unknown) as typeof fetch;
   try {
@@ -111,7 +111,7 @@ test("every api call hits its registered method and path", async () => {
 test("searchDirectory queries the directory endpoint", async () => {
   let seen = "";
   globalThis.fetch = (jest.fn(async (url: string) => {
-    seen = new URL(String(url)).pathname;
+    seen = new URL(String(url)).pathname.replace(/^\/api/, "");
     return {ok: true, status: 200, text: async () => JSON.stringify({statusCode: 200, status: "SUCCESS", data: []})};
   }) as unknown) as typeof fetch;
   try {

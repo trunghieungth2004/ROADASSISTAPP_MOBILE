@@ -7,6 +7,7 @@ export const MAP_SHOP_LIMIT = 5;
 
 export type ShopEntry = {
   id: string;
+  kind?: "SHOP" | "TOW" | "MOBILE_SHOP" | null;
   name: string;
   lat?: number | null;
   lng?: number | null;
@@ -17,6 +18,8 @@ export type ShopEntry = {
   declined?: boolean | null;
   openNow?: boolean | null;
   accepting?: boolean | null;
+  bookingEnabled?: boolean | null;
+  services?: Array<{code: string; name: string; displayPrice: number; quoteRequired: boolean; channels?: Array<"BOOKING" | "ASSIST">}> | null;
 };
 
 export function normalizeShopName(name: string): string {
@@ -45,6 +48,30 @@ export function isRepairPlace(place: Place): boolean {
 
 export function filterRepairPlaces(places: Place[]): Place[] {
   return places.filter(isRepairPlace);
+}
+
+export function dropNearDuplicates(
+  places: Place[],
+  radiusM = SHOP_DUPLICATE_RADIUS_M,
+): Place[] {
+  const out: Place[] = [];
+  for (const place of places) {
+    const wanted = normalizeShopName(place.label);
+    const duplicate = out.some((other) => {
+      if (place.providerKind !== undefined && place.providerKind !== null &&
+        other.providerKind !== undefined && other.providerKind !== null &&
+        place.providerKind !== other.providerKind) {
+        return false;
+      }
+      if (!sameShop(normalizeShopName(other.label), wanted)) return false;
+      return distBetween(
+        {lat: place.lat, lng: place.lng},
+        {lat: other.lat, lng: other.lng},
+      ) <= radiusM;
+    });
+    if (!duplicate) out.push(place);
+  }
+  return out;
 }
 
 export function dropShopDuplicates(
@@ -78,6 +105,9 @@ export function toShopPlace(shop: ShopEntry & {lat: number; lng: number}): Place
     ...(shop.declined === true ? {declined: true} : {}),
     ...(typeof shop.openNow === "boolean" ? {openNow: shop.openNow} : {}),
     ...(typeof shop.accepting === "boolean" ? {accepting: shop.accepting} : {}),
+    ...(typeof shop.bookingEnabled === "boolean" ? {bookingEnabled: shop.bookingEnabled} : {}),
+    ...(Array.isArray(shop.services) ? {services: shop.services} : {}),
+    ...(shop.kind ? {providerKind: shop.kind} : {}),
   };
 }
 
@@ -110,6 +140,7 @@ export async function fetchShopPlaces(
     .filter((s) => filters?.acceptingOnly !== true || s.accepting !== false)
     .map((s) => ({
       id: s.id,
+      ...(s.kind ? {kind: s.kind} : {}),
       name: s.name,
       lat: s.lat,
       lng: s.lng,
@@ -120,6 +151,8 @@ export async function fetchShopPlaces(
       ...(s.declined === true ? {declined: true} : {}),
       ...(typeof s.openNow === "boolean" ? {openNow: s.openNow} : {}),
       ...(typeof s.accepting === "boolean" ? {accepting: s.accepting} : {}),
+      ...(typeof s.bookingEnabled === "boolean" ? {bookingEnabled: s.bookingEnabled} : {}),
+      ...(Array.isArray(s.services) ? {services: s.services} : {}),
     }));
 }
 

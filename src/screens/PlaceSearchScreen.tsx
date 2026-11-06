@@ -10,10 +10,13 @@ import SavedPlacesSheet from "../components/place-search/SavedPlacesSheet";
 import MapPickOverlay from "../components/map/MapPickOverlay";
 import Overlay from "../components/overlay/Overlay";
 import type {PlaceSource} from "../components/place-search/PlaceSearch.types";
+import ShopDetailSheet from "./assist/ShopDetailSheet";
+import type {Provider, ProviderService} from "../api/providers";
 import type {ShopSearchFilters} from "../components/place-search/PlaceSearch.types";
 import {listSavedPlaces, removeSavedPlace, savePlace, type SavedPlace} from "../api/places";
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
+import {hasBookingService} from "../services/serviceChannels";
 import {darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
 const CATEGORY_ICONS: Record<string, ComponentProps<typeof MaterialIcons>["name"]> = {
@@ -34,12 +37,14 @@ const CATEGORY_ICONS: Record<string, ComponentProps<typeof MaterialIcons>["name"
 
 function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
   if (item.source === "saved") return "bookmark";
+  if (item.providerKind === "TOW") return "local-shipping";
+  if (item.providerKind === "MOBILE_SHOP") return "build";
   if (item.source === "shop") return "storefront";
   if (item.category && item.category in CATEGORY_ICONS) return CATEGORY_ICONS[item.category];
   return "place";
 }
-type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string; filters?: ShopSearchFilters};
-export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote, filters}: Props) {
+type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string; filters?: ShopSearchFilters; requireBookable?: boolean; shopPreviewChannel?: "BOOKING" | "ASSIST"};
+export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote, filters, requireBookable = false, shopPreviewChannel}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -58,6 +63,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
   const [pickingSaved, setPickingSaved] = useState(false);
   const [draftPoint, setDraftPoint] = useState<{lat: number; lng: number} | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
+  const [previewShop, setPreviewShop] = useState<Place | null>(null);
   const grouped: {header: string | null; item: Place}[] = [];
   let last: string | null = null;
   for (const p of search.options) {
@@ -130,6 +136,21 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
       setSavedBusy(false);
     }
   }
+  function previewProvider(place: Place): Provider {
+    return {
+      id: place.id ?? "",
+      kind: "SHOP",
+      name: place.label,
+      lat: place.lat,
+      lng: place.lng,
+      status: "ACTIVE",
+      accepting: place.accepting ?? undefined,
+      bookingEnabled: place.bookingEnabled ?? undefined,
+      ratingAvg: place.ratingAvg,
+      ratingCount: place.ratingCount,
+      services: place.services as ProviderService[] | null,
+    };
+  }
   return (
     <View style={[styles.screen, {backgroundColor: theme.background, paddingTop: insets.top + 12}]}>
       <View style={styles.searchRow}>
@@ -191,9 +212,19 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
       {search.searching ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.searching}</Text> : null}
       {!search.searching && search.input.trim().length >= 3 && search.options.length === 0 ? <Text style={[styles.hint, {color: theme.muted}]}>{t.route.noResults}</Text> : null}
       <FlatList style={styles.results} data={grouped} keyExtractor={(row) => `${row.item.source}:${row.item.label}:${row.item.lat},${row.item.lng}`} keyboardShouldPersistTaps="handled" renderItem={({item: row}) => {
+        const registered = row.item.source === "shop";
+        const bookable = registered && row.item.bookingEnabled === true &&
+          hasBookingService(row.item.services);
         const declined = row.item.id !== undefined && (disabledIds?.has(row.item.id) ?? false) || row.item.declined === true;
-        const disabled = declined;
+        const disabled = declined || (requireBookable && !bookable);
+        const note = !disabled ? undefined :
+          requireBookable && !bookable ?
+            (registered ? t.bookings.notBookable : t.bookings.notRegistered) :
+            disabledNote;
         const meta: string[] = [];
+        if (row.item.providerKind === "SHOP") meta.push(t.provider.kindShop);
+        if (row.item.providerKind === "TOW") meta.push(t.provider.kindTow);
+        if (row.item.providerKind === "MOBILE_SHOP") meta.push(t.provider.kindMobileShop);
         if (typeof row.item.ratingAvg === "number" && typeof row.item.ratingCount === "number") meta.push(`★ ${row.item.ratingAvg.toFixed(1)} (${row.item.ratingCount})`);
         const meters = typeof row.item.distanceMeters === "number" ? row.item.distanceMeters : typeof row.item.distance === "number" ? row.item.distance : null;
         if (meters !== null) meta.push(meters < 1000 ? t.shop.radiusM.replace("{n}", String(Math.round(meters))) : t.shop.radiusKm.replace("{n}", (meters / 1000).toFixed(1)));
@@ -202,17 +233,48 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
         return (
         <View>
           {row.header ? <Text style={[styles.header, {color: theme.muted}]}>{row.header}</Text> : null}
-          <Pressable style={[styles.row, declined && styles.disabledRow]} disabled={disabled} onPress={() => { search.select(row.item); onPick(row.item); }} accessibilityRole="button" accessibilityState={{disabled}} accessibilityLabel={row.item.label}>
+          <Pressable style={[styles.row, declined && styles.disabledRow]} disabled={disabled} onPress={() => {
+            if (shopPreviewChannel !== undefined &&
+              row.item.source === "shop" &&
+              row.item.providerKind === "SHOP") {
+              setPreviewShop(row.item);
+              return;
+            }
+            search.select(row.item);
+            onPick(row.item);
+          }} accessibilityRole="button" accessibilityState={{disabled}} accessibilityLabel={row.item.label}>
             <MaterialIcons name={resultIcon(row.item)} size={20} color={declined ? theme.muted : theme.primary} />
             <View style={styles.rowCol}>
               <Text style={[styles.rowText, {color: declined ? theme.muted : theme.text}]}>{row.item.label}</Text>
               {meta.length > 0 ? <Text style={[styles.rowNote, {color: theme.muted}]}>{meta.join(" · ")}</Text> : null}
-              {declined && disabledNote ? <Text style={[styles.rowNote, {color: theme.muted}]}>{disabledNote}</Text> : null}
+              {note ? <Text style={[styles.rowNote, {color: disabled ? theme.muted : theme.primary}]}>{note}</Text> : null}
             </View>
+            {requireBookable && bookable ? (
+              <View style={[styles.bookBadge, {borderColor: theme.primary}]}>
+                <Text style={[styles.bookBadgeText, {color: theme.primary}]}>{t.bookings.book}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
         );
       }} />
+      {previewShop !== null ? (
+        <ShopDetailSheet
+          t={t}
+          shop={previewProvider(previewShop)}
+          openLabel={previewShop.openNow === true ? t.shop.open : previewShop.openNow === false ? t.shop.closed : t.shop.unknownHours}
+          openColor={previewShop.openNow === true ? theme.primary : previewShop.openNow === false ? theme.danger : theme.muted}
+          serviceChannel={shopPreviewChannel}
+          showOffDuty={shopPreviewChannel === "ASSIST"}
+          onChoose={() => {
+            const place = previewShop;
+            setPreviewShop(null);
+            search.select(place);
+            onPick(place);
+          }}
+          onClose={() => setPreviewShop(null)}
+        />
+      ) : null}
       {savedOpen ? (
         <SavedPlacesSheet
           t={t}
@@ -269,4 +331,6 @@ const styles = StyleSheet.create({
   rowCol: {flex: 1, minWidth: 0, gap: 2},
   rowNote: {fontSize: 12},
   disabledRow: {opacity: 0.5},
+  bookBadge: {borderWidth: 1, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
+  bookBadgeText: {fontSize: 11, fontWeight: "700"},
 });

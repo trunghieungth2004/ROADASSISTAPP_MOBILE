@@ -2,6 +2,7 @@ import {createContext, useCallback, useContext, useEffect, useMemo, useState, ty
 import {onIdTokenChanged, signOut as firebaseSignOut} from "firebase/auth";
 import * as SecureStore from "expo-secure-store";
 import {auth} from "../auth/firebase";
+import {loadStatuses} from "../services/statusCache";
 import {clearInflight, setTokenRefresher, setUnauthorizedHandler} from "../api/client";
 import {clearApiCache} from "../services/cache";
 import {unsyncPushToken} from "../services/push";
@@ -68,6 +69,9 @@ export function AuthProvider({children}: {children: ReactNode}) {
       setUnauthorizedHandler(null);
     };
   }, [refreshToken, signOut]);
+  useEffect(() => {
+    void loadStatuses(session?.token);
+  }, [session?.token]);
   const value = useMemo<AuthState>(() => ({uid: session?.uid ?? null, token: session?.token ?? null, loaded, signIn, signOut, refreshToken}), [session, loaded, signIn, signOut, refreshToken]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

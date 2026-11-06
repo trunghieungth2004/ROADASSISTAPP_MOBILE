@@ -45,8 +45,9 @@ EXPO_PUBLIC_MAPTILER_KEY=your-maptiler-key
 emulator with `adb reverse tcp:5001 tcp:5001` (the emulator only binds
 loopback). Metro reads `.env` at startup: restart Metro and reload the app
 after changing it. No native rebuild is needed for JS-only changes.
-Production: `EXPO_PUBLIC_API_URL=https://api-pgjgmzblba-as.a.run.app`
-(no `/api` suffix — paths are joined as `${API_URL}/routes`).
+Production: `EXPO_PUBLIC_API_URL=https://asia-southeast1-roadassistapp-c2e37.cloudfunctions.net/api`
+(the functions base URL; `api-pgjgmzblba-as.a.run.app` is the SePay checkout
+bridge and must never be used as the API base).
 
 ## Route screen (`src/screens/RouteScreen.tsx`)
 
@@ -619,11 +620,34 @@ a container capped at `maxHeight` (85% dialog / 70% sheet), so a short list
 produces a short dialog and a long one scrolls. A floor would buy a taller
 empty state at the cost of dead space on every non-empty one.
 
+## Payout accounts & withdrawals
+
+More → Payments → To receive shows available balance (`pending.net -
+commissionOwed`), commission owed, and paid-out totals. `PayoutHistory` carries
+the saved bank account (masked to the last four digits), an account editor
+(bank chips from `POST /payouts/banks`, account number, holder name) and a
+withdraw action for the available balance. Requests list with status chips;
+one pending request at a time. The provider form edits the SHOP/MOBILE_SHOP
+service catalog (name, price, inspection flag, category) and sends it on
+create/update.
+
+## Live tracking share
+
+Live rider tickets expose a share action in the record footer
+(`POST /dispatch/share`). The app opens the native share sheet with
+`${EXPO_PUBLIC_WEB_URL ?? https://roadassistapp-c2e37.web.app}/track/<token>`;
+the public web page polls `POST /dispatch/share/view` (status, helper name,
+ETA, pin) for six hours. Closed tickets cannot be shared.
+
 ## Quotes, payments & disputes
 
 ### Itemized quotes, cash/SePay approval
 
-The record sheet money block renders the approved itemized quote
+Work done can carry a warranty (`warrantyDays`, 0–90); resolving stamps
+`warrantyUntil`, which the bill shows. Bill detail renders the refund request state (`refundRequest`) and a request-refund action for received payments and each item's `breakdown` (base/distance/waiting/night,
+SOS call-out/travel/repair, prior partials) with `distanceKm` in the line
+detail, beside the itemized quote lines. The record sheet money block renders
+the approved itemized quote
 (`shopQuotedAmount` + `quoteItems` / `invoiceItems`), legacy `finalAmount`
 with fault photos, prior mobile/tower partials (`mobileFeeHistory` /
 `towFeeHistory`), and the tow fare rows (board-preview estimate, live "up to"

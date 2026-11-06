@@ -22,7 +22,7 @@ import {createProvider} from "../api/providers";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
 import AssistScreen from "../screens/AssistScreen";
-import VehicleScreen from "../screens/VehicleScreen";
+import BookingScreen from "../screens/BookingScreen";
 import MoreScreen from "../screens/MoreScreen";
 const Tab = createBottomTabNavigator();
 type IconProps = {color: string; size: number};
@@ -30,7 +30,7 @@ const TAB_ICONS: Record<string, (props: IconProps) => ReactNode> = {
   Route: (p) => <MaterialIcons name="route" {...p} />,
   Hazards: (p) => <MaterialIcons name="warning-amber" {...p} />,
   Assist: (p) => <MaterialIcons name="build" {...p} />,
-  Vehicle: (p) => <MaterialCommunityIcons name="motorbike" {...p} />,
+  Booking: (p) => <MaterialIcons name="event-available" {...p} />,
   More: (p) => <MaterialIcons name="more-horiz" {...p} />,
 };
 function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
@@ -206,7 +206,7 @@ export default function Tabs() {
       <Tab.Screen name="Route" component={RouteScreen} options={{title: t.tabs.route}} />
       <Tab.Screen name="Hazards" component={HazardScreen} options={{title: t.tabs.hazards}} />
       <Tab.Screen name="Assist" component={AssistScreen} options={{title: t.tabs.dispatch}} />
-      <Tab.Screen name="Vehicle" component={VehicleScreen} options={{title: t.tabs.vehicle}} />
+      <Tab.Screen name="Booking" component={BookingScreen} options={{title: t.tabs.booking}} />
       <Tab.Screen name="More" component={MoreScreen} options={{title: t.tabs.more}} />
     </Tab.Navigator>
   );

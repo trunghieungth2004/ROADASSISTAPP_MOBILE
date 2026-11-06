@@ -18,12 +18,17 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import AboutScreen from "./src/screens/AboutScreen";
 import PermissionsScreen from "./src/screens/PermissionsScreen";
 import ProvidersScreen from "./src/screens/ProvidersScreen";
+import WarrantyScreen from "./src/screens/WarrantyScreen";
 import BillsScreen from "./src/screens/BillsScreen";
 import BillDetailScreen from "./src/screens/BillDetailScreen";
 import PaymentsScreen from "./src/screens/PaymentsScreen";
+import VehicleScreen from "./src/screens/VehicleScreen";
+import ShopBookingsScreen from "./src/screens/ShopBookingsScreen";
+import SupportScreen from "./src/screens/SupportScreen";
+import JobSummaryScreen from "./src/screens/JobSummaryScreen";
 import {useEffect, useRef, useState} from "react";
 import {AppState} from "react-native";
-import {ensurePushConfigured, drainPaymentLaunch, subscribePaymentPush, subscribePushTokenRefresh, syncPushTokenWithRetry, type PaymentPushData} from "./src/services/push";
+import {ensurePushConfigured, drainBookingLaunch, drainPaymentLaunch, subscribeBookingPush, subscribePaymentPush, subscribePushTokenRefresh, syncPushTokenWithRetry, type BookingPushData, type PaymentPushData} from "./src/services/push";
 import {navigationRef} from "./src/navigation/ref";
 import {warmAudio} from "./src/services/sound";
 import {shouldOfferUpdate, skipRelease, type AppRelease} from "./src/services/appUpdate";
@@ -115,6 +120,28 @@ function PaymentPushSync({navReady}: {navReady: boolean}) {
   }, [pending, navReady]);
   return null;
 }
+function BookingPushSync({navReady}: {navReady: boolean}) {
+  const {uid, loaded} = useAuth();
+  const [pending, setPending] = useState<BookingPushData | null>(null);
+  useEffect(() => {
+    if (!loaded || !uid) return;
+    let alive = true;
+    void drainBookingLaunch().then((data) => {
+      if (alive && data) setPending(data);
+    });
+    const unsubscribe = subscribeBookingPush((data) => setPending(data), uid);
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, [loaded, uid]);
+  useEffect(() => {
+    if (!pending || !navReady || !navigationRef.isReady()) return;
+    navigationRef.navigate("Tabs", {screen: "Booking"});
+    setPending(null);
+  }, [pending, navReady]);
+  return null;
+}
 function UpdateCheck() {
   const {t} = useStrings();
   const [release, setRelease] = useState<AppRelease | null>(null);
@@ -160,6 +187,7 @@ function ThemedApp() {
               <NavSessionProvider>
                 <PushSync />
                 <PaymentPushSync navReady={navReady} />
+                <BookingPushSync navReady={navReady} />
                 <UpdateCheck />
                 <NavigationContainer
                   ref={navigationRef}
@@ -174,8 +202,13 @@ function ThemedApp() {
                     <Stack.Screen name="About" component={AboutScreen} />
                     <Stack.Screen name="Permissions" component={PermissionsScreen} />
                     <Stack.Screen name="Providers" component={ProvidersScreen} />
+                    <Stack.Screen name="Warranty" component={WarrantyScreen} />
                     <Stack.Screen name="Bills" component={BillsScreen} />
                     <Stack.Screen name="Payments" component={PaymentsScreen} />
+                    <Stack.Screen name="Vehicle" component={VehicleScreen} />
+                    <Stack.Screen name="ShopBookings" component={ShopBookingsScreen} />
+                    <Stack.Screen name="Support" component={SupportScreen} />
+                    <Stack.Screen name="JobSummary" component={JobSummaryScreen} />
                     <Stack.Screen name="BillDetail" component={BillDetailScreen} />
                   </Stack.Navigator>
                 </NavigationContainer>

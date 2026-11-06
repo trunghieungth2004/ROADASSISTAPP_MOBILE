@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {useWindowDimensions} from "react-native";
 import {listSavedPlaces, placeKey, reverseLabel, searchDirectory, searchMapPlaces} from "../../api/places";
 import type {Place, PlaceSource, ShopSearchFilters} from "./PlaceSearch.types";
-import {dropShopDuplicates, toShopPlace, type ShopEntry} from "./shopMerge";
+import {dropNearDuplicates, dropShopDuplicates, toShopPlace, type ShopEntry} from "./shopMerge";
 export type PlaceSearch = {input: string; options: Place[]; searching: boolean; selected: Place | null; handleInput: (value: string) => void; pin: (value: string) => void; select: (place: Place) => void; clear: () => void; refreshSaved: () => void; resolvePoint: (lat: number, lng: number) => Promise<string>};
 const MIN_QUERY_LEN = 3;
 const DEBOUNCE_MS = 300;
@@ -39,8 +39,15 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
   const merge = useCallback((lists: Place[][]): Place[] => {
     const seen = new Set<string>();
     const out: Place[] = [];
-    for (const list of lists) { for (const p of list) { const key = placeKey(p); if (seen.has(key)) continue; seen.add(key); out.push(p); } }
-    return out;
+    for (const list of lists) {
+      for (const p of list) {
+        const key = p.id !== undefined ? `id:${p.id}` : placeKey(p);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(p);
+      }
+    }
+    return dropNearDuplicates(out);
   }, []);
   const savedNow = useCallback(async (): Promise<Place[]> => {
     if (!token) return [];

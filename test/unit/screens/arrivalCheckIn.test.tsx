@@ -6,6 +6,8 @@ import {clearApiCache} from "../../../src/services/cache";
 import {en} from "../../../src/i18n/en";
 import type {RouteOption} from "../../../src/api/routes";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true}),
 }));
@@ -139,8 +141,8 @@ function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/dispatch/one") return envelope(mockOneTicket);
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/dispatch/one") return envelope(mockOneTicket);
     return envelope({id: "t1"});
   }) as unknown) as typeof fetch;
 }

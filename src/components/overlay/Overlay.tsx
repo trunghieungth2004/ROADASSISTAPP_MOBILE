@@ -70,7 +70,7 @@ function Header({title, leading, right, trailing}: {title?: string; leading?: Re
   );
 }
 
-function Footer({actions, layout}: {actions: OverlayAction[]; layout: OverlayActionLayout}) {
+export function ActionFooter({actions, layout}: {actions: OverlayAction[]; layout: OverlayActionLayout}) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const secondary = actions.filter((action) => action.group === "secondary" || (action.iconOnly === true && action.group !== "primary"));
@@ -167,7 +167,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
             <View style={styles.handle} />
             <Header title={title} leading={leading} right={right} trailing={<DismissButton closeLabel={closeLabel} onClose={onClose} />} />
             {body}
-            {footed ? <Footer actions={actions} layout={actionLayout} /> : null}
+            {footed ? <ActionFooter actions={actions} layout={actionLayout} /> : null}
           </View>
         </View>
       </Modal>
@@ -186,7 +186,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
           <View style={[styles.dialog, !scrolls && styles.dialogFree, {backgroundColor: theme.paper}]}>
             <Header title={title} leading={leading} right={right} />
             {body}
-            {footed ? <Footer actions={actions} layout={actionLayout} /> : null}
+            {footed ? <ActionFooter actions={actions} layout={actionLayout} /> : null}
             {actionLayout === "primary" ? (
               <Pressable
                 style={[styles.cancelRow, {borderColor: theme.border}]}

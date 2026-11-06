@@ -2,6 +2,7 @@ import {createContext, useContext, useEffect, useMemo, useState, type ReactNode}
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {en, type Strings} from "../i18n/en";
 import {vi} from "../i18n/vi";
+import {setStatusLang} from "../services/statusCache";
 export type Lang = "en" | "vi";
 const strings: Record<Lang, Strings> = {en, vi};
 const LANG_KEY = "roadassist.lang";
@@ -9,6 +10,9 @@ type LanguageState = {lang: Lang; t: Strings; toggle: () => void};
 const LanguageContext = createContext<LanguageState | null>(null);
 export function LanguageProvider({children}: {children: ReactNode}) {
   const [lang, setLang] = useState<Lang>("en");
+  useEffect(() => {
+    setStatusLang(lang);
+  }, [lang]);
   useEffect(() => {
     let mounted = true;
     void AsyncStorage.getItem(LANG_KEY).then((saved) => {

@@ -1,5 +1,5 @@
 import {expect, jest, test} from "@jest/globals";
-import {fetchShopPlaces, mergeShopResults, normalizeShopName} from "../../../src/components/place-search/shopMerge";
+import {dropNearDuplicates, fetchShopPlaces, mergeShopResults, normalizeShopName} from "../../../src/components/place-search/shopMerge";
 import {searchProviders, type Provider} from "../../../src/api/providers";
 
 jest.mock("../../../src/api/providers", () => ({
@@ -58,4 +58,13 @@ test("merge caps map results and sorts by distance", () => {
   const mapShops = mergeShopResults([], places, {lat: 10.7, lng: 106.6});
   expect(mapShops).toHaveLength(5);
   expect(mapShops[0]?.label).toBe("Repair 0");
+});
+
+test("near duplicates keep different provider kinds but drop map twins", () => {
+  const rows = dropNearDuplicates([
+    {label: "Same Name", lat: 10.71, lng: 106.61, source: "directory", id: "s1", providerKind: "SHOP"},
+    {label: "Same Name", lat: 10.71, lng: 106.61, source: "directory", id: "t1", providerKind: "TOW"},
+    {label: "Same Name", lat: 10.7101, lng: 106.6101, source: "map", category: "repair"},
+  ]);
+  expect(rows.map((row) => row.providerKind ?? "MAP")).toEqual(["SHOP", "TOW"]);
 });

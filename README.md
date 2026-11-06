@@ -8,13 +8,15 @@ GPS, push, audio).
 ## Quick Start
 
 ```bash
-npm install
+yarn install
 npx expo run:android --device
 ```
 
 `.env` (gitignored) overrides `EXPO_PUBLIC_API_URL`,
 `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`,
-`EXPO_PUBLIC_FIREBASE_PROJECT_ID`, and `EXPO_PUBLIC_MAPTILER_KEY` (all carry
+`EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_MAPTILER_KEY`, and
+`EXPO_PUBLIC_WEB_URL` (public tracking base, defaults to the Firebase Hosting
+site) (all carry
 committed fallbacks in `src/config/secrets.ts`; maps throw
 `Missing EXPO_PUBLIC_MAPTILER_KEY` only when the resolved key is empty).
 Pointing at a local BE

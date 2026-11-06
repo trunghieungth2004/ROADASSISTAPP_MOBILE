@@ -21,6 +21,11 @@ export type DispatchPushData = {
   action?: string;
 };
 
+export type BookingPushData = {
+  bookingId: string;
+  event: string;
+};
+
 export type PaymentPushData = {
   event: string;
   paymentId: string;
@@ -86,5 +91,16 @@ export function parsePaymentPush(data: unknown): PaymentPushData | null {
     paymentId,
     ticketId,
     ...(payoutId === "" ? {} : {payoutId}),
+  };
+}
+
+export function parseBookingPush(data: unknown): BookingPushData | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  if (d.screen !== "bookings") return null;
+  if (typeof d.bookingId !== "string" || d.bookingId === "") return null;
+  return {
+    bookingId: d.bookingId,
+    event: typeof d.event === "string" ? d.event : "",
   };
 }

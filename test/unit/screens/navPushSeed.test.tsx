@@ -89,7 +89,7 @@ function envelope(data: unknown): Response {
 function installFetch(): void {
   getFlagCalls = 0;
   const spy = jest.fn(async (url: string) => {
-    const path = new URL(String(url)).pathname;
+    const path = new URL(String(url)).pathname.replace(/^\/api/, "");
     if (path === "/flags/near") return envelope([]);
     if (path === "/flags/get") {
       getFlagCalls += 1;

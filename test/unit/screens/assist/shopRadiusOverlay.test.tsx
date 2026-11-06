@@ -7,6 +7,8 @@ import {clearApiCache} from "../../../../src/services/cache";
 import {en} from "../../../../src/i18n/en";
 import type {Provider} from "../../../../src/api/providers";
 
+const apiPath = (u: URL): string => u.pathname.replace(/^\/api/, "");
+
 const metrics: Metrics = {
   insets: {top: 0, bottom: 0, left: 0, right: 0},
   frame: {x: 0, y: 0, width: 390, height: 844},
@@ -41,9 +43,9 @@ function installFetch(): void {
   seen.length = 0;
   globalThis.fetch = (jest.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(String(url));
-    seen.push({path: u.pathname, body: String(init?.body ?? "")});
-    if (u.pathname === "/providers/near") return envelope([shop("s1", 330)]);
-    if (u.pathname === "/providers/ratings") {
+    seen.push({path: apiPath(u), body: String(init?.body ?? "")});
+    if (apiPath(u) === "/providers/near") return envelope([shop("s1", 330)]);
+    if (apiPath(u) === "/providers/ratings") {
       return envelope({
         ratings: [
           {id: "pr1", score: 5, text: "Great fix", byUserName: "Rider A", reply: null, repliedAt: null, createdAt: "2026-01-01T00:00:00.000Z"},

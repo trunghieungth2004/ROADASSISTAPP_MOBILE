@@ -1,6 +1,6 @@
 import {useCallback, useState} from "react";
-import {Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
-import {AppText as Text} from "../components/ui/AppText";
+import {Linking, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {createProvider, myProviders, type Provider} from "../api/providers";
+import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim} from "../api/warranty";
 import {getNotificationPrefs, updateNotificationPrefs, type NotificationPrefs} from "../api/notifications";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
 import type {MobileShopDraft, ShopDraft, TowDraft} from "./OnboardingScreen";
@@ -39,6 +40,73 @@ export default function SettingsScreen() {
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [prefsBusy, setPrefsBusy] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [warrantyOpen, setWarrantyOpen] = useState(false);
+  const [warrantyClaims, setWarrantyClaims] = useState<WarrantyClaim[]>([]);
+  const [warrantyBusy, setWarrantyBusy] = useState(false);
+  const [warrantyError, setWarrantyError] = useState<string | null>(null);
+  const [myWarrantyOpen, setMyWarrantyOpen] = useState(false);
+  const [myClaims, setMyClaims] = useState<WarrantyClaim[]>([]);
+  const [myWarrantyError, setMyWarrantyError] = useState<string | null>(null);
+  const [disputeFor, setDisputeFor] = useState<WarrantyClaim | null>(null);
+  const [disputeNote, setDisputeNote] = useState("");
+  const [disputeBusy, setDisputeBusy] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+  const loadWarranty = useCallback(async (): Promise<void> => {
+    if (!token) return;
+    try {
+      setWarrantyClaims(await shopWarrantyClaims(token));
+      setWarrantyError(null);
+    } catch (err) {
+      setWarrantyError(toMessage(err));
+    }
+  }, [token]);
+
+  const loadMyWarranty = useCallback(async (): Promise<void> => {
+    if (!token) return;
+    try {
+      setMyClaims(await myWarrantyClaims(token));
+      setMyWarrantyError(null);
+    } catch (err) {
+      setMyWarrantyError(toMessage(err));
+    }
+  }, [token]);
+
+  const openDispute = (claim: WarrantyClaim): void => {
+    setDisputeFor(claim);
+    setDisputeNote("");
+    setDisputeError(null);
+  };
+
+  const submitDispute = async (): Promise<void> => {
+    if (!token || !disputeFor || disputeBusy) return;
+    setDisputeBusy(true);
+    setDisputeError(null);
+    try {
+      await disputeWarrantyClaim(token, disputeFor.id, disputeNote.trim() || undefined);
+      setDisputeFor(null);
+      setNotice(t.provider.disputeDone);
+      await loadMyWarranty();
+    } catch (err) {
+      setDisputeError(toMessage(err));
+    } finally {
+      setDisputeBusy(false);
+    }
+  };
+
+  const respondClaim = async (claim: WarrantyClaim, accept: boolean): Promise<void> => {
+    if (!token || warrantyBusy) return;
+    setWarrantyBusy(true);
+    try {
+      await respondWarrantyClaim(token, claim.id, accept);
+      setNotice(accept ? t.provider.warrantyAccepted : t.provider.warrantyDeclined);
+      await loadWarranty();
+    } catch (err) {
+      setWarrantyError(toMessage(err));
+    } finally {
+      setWarrantyBusy(false);
+    }
+  };
+
   const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
       setProviders([]);
@@ -135,12 +203,32 @@ export default function SettingsScreen() {
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <Pressable style={styles.listRow} onPress={() => void Linking.openURL("tel:112")} accessibilityRole="button" accessibilityLabel={t.more.emergency}>
+            <MaterialIcons name="emergency" size={20} color={theme.danger} />
+            <Text style={[styles.listText, {color: theme.danger}]}>{t.more.emergency}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Permissions" as never)} accessibilityRole="button" accessibilityLabel={t.more.permissions}>
             <MaterialIcons name="lock" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.permissions}</Text>
             <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.myWarrantyClaims}>
+            <MaterialIcons name="verified" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.provider.myWarrantyClaims}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+          {providers.length > 0 ? (
+            <>
+              <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+              <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.warrantyClaims}>
+                <MaterialIcons name="storefront" size={20} color={theme.primary} />
+                <Text style={[styles.listText, {color: theme.text}]}>{t.provider.warrantyClaims}</Text>
+                <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+              </Pressable>
+            </>
+          ) : null}
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Providers" as never)} accessibilityRole="button" accessibilityLabel={t.provider.title}>
             <MaterialIcons name="store" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.provider.title}</Text>
@@ -203,11 +291,87 @@ export default function SettingsScreen() {
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
+      <Overlay
+        visible={warrantyOpen}
+        variant="sheet"
+        title={t.provider.warrantyClaims}
+        closeLabel={t.common.close}
+        onClose={() => setWarrantyOpen(false)}
+      >
+        {warrantyError ? <Text style={[styles.listSecondary, {color: theme.danger}]}>{warrantyError}</Text> : null}
+        {warrantyClaims.length === 0 ? (
+          <Text style={[styles.listSecondary, {color: theme.muted}]}>{t.provider.warrantyNone}</Text>
+        ) : warrantyClaims.map((claim) => (
+          <View key={claim.id} style={{gap: 6, paddingVertical: 8}}>
+            <Text style={[styles.listText, {color: theme.text}]}>{claim.serviceName}</Text>
+            <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${claim.status} · ${claim.reason}`}</Text>
+            {claim.status === "OPEN" ? (
+              <View style={{flexDirection: "row", gap: 8}}>
+                <Pressable style={[styles.primary, {backgroundColor: theme.primary}]} disabled={warrantyBusy} onPress={() => void respondClaim(claim, true)}>
+                  <Text style={styles.primaryText}>{t.assist.accept}</Text>
+                </Pressable>
+                <Pressable style={[styles.primary, {borderWidth: 1, borderColor: theme.danger}]} disabled={warrantyBusy} onPress={() => void respondClaim(claim, false)}>
+                  <Text style={[styles.primaryText, {color: theme.danger}]}>{t.provider.decline}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ))}
+      </Overlay>
+      <Overlay
+        visible={myWarrantyOpen}
+        variant="sheet"
+        title={t.provider.myWarrantyClaims}
+        closeLabel={t.common.close}
+        onClose={() => setMyWarrantyOpen(false)}
+      >
+        {myWarrantyError ? <Text style={[styles.listSecondary, {color: theme.danger}]}>{myWarrantyError}</Text> : null}
+        {myClaims.length === 0 ? (
+          <Text style={[styles.listSecondary, {color: theme.muted}]}>{t.provider.myWarrantyNone}</Text>
+        ) : myClaims.map((claim) => (
+          <View key={claim.id} style={{gap: 6, paddingVertical: 8}}>
+            <Text style={[styles.listText, {color: theme.text}]}>{claim.serviceName}</Text>
+            <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${claim.status} · ${claim.reason}`}</Text>
+            <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${t.bills.warranty}: ${new Date(claim.warrantyUntil).toLocaleDateString()}`}</Text>
+            {claim.status === "DECLINED" ? (
+              <Pressable style={[styles.primary, {backgroundColor: theme.primary}]} onPress={() => openDispute(claim)}>
+                <Text style={styles.primaryText}>{t.provider.dispute}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+      </Overlay>
+      <Overlay
+        visible={disputeFor !== null}
+        variant="dialog"
+        title={t.provider.dispute}
+        closeLabel={t.common.cancel}
+        onClose={() => setDisputeFor(null)}
+        actions={[{
+          label: t.provider.disputeSubmit,
+          tone: "primary",
+          busy: disputeBusy,
+          onPress: () => void submitDispute(),
+        }]}
+      >
+        <Text style={[styles.listSecondary, {color: theme.muted}]}>{t.provider.disputeHint}</Text>
+        {disputeError ? <Text style={[styles.listSecondary, {color: theme.danger}]}>{disputeError}</Text> : null}
+        <TextInput
+          style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+          value={disputeNote}
+          onChangeText={setDisputeNote}
+          placeholder={t.provider.disputeHint}
+          placeholderTextColor={theme.muted}
+          multiline
+        />
+      </Overlay>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  primary: {borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12},
+  primaryText: {fontWeight: "700", color: "#fff", textAlign: "center"},
   scroll: {padding: 16, gap: 12},
   card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
   listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
@@ -223,4 +387,5 @@ const styles = StyleSheet.create({
   optionRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
   optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16},
   optText: {fontSize: 13, fontWeight: "600"},
+  input: {borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 72, textAlignVertical: "top"},
 });

@@ -2,9 +2,9 @@ import {Platform} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {registerPush, unregisterPush} from "../api/push";
-import {parseDispatchPush, parseHazardPush, parsePaymentPush, type DispatchPushData, type HazardPushData, type PaymentPushData} from "./pushPayload";
+import {parseBookingPush, parseDispatchPush, parseHazardPush, parsePaymentPush, type BookingPushData, type DispatchPushData, type HazardPushData, type PaymentPushData} from "./pushPayload";
 
-export type {DispatchPushData, HazardPushData, PaymentPushData};
+export type {BookingPushData, DispatchPushData, HazardPushData, PaymentPushData};
 
 const DEVICE_KEY = "roadassist.push.device";
 const OWNER_KEY = "roadassist.push.owner";
@@ -256,6 +256,28 @@ export function subscribeDispatchPush(onPush: (data: DispatchPushData) => void, 
     received.remove();
     tapped.remove();
   };
+}
+
+export function subscribeBookingPush(onPush: (data: BookingPushData) => void, owner: string): () => void {
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
+    const parsed = parseBookingPush(r.notification.request.content.data);
+    if (!parsed) return;
+    if (claimPush(`booking:${parsed.bookingId}:${parsed.event}`, undefined, owner)) onPush(parsed);
+  });
+  return () => {
+    tapped.remove();
+  };
+}
+
+export async function drainBookingLaunch(): Promise<BookingPushData | null> {
+  try {
+    const res = await Notifications.getLastNotificationResponseAsync();
+    const parsed = parseBookingPush(res?.notification.request.content.data);
+    if (!parsed) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export async function getLastPush(): Promise<{flagId: string; at: number} | null> {  try {

@@ -1,7 +1,7 @@
 import {useCallback, useState} from "react";
 import {Keyboard, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
-import {MaterialIcons} from "@expo/vector-icons";
+import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {updateProfile} from "../api/users";
 import {profileServiceKinds, serviceLabel} from "./more/providerUi";
@@ -123,9 +123,38 @@ export default function MoreScreen() {
           <TextInput style={[styles.input, {borderColor: theme.border, color: theme.text}]} value={nameDraft} onChangeText={setNameDraft} placeholder={t.more.displayName} placeholderTextColor={theme.muted} />
         </Overlay>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Providers" as never)} accessibilityRole="button" accessibilityLabel={t.more.provider}>
+            <MaterialIcons name="storefront" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.more.provider}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Vehicle" as never)} accessibilityRole="button" accessibilityLabel={t.tabs.vehicle}>
+            <MaterialCommunityIcons name="motorbike" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.tabs.vehicle}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+          <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Payments" as never)} accessibilityRole="button" accessibilityLabel={t.payments.title}>
             <MaterialIcons name="payments" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.payments.title}</Text>
+            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          </Pressable>
+          {services.includes("RIDER") || providers.length > 0 ? (
+            <>
+              <View style={[styles.divider, {backgroundColor: theme.divider}]} />
+              <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.warrantyClaims}>
+                <MaterialIcons name="verified" size={20} color={theme.primary} />
+                <Text style={[styles.listText, {color: theme.text}]}>{t.provider.warrantyTitle}</Text>
+                <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+        <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+          <Pressable style={styles.listRow} onPress={() => navigation.navigate("Support" as never)} accessibilityRole="button" accessibilityLabel={t.support.title}>
+            <MaterialIcons name="support-agent" size={20} color={theme.primary} />
+            <Text style={[styles.listText, {color: theme.text}]}>{t.support.title}</Text>
             <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
