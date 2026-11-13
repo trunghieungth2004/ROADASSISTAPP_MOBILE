@@ -7,6 +7,28 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-13
+
+### Added
+
+- Cases center for ratings, reports, disputes and appeals, with a shared
+  detail sheet showing the outcome, account impact and appeal state.
+- Trust and Standing score bars on the profile.
+
+### Changed
+
+- Bill actions now follow the bill viewer: admin and payee views are read-only.
+- Overturned reports no longer show an account warning.
+- The update dialog shows the full release changelog instead of truncating it.
+- Provider details no longer show a Warranty claims shortcut; warranty remains
+  available from More and Settings.
+
+### Fixed
+
+- Profile standing, restriction and conduct fields now refresh correctly after
+  admin changes.
+- Case rows now show their outcome and use localized labels.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added

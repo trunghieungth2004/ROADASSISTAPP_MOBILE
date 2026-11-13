@@ -97,11 +97,10 @@ breaks updates without a compile error anywhere.
 
 ### Current rollout
 
-`v0.3.0` is the current release candidate. It adds bookings, support,
-refunds, warranty coverage and claims, searchable service selection, vehicle
-service history, role-specific ticket photos, and the warranty stamping fix
-for return-TOW auto-resolved walk-ins. Install it over `v0.2.2` with the same
-signing key to verify the in-app updater path.
+`v0.3.1` is the current release candidate. It adds the Cases center, Trust
+and Standing profile scores, read-only admin/payee bill views, full update
+changelogs, and profile standing/restriction fixes. Install it over `v0.3.0`
+with the same signing key to verify the in-app updater path.
 
 ### Verify a published release
 

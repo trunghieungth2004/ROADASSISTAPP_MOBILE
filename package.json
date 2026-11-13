@@ -1,8 +1,8 @@
 {
   "name": "roadassistapp-mobile",
-  "description": "RoadAssist mobile app (React Native / Expo) \u2014 1:1 of web FE.",
+  "description": "RoadAssist mobile app (React Native / Expo) — 1:1 of web FE.",
   "license": "MIT",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/roboto": "^0.4.3",
