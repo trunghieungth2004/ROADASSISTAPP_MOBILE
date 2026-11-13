@@ -25,7 +25,7 @@ export default function UpdateDialog({t, release, onSkip, onClose}: Props) {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
-  const notes = release.notes.length > 600 ? `${release.notes.slice(0, 600)}…` : release.notes;
+  const notes = release.notes.trim();
   const percent: `${number}%` = `${Math.round(progress * 100)}%`;
   async function onDownload(): Promise<void> {
     if (phase === "busy") return;
@@ -63,7 +63,7 @@ export default function UpdateDialog({t, release, onSkip, onClose}: Props) {
           {notes !== "" ? (
             <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
               <Text style={[styles.cardLabel, {color: theme.muted}]}>{t.more.updateNotes}</Text>
-              <Text style={[styles.notes, {color: theme.text}]}>{notes}</Text>
+              <Text selectable style={[styles.notes, {color: theme.text}]}>{notes}</Text>
             </View>
           ) : null}
           {phase === "busy" ? (
