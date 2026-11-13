@@ -5,7 +5,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {darkTheme, lightTheme, onColor, type AppTheme} from "../../theme";
-import {DECLINE_REASONS, isTerminal, isUnfixableStatus, type DeclineReason, type FeedTicket} from "../../api/dispatch";
+import {DECLINE_REASONS, DISPATCH_STATUS, isTerminal, isUnfixableStatus, type DeclineReason, type FeedTicket} from "../../api/dispatch";
 import type {Bill} from "../../api/bills";
 import type {UserRating} from "../../api/ratings";
 import Overlay, {type OverlayAction, type OverlayActionTone} from "../../components/overlay/Overlay";
@@ -27,6 +27,8 @@ import NotesPhotosCard from "./detail/NotesPhotosCard";
 import ServiceWorkCard from "./detail/ServiceWorkCard";
 import FeesCard from "./detail/FeesCard";
 import PhotoThumb from "../../components/ui/PhotoThumb";
+import DisputeDetailSheet from "./DisputeDetailSheet";
+import {disputeLabel, disputeResultLabel} from "./disputeLabels";
 export type TicketPaymentView = {
   method?: string | null;
   status?: string | null;
@@ -102,6 +104,7 @@ type Props = {
   onConfirmCash?: ((ticket: FeedTicket) => void) | null;
   onOpenBill?: ((ticket: FeedTicket) => void) | null;
   onOpenDispute?: ((ticket: FeedTicket) => void) | null;
+  onOpenReport?: ((ticket: FeedTicket) => void) | null;
   onTowerCancel?: ((ticket: FeedTicket) => void) | null;
   onOpenArchivedChat?: ((ticket: FeedTicket, version: number) => void) | null;
   payment?: TicketPaymentView | null;
@@ -110,6 +113,7 @@ type Props = {
   bill?: Bill | null;
   quoteFunded?: boolean;
   quotePayMethod?: string | null;
+  readOnly?: boolean;
 };
 
 function agoOf(at: string, t: Strings): string {
@@ -125,11 +129,12 @@ function Section({theme, icon, children}: {theme: AppTheme; icon: string; childr
   );
 }
 
-export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onDelay, onClearDelay, delayBusy = false, isAdmin = false, onShare, onQuickFix, onRelease, onOfferMobileTow, canOfferMobileTow = false, mobileTowShopOff = false, onContinueSos, onReleaseSos, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onApproveInvoice, onApproveMobileFix, onDeclineMobileFix, onDeclineQuote, onMarkTowLoaded, onConfirmTowReceived, onConfirmCash, onOpenBill, onOpenDispute, onTowerCancel, onOpenArchivedChat, payment, waiting, onMarkUnfixable, bill, quoteFunded, quotePayMethod, roleContext}: Props) {
+export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onDelay, onClearDelay, delayBusy = false, isAdmin = false, onShare, onQuickFix, onRelease, onOfferMobileTow, canOfferMobileTow = false, mobileTowShopOff = false, onContinueSos, onReleaseSos, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onApproveInvoice, onApproveMobileFix, onDeclineMobileFix, onDeclineQuote, onMarkTowLoaded, onConfirmTowReceived, onConfirmCash, onOpenBill, onOpenDispute, onOpenReport, onTowerCancel, onOpenArchivedChat, payment, waiting, onMarkUnfixable, bill, quoteFunded, quotePayMethod, roleContext, readOnly = false}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const inbound = directionOf(ticket) === "in";
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [disputeDetailOpen, setDisputeDetailOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState<DeclineReason>("FULL");
   const [declineNote, setDeclineNote] = useState("");
@@ -291,6 +296,13 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   const destinationMine = role.kind === "destination";
   const canEstimate = onOpenEstimate !== undefined && onOpenEstimate !== null && canSendEstimate(ticket.direction, ticket.ticketType, ticket.status, destinationMine, estimateState);
   const showDisputeAction = onOpenDispute !== undefined && onOpenDispute !== null && !disputeOpen && !towerCancelled && !shopDeclinedMid && (role.kind === "rider" || role.kind === "assigned") && (canDispute(ticket.status) || canDisputeResolved(ticket));
+  const reportTarget = role.kind === "rider" ?
+    ticket.assignedShopId ?? ticket.providerId ?? ticket.destinationShopId :
+    ticket.userId;
+  const canReportStatus = ticket.status !== DISPATCH_STATUS.PENDING &&
+    typeof reportTarget === "string" &&
+    reportTarget !== "";
+  const showReportAction = onOpenReport !== undefined && onOpenReport !== null && !readOnly && (role.kind === "rider" || role.kind === "assigned") && canReportStatus;
   const canConfirmCash = ticket.canConfirmCash === true || billPayment?.canConfirmCash === true;
   const canViewBill = role.kind === "rider" || role.kind === "assigned" || role.kind === "destination";
   const actions: OverlayAction[] = [];
@@ -301,8 +313,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   if (!inbound && canRate(ticket.status)) {
     actions.push({label: hasRated ? t.rating.editRating : t.assist.rate, tone: "primary", busy, iconOnly: true, icon: iconOf("star", "primary", false), onPress: () => onRate(ticket)});
   }
+  if (showReportAction && onOpenReport) {
+    actions.push({label: t.assist.reportTicket, tone: "danger", outline: true, iconOnly: true, icon: iconOf("report-problem", "danger"), onPress: () => onOpenReport(ticket)});
+  }
   if (showDisputeAction && onOpenDispute) {
-    actions.push({label: t.assist.disputeTicket, tone: "danger", outline: true, iconOnly: true, icon: iconOf("flag", "danger"), onPress: () => onOpenDispute(ticket)});
+    actions.push({label: t.assist.disputeTicket, tone: "danger", outline: true, iconOnly: true, icon: iconOf("gavel", "danger"), onPress: () => onOpenDispute(ticket)});
   }
   const showCancel = (!inbound && canCancel(ticket.status)) || allowTowerCancel || canCancelSosShop(ticket.ticketType, ticket.status, mobileShopAssigned);
   const towerCancelAction = allowTowerCancel && onTowerCancel !== undefined && onTowerCancel !== null ? onTowerCancel : null;
@@ -465,7 +480,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
       title={ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}
       closeLabel={t.common.cancel}
       onClose={onClose}
-      actions={actions}
+      actions={readOnly ? [] : actions}
       actionLayout={feeDecision ? "confirm" : "ticket"}
       right={
         <View style={styles.headerPills}>
@@ -486,6 +501,46 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
           <Text style={[styles.direction, {color: theme.primary}]} accessibilityLabel={inbound ? t.assist.incoming : t.assist.outgoing}>{inbound ? t.assist.filterIn : t.assist.filterOut}</Text>
           <Text style={[styles.coords, {color: theme.muted}]}>{ticketTypeLabel(ticket.ticketType, t, ticket.towKind)}{typeof ticket.createdAt === "string" ? ` · ${agoOf(ticket.createdAt, t)}` : ""}</Text>
         </View>
+        {ticket.dispute ? (
+          <Pressable
+            onPress={() => setDisputeDetailOpen(true)}
+            style={[styles.disputeCard, {borderColor: theme.border, backgroundColor: theme.paper}]}
+            accessibilityRole="button"
+            accessibilityLabel={`${disputeLabel(ticket.dispute.type, ticket.dispute.reasonCode, t)} ${ticket.dispute.status}`}
+          >
+            <View style={styles.disputeHead}>
+              <MaterialIcons name="gavel" size={16} color={theme.primary} />
+              <View style={styles.disputeText}>
+                <Text style={[styles.disputeTitle, {color: theme.text}]}>
+                  {disputeLabel(ticket.dispute.type, ticket.dispute.reasonCode, t)}
+                </Text>
+                <Text style={[styles.disputeLine, {color: theme.muted}]}>
+                  {`${t.dispute.filed}: ${agoOf(ticket.dispute.at, t)} · ${disputeResultLabel(ticket.dispute.status, ticket.dispute.outcome, t)}`}
+                </Text>
+              </View>
+              <View style={[styles.disputePill, {
+                backgroundColor: ticket.dispute.status === "OPEN" ?
+                  theme.danger :
+                  ticket.dispute.status === "RESOLVED" ?
+                    theme.success :
+                    theme.muted,
+              }]}>
+                <Text style={styles.disputePillText}>
+                  {ticket.dispute.status}
+                </Text>
+              </View>
+              
+            </View>
+          </Pressable>
+        ) : null}
+        {disputeDetailOpen && ticket.dispute ? (
+          <DisputeDetailSheet
+            t={t}
+            dispute={ticket.dispute}
+            riderUid={ticket.userId}
+            onClose={() => setDisputeDetailOpen(false)}
+          />
+        ) : null}
         {disputeOpen ? (
           <View style={[styles.banner, {borderColor: theme.danger, backgroundColor: theme.danger}]}>
             <MaterialIcons name="flag" size={16} color="#fff" />
@@ -669,7 +724,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
                 <View style={[styles.chatArchivePill, {backgroundColor: theme.muted}]}>
                   <Text style={styles.chatArchivePillText}>{t.chat.archived}</Text>
                 </View>
-                <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+                
               </Pressable>
             ))}
           </DetailCard>
@@ -707,7 +762,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
                 </View>
               ) : null}
             </View>
-            <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+            
           </Pressable>
         ) : null}
         <NotesPhotosCard
@@ -758,10 +813,10 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
             </View>
           </Pressable>
         ) : null}
-        {ratings.filter((r) => r.targetKind !== "RIDER").length > 0 ? (
-          <Text style={[styles.label, {color: theme.text}]}>{t.rating.yourRating}</Text>
+        {ratings.filter((r) => r.excluded !== true).length > 0 ? (
+          <Text style={[styles.label, {color: theme.text}]}>{t.rating.allReviews}</Text>
         ) : null}
-        {ratings.filter((r) => r.targetKind !== "RIDER").map((r) => {
+        {ratings.filter((r) => r.excluded !== true).map((r) => {
           const mine = typeof r.byUserId === "string" && r.byUserId === uid;
           return (
           <View key={r.id} style={[styles.replyRow, {borderColor: theme.border}]}>
@@ -901,6 +956,14 @@ const styles = StyleSheet.create({
   chipRow: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   disabled: {opacity: 0.6},
+  disputeCard: {borderWidth: 1, borderRadius: 12, padding: 10, gap: 4},
+  disputeHead: {flexDirection: "row", alignItems: "center", gap: 6},
+  disputeTitle: {fontSize: 13, fontWeight: "800"},
+  disputeText: {flex: 1, minWidth: 0, gap: 2},
+  disputePill: {borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8},
+  disputePillText: {fontSize: 10, fontWeight: "700", color: "#ffffff"},
+  disputeLine: {fontSize: 12, lineHeight: 17},
+  disputeMeta: {fontSize: 10, lineHeight: 14},
   banner: {flexDirection: "row", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10, alignItems: "flex-start"},
   delayBtn: {alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10},
   delayBtnText: {fontSize: 11, fontWeight: "700"},

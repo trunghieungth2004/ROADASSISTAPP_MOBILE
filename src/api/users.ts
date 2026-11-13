@@ -8,6 +8,11 @@ export type MeUser = {
   role: string;
   status?: string | null;
   trustScore?: number;
+  standingScore?: number;
+  bookingBlocked?: boolean;
+  restrictedUntil?: string | null;
+  restrictionReason?: string | null;
+  conductFlag?: boolean;
   points?: number;
   ratingAvg?: number;
   ratingCount?: number;

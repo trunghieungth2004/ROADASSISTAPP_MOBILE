@@ -19,7 +19,7 @@ type Props = {
   viewer: "RIDER" | "PROVIDER";
   busy: boolean;
   error: string | null;
-  onSubmit: (reason: string, note: string, photoUri: string | null) => void;
+  onSubmit: (reason: string, note: string, photoUris: string[]) => void;
   onClose: () => void;
 };
 
@@ -45,25 +45,26 @@ export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const photoViewer = usePhotoViewer(t.common.cancel);
   const reasons = viewer === "PROVIDER" ?
     [...PROVIDER_DISPUTE_REASONS] :
-    RIDER_DISPUTE_REASONS.filter((reason) => {
-      if (ticketType === "TOW") {
-        return reason !== "FIX_NOT_DONE" && reason !== "POOR_QUALITY" && reason !== "UNFIXABLE_DISAGREE";
-      }
-      return reason !== "WRONG_ROUTE";
-    });
+    RIDER_DISPUTE_REASONS.filter((reason) =>
+      ticketType === "TOW" ?
+        reason !== "FIX_NOT_DONE" && reason !== "POOR_QUALITY" :
+        true,
+    );
   async function onAddPhoto(from: PhotoSource): Promise<void> {
-    if (photoBusy || photo !== null) return;
+    if (photoBusy || photos.length >= 5) return;
     setPhotoBusy(true);
     setLocalError(null);
     try {
-      const picked = from === "camera" ? await takePhoto() : await pickPhotos(1, 0);
-      if (picked.length > 0 && typeof picked[0] === "string") setPhoto(picked[0] as string);
+      const remaining = 5 - photos.length;
+      const picked = from === "camera" ? await takePhoto() : await pickPhotos(remaining, 0);
+      const next = picked.filter((item): item is string => typeof item === "string");
+      if (next.length > 0) setPhotos((prev) => [...prev, ...next].slice(0, 5));
     } catch (err) {
       setLocalError(isPhotoPermissionError(err) ? (from === "camera" ? t.photos.cameraDenied : t.photos.denied) : err instanceof Error ? err.message : t.dispute.needReason);
     } finally {
@@ -75,7 +76,14 @@ export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer
       setLocalError(t.dispute.needReason);
       return;
     }
-    onSubmit(reason, note.trim(), photo);
+    const needsPhoto = reason === "OVERCHARGE" ||
+      reason === "FIX_NOT_DONE" ||
+      reason === "POOR_QUALITY";
+    if (needsPhoto && photos.length === 0) {
+      setLocalError(t.dispute.needPhoto);
+      return;
+    }
+    onSubmit(reason, note.trim(), photos);
   }
   return (
     <Overlay
@@ -107,16 +115,21 @@ export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer
           multiline
           maxLength={500}
         />
-        {photo ? (
-          <View style={styles.photoRow}>
-            <Pressable onPress={() => photoViewer.open(photo)} accessibilityRole="button" accessibilityLabel={t.assist.photos}>
-              <Image source={{uri: photo}} style={styles.thumb} />
-            </Pressable>
-            <Pressable onPress={() => setPhoto(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.common.delete}>
-              <MaterialIcons name="close" size={18} color={theme.danger} />
-            </Pressable>
+        {photos.length > 0 ? (
+          <View style={styles.photoGrid}>
+            {photos.map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.photoRow}>
+                <Pressable onPress={() => photoViewer.open(uri)} accessibilityRole="button" accessibilityLabel={t.assist.photos}>
+                  <Image source={{uri}} style={styles.thumb} />
+                </Pressable>
+                <Pressable onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))} hitSlop={8} accessibilityRole="button" accessibilityLabel={t.common.delete}>
+                  <MaterialIcons name="close" size={18} color={theme.danger} />
+                </Pressable>
+              </View>
+            ))}
           </View>
-        ) : (
+        ) : null}
+        {photos.length < 5 ? (
           <View style={styles.sourceRow}>
             <Pressable style={[styles.chipBtn, {borderColor: theme.primary}]} disabled={photoBusy} onPress={() => void onAddPhoto("camera")} accessibilityRole="button" accessibilityLabel={t.photos.take}>
               <MaterialIcons name="photo-camera" size={16} color={theme.primary} />
@@ -124,10 +137,10 @@ export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer
             </Pressable>
             <Pressable style={[styles.chipBtn, {borderColor: theme.primary}]} disabled={photoBusy} onPress={() => void onAddPhoto("library")} accessibilityRole="button" accessibilityLabel={t.dispute.photo}>
               <MaterialIcons name="photo-library" size={16} color={theme.primary} />
-              <Text style={{color: theme.primary}}>{photoBusy ? t.common.loading : t.dispute.photo}</Text>
+              <Text style={{color: theme.primary}}>{`${t.dispute.photo} ${photos.length}/5`}</Text>
             </Pressable>
           </View>
-        )}
+        ) : null}
         {photoViewer.node}
       </View>
     </Overlay>
@@ -142,5 +155,6 @@ const styles = StyleSheet.create({
   sourceRow: {flexDirection: "row", gap: 8, flexWrap: "wrap", alignSelf: "flex-start"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 64, textAlignVertical: "top"},
   photoRow: {flexDirection: "row", alignItems: "center", gap: 8},
+  photoGrid: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
   thumb: {width: 64, height: 64, borderRadius: 8},
 });

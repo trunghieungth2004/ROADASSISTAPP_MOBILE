@@ -15,4 +15,3 @@ export function walkKm(distanceMeters: number): string {
   if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return "0.0";
   return (distanceMeters / 1000).toFixed(1);
 }
-

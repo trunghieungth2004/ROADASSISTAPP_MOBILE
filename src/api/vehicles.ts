@@ -45,8 +45,12 @@ export type VehicleHistoryLine = {
   lineId: string;
   serviceCode: string;
   name: string;
+  category?: string | null;
   qty: number;
+  unitPrice?: number | null;
   amount: number;
+  warrantyDays?: number | null;
+  warrantyParts?: string | null;
   warrantyUntil: string | null;
   claim: {
     id: string;
@@ -81,7 +85,6 @@ export type RideConfigPayload = {
   estHeight?: number;
 };
 
-
 export function listProfiles(token: string): Promise<VehicleProfile[]> {
   return api.post<VehicleProfile[]>("/vehicleProfiles/all", {}, token);
 }
@@ -108,4 +111,3 @@ export function removeProfile(profileId: string, token: string): Promise<{remove
 export function addRideConfig(payload: RideConfigPayload, token: string): Promise<{id: string}> {
   return api.post<{id: string}>("/vehicleProfiles/rideConfig", payload, token);
 }
-

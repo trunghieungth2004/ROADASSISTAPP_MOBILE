@@ -1,6 +1,22 @@
 import {DISPATCH_STATUS, isTerminal, type FeedDirection, type FeedTicket} from "../../api/dispatch";
 import {towDestOf} from "./towDest";
 
+export const LIVE_TICKET_STATUSES: Set<string> = new Set([
+  DISPATCH_STATUS.MATCHED,
+  DISPATCH_STATUS.ARRIVED,
+  DISPATCH_STATUS.IN_PROGRESS,
+  DISPATCH_STATUS.READY,
+  DISPATCH_STATUS.QUOTED,
+  DISPATCH_STATUS.IN_SHOP,
+  DISPATCH_STATUS.FINAL_QUOTED,
+  DISPATCH_STATUS.ESTIMATED,
+  DISPATCH_STATUS.EST_APPROVED,
+]);
+
+export function isLiveTicket(status: string): boolean {
+  return LIVE_TICKET_STATUSES.has(status);
+}
+
 export function canRate(status: string): boolean {
   return status === DISPATCH_STATUS.RESOLVED;
 }

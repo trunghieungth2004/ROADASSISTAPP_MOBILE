@@ -34,7 +34,7 @@ export default function BillStrip({t, theme, bills, dueCount, dueTotal, onOpen}:
         <Text style={[styles.meta, {color: due ? theme.danger : theme.muted}]}>{meta}</Text>
       </View>
       <Text style={[styles.link, {color: theme.primary}]}>{t.bills.view}</Text>
-      <MaterialIcons name="chevron-right" size={18} color={theme.primary} />
+      
     </Pressable>
   );
 }

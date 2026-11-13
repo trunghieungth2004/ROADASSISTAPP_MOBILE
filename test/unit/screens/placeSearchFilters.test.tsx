@@ -64,6 +64,48 @@ test("filter chips re-run the shop search with the chosen sort and rating", asyn
   }
 });
 
+test("price sort ranks shops and shows the estimate", async () => {
+  jest.useFakeTimers();
+  const shops = jest.fn(async (_q: string, _f?: ShopSearchFilters) => [{
+    id: "s1",
+    name: "Good Shop",
+    lat: 10.71,
+    lng: 106.61,
+    estimatedServicePrice: 100000,
+    estimatedTravelFee: 40000,
+    estimatedTotal: 140000,
+    estimatedDistanceKm: 5,
+    pricingMode: "FIXED" as const,
+  }]);
+  const renderer = await render({
+    shops,
+    filters: {sortBy: "price", serviceCategory: "ENGINE"},
+    sources: ["shop"],
+  });
+  try {
+    const input = renderer.root.findAll((n) =>
+      n.props?.accessibilityLabel === "Search" &&
+      typeof n.props?.onChangeText === "function")[0];
+    act(() => {
+      input?.props.onChangeText("sua xe");
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(shops.mock.calls[0][1]).toMatchObject({
+      sortBy: "price",
+      serviceCategory: "ENGINE",
+    });
+    const estimate = renderer.root.findAll((n) =>
+      typeof n.props?.children === "string" &&
+      n.props.children.includes("140,000"));
+    expect(estimate.length).toBeGreaterThan(0);
+  } finally {
+    renderer.unmount();
+    jest.useRealTimers();
+  }
+});
+
 test("the chips stay hidden without shop filters", async () => {
   const shops = jest.fn(async () => [{id: "s1", name: "Good Shop", lat: 10.71, lng: 106.61}]);
   const renderer = await render({shops, sources: ["shop"]});

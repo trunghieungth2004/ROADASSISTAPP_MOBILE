@@ -50,7 +50,7 @@ export default function ReturnTowSheet({t, current, origin, destination, onOpenS
           <Text style={[styles.searchText, {color: destinationLabel === null ? theme.muted : theme.text}]} numberOfLines={1}>
             {destinationLabel ?? t.assist.returnTowChoosePlace}
           </Text>
-          <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          
         </Pressable>
         {options.map((option) => {
           const active = choice === option.key;

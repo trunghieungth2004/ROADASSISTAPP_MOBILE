@@ -10,6 +10,7 @@ export const CACHE_TTL_MS: Record<string, number> = {
   providersMine: 30000,
   providersNear: 15000,
   ticketsMine: 15000,
+  billsPayee: 15000,
   ticketsNear: 10000,
   flagsNear: 5000,
   flagsMine: 15000,

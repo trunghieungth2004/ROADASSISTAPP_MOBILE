@@ -1,5 +1,3 @@
-
-
 export function safeCameraCall(call: () => void | Promise<void>): void {
   try {
     const result = call();

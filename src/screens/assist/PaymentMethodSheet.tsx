@@ -55,7 +55,7 @@ export default function PaymentMethodSheet({t, amount, status, busy, error, pend
             <Text style={[styles.choiceTitle, {color: theme.text}]}>{t.bills.payCash}</Text>
             <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.paymentCashHint}</Text>
           </View>
-          <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          
         </Pressable>
         <Pressable
           style={[styles.choice, {borderColor: theme.border, backgroundColor: theme.paper}, busy && styles.disabled]}
@@ -71,7 +71,7 @@ export default function PaymentMethodSheet({t, amount, status, busy, error, pend
             <Text style={[styles.choiceTitle, {color: theme.text}]}>{t.bills.paySepay}</Text>
             <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.paymentSepayHint}</Text>
           </View>
-          <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+          
         </Pressable>
         {busy ? <ActivityIndicator color={theme.primary} /> : null}
       </View>

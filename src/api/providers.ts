@@ -86,9 +86,16 @@ export type Provider = {
   ratingAvg?: number;
   ratingCount?: number;
   reviewNote?: string | null;
+  estimatedServicePrice?: number | null;
+  estimatedTravelFee?: number | null;
+  estimatedTotal?: number | null;
+  pricingMode?: "FIXED" | "QUOTE" | "SERVICE_FEE" | null;
+  matchedServiceCode?: string | null;
+  matchedServiceName?: string | null;
+  estimatedDistanceKm?: number | null;
 };
 
-export type ProviderSort = "distance" | "rating";
+export type ProviderSort = "distance" | "rating" | "price";
 
 export type NearProvidersOptions = {
   kind?: string;

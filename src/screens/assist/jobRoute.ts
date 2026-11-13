@@ -14,7 +14,6 @@ export function isLiveJob(ticket: FeedTicket | null): boolean {
       (ticket.status === "7" || ticket.status === "9"));
 }
 
-
 export function jobRouteKeyFor(
   ticket: FeedTicket | null,
   sosProviderPoint: JobRoutePoint,

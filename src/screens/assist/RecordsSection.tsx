@@ -7,7 +7,6 @@ import type {AppTheme} from "../../theme";
 import type {FeedTicket} from "../../api/dispatch";
 import StatusRow from "../../components/ui/StatusRow";
 
-
 import {RECORD_FILTERS, businessKindOf, filterByKind, filterRecords, type BusinessKind, type RecordFilter} from "./recordFilter";
 import TicketRow from "./TicketRow";
 

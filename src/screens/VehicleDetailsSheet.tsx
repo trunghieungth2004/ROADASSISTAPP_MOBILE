@@ -234,7 +234,7 @@ export default function VehicleDetailsSheet({profileId, onClose, onChanged}: Pro
                           <Text style={[styles.shopLink, {color: theme.primary}]} numberOfLines={1}>
                             {provider?.name ?? item.providerName ?? item.ticketType}
                           </Text>
-                          {provider ? <MaterialIcons name="chevron-right" size={15} color={theme.muted} /> : null}
+                          
                         </View>
                       </Pressable>
                       <Text style={[styles.amount, {color: theme.text}]}>{`${item.total.toLocaleString()} VND`}</Text>
@@ -293,7 +293,7 @@ export default function VehicleDetailsSheet({profileId, onClose, onChanged}: Pro
               accessibilityRole="button"
             >
               <Text style={[styles.lineName, {color: theme.text, flex: 1}]}>{line.name}</Text>
-              <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+              
             </Pressable>
           ))}
         </View>

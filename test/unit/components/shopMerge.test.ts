@@ -27,6 +27,53 @@ test("tow shop search hides off-duty shops", async () => {
   expect(rows.map((row) => row.id)).toEqual(["on"]);
 });
 
+test("forwards price ranking filters and maps estimates", async () => {
+  jest.mocked(searchProviders).mockResolvedValue([
+    {
+      id: "s1",
+      name: "Good Shop",
+      kind: "SHOP",
+      lat: 10.7,
+      lng: 106.6,
+      accepting: true,
+      estimatedServicePrice: 100000,
+      estimatedTravelFee: 40000,
+      estimatedTotal: 140000,
+      estimatedDistanceKm: 5,
+      pricingMode: "FIXED",
+      matchedServiceCode: "ENGINE_FIX",
+    },
+  ] as never);
+  const rows = await fetchShopPlaces(
+    "fix",
+    "tok",
+    {lat: 10.7, lng: 106.6},
+    "SOLO_BIKE",
+    undefined,
+    true,
+    {sortBy: "price", serviceCategory: "ENGINE"},
+  );
+  expect(searchProviders).toHaveBeenCalledWith(
+    10.7,
+    106.6,
+    "fix",
+    "tok",
+    expect.objectContaining({
+      sortBy: "price",
+      serviceCategory: "ENGINE",
+      vehicleClass: "SOLO_BIKE",
+    }),
+  );
+  expect(rows[0]).toMatchObject({
+    estimatedServicePrice: 100000,
+    estimatedTravelFee: 40000,
+    estimatedTotal: 140000,
+    estimatedDistanceKm: 5,
+    pricingMode: "FIXED",
+    matchedServiceCode: "ENGINE_FIX",
+  });
+});
+
 test("normalizeShopName folds case and diacritics", () => {
   expect(normalizeShopName("Tiệm Sửa Xe")).toBe("tiem sua xe");
   expect(normalizeShopName("Good-Shop!")).toBe("good shop");

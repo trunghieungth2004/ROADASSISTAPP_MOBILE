@@ -183,10 +183,6 @@ export default function ProvidersScreen() {
             token={token}
             provider={providerDetail}
             onClose={() => setProviderDetail(null)}
-            onWarranty={() => {
-              setProviderDetail(null);
-              navigation.navigate("Warranty" as never);
-            }}
             onEdit={() => {
               setProviderEdit(providerDetail);
               setProviderDetail(null);

@@ -5,46 +5,39 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../components/ui/AppText";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
-import PhotoThumb from "../components/ui/PhotoThumb";
 import {usePhotoViewer} from "../components/ui/PhotoViewer";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import {darkTheme, lightTheme} from "../theme";
 import {toMessage} from "../api/client";
-import {listProfiles, vehicleHistory, type VehicleHistoryItem, type VehicleHistoryLine, type VehicleProfile} from "../api/vehicles";
+import {listProfiles, vehicleHistory} from "../api/vehicles";
 import {myProviders, type Provider} from "../api/providers";
-import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim} from "../api/warranty";
+import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim, type WarrantyDeclineReason} from "../api/warranty";
 import {resolvePhotoUrl} from "../services/photos";
 import ShopDetailSheet from "./assist/ShopDetailSheet";
 import WarrantyClaimDialog from "./bills/WarrantyClaimDialog";
-import {billDateLabel} from "./bills/billLabels";
-
-type CoverageRow = {
-  profile: VehicleProfile;
-  item: VehicleHistoryItem;
-  line: VehicleHistoryLine;
-};
-
-function statusColor(status: string, theme: AppTheme): string {
-  if (status === "OPEN") return "#d97706";
-  if (status === "REBOOKED" || status === "ACCEPTED") return theme.primary;
-  if (status === "COMPLETED" || status === "RESOLVED") return theme.success;
-  if (status === "DECLINED" || status === "REJECTED") return theme.danger;
-  if (status === "DISPUTED") return "#8b5cf6";
-  return theme.muted;
-}
-
-function statusLabel(status: string, t: ReturnType<typeof useStrings>["t"]): string {
-  if (status === "OPEN") return t.vehicle.claimOpen;
-  if (status === "REBOOKED" || status === "ACCEPTED") return t.vehicle.claimRebooked;
-  if (status === "COMPLETED") return t.vehicle.claimCompleted;
-  if (status === "DECLINED" || status === "REJECTED") return t.vehicle.claimDeclined;
-  if (status === "DISPUTED") return t.provider.dispute;
-  if (status === "RESOLVED") return t.vehicle.claimResolved;
-  return status;
-}
+import WarrantyDetailSheet from "./warranty/WarrantyDetailSheet";
+import WarrantyTicketSheet from "./warranty/WarrantyTicketSheet";
+import WarrantyDeclineDialog from "./warranty/WarrantyDeclineDialog";
+import WarrantyDisputeDialog from "./warranty/WarrantyDisputeDialog";
+import {
+  claimDetail,
+  coverageDetail,
+  coverageForClaim,
+  groupClaimsByTicket,
+  groupCoverageByTicket,
+  type WarrantyCoverageRow,
+  type WarrantyDetailInput,
+} from "./warranty/warrantyDetail";
+import {
+  ClaimCard,
+  ClaimGroupCard,
+  CoverageCard,
+  CoverageGroupCard,
+  GroupToggle,
+} from "./warranty/WarrantyCards";
 
 export default function WarrantyScreen() {
   const {t} = useStrings();
@@ -60,15 +53,22 @@ export default function WarrantyScreen() {
   const [riderTab, setRiderTab] = useState<"coverage" | "claims">("coverage");
   const [providerTab, setProviderTab] = useState<"open" | "rework" | "closed">("open");
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [coverage, setCoverage] = useState<CoverageRow[]>([]);
+  const [coverage, setCoverage] = useState<WarrantyCoverageRow[]>([]);
   const [claims, setClaims] = useState<WarrantyClaim[]>([]);
   const [shopClaims, setShopClaims] = useState<WarrantyClaim[]>([]);
+  const [detailFor, setDetailFor] = useState<WarrantyDetailInput | null>(null);
+  const [ticketFor, setTicketFor] = useState<string | null>(null);
+  const [grouped, setGrouped] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shopFor, setShopFor] = useState<Provider | null>(null);
   const [claimFor, setClaimFor] = useState<{ticketId: string; lineId: string; name: string} | null>(null);
+  const [declineFor, setDeclineFor] = useState<WarrantyClaim | null>(null);
+  const [declineError, setDeclineError] = useState<string | null>(null);
+  const [disputeFor, setDisputeFor] = useState<WarrantyClaim | null>(null);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
   const providerRole = providers.length > 0 || services.includes("SHOP") || services.includes("TOW") || services.includes("MOBILE_SHOP");
 
   const load = useCallback(async (): Promise<void> => {
@@ -87,7 +87,7 @@ export default function WarrantyScreen() {
         const profiles = await listProfiles(token).catch(() => []);
         const histories = await Promise.all(profiles.map((profile) =>
           vehicleHistory(profile.id, token).catch(() => ({profileId: profile.id, items: []}))));
-        const rows: CoverageRow[] = [];
+        const rows: WarrantyCoverageRow[] = [];
         profiles.forEach((profile, index) => {
           for (const item of histories[index]?.items ?? []) {
             for (const line of item.lines) {
@@ -114,32 +114,75 @@ export default function WarrantyScreen() {
     void load();
   }, [load]));
 
-  async function respond(claim: WarrantyClaim, accept: boolean): Promise<void> {
-    if (!token || busy) return;
+  async function acceptClaim(claim: WarrantyClaim): Promise<boolean> {
+    if (!token || busy) return false;
     setBusy(true);
     try {
-      await respondWarrantyClaim(token, claim.id, accept);
-      setNotice(accept ? t.provider.warrantyAccepted : t.provider.warrantyDeclined);
+      await respondWarrantyClaim(token, claim.id, true);
+      setNotice(t.provider.warrantyAccepted);
       await load();
+      return true;
     } catch (err) {
       setError(toMessage(err));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  async function dispute(claim: WarrantyClaim): Promise<void> {
-    if (!token || busy) return;
+  async function acceptFromDetail(claim: WarrantyClaim): Promise<void> {
+    if (await acceptClaim(claim)) setDetailFor(null);
+  }
+
+  async function submitDecline(
+    reasonCode: WarrantyDeclineReason,
+    note: string,
+  ): Promise<void> {
+    if (!token || !declineFor || busy) return;
     setBusy(true);
+    setDeclineError(null);
     try {
-      await disputeWarrantyClaim(token, claim.id);
-      setNotice(t.provider.disputeDone);
+      await respondWarrantyClaim(token, declineFor.id, false, {
+        reasonCode,
+        note,
+      });
+      const claimId = declineFor.id;
+      setDeclineFor(null);
+      setDetailFor((prev) => prev?.claim?.id === claimId ? null : prev);
+      setNotice(t.provider.warrantyDeclined);
       await load();
     } catch (err) {
-      setError(toMessage(err));
+      setDeclineError(toMessage(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitDispute(note: string): Promise<void> {
+    if (!token || !disputeFor || busy) return;
+    setBusy(true);
+    setDisputeError(null);
+    try {
+      const claimId = disputeFor.id;
+      await disputeWarrantyClaim(token, claimId, note);
+      setDisputeFor(null);
+      setDetailFor((prev) => prev?.claim?.id === claimId ? null : prev);
+      setNotice(t.provider.disputeDone);
+      await load();
+    } catch (err) {
+      setDisputeError(toMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function claimFromDetail(detail: WarrantyDetailInput): void {
+    setDetailFor(null);
+    setClaimFor({
+      ticketId: detail.ticketId,
+      lineId: detail.lineId,
+      name: detail.serviceName,
+    });
   }
 
   function openPhoto(path: string): void {
@@ -152,53 +195,9 @@ export default function WarrantyScreen() {
   const reworkClaims = shopClaims.filter((claim) => claim.status === "REBOOKED" || claim.status === "ACCEPTED");
   const closedClaims = shopClaims.filter((claim) => claim.status !== "OPEN" && claim.status !== "REBOOKED" && claim.status !== "ACCEPTED");
   const providerRows = providerTab === "open" ? openClaims : providerTab === "rework" ? reworkClaims : closedClaims;
-
-  function claimCard(claim: WarrantyClaim, providerView: boolean) {
-    const color = statusColor(claim.status, theme);
-    return (
-      <View key={claim.id} style={[styles.card, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-        <View style={styles.head}>
-          <Text style={[styles.title, {color: theme.text}]} numberOfLines={1}>{claim.serviceName}</Text>
-          <View style={[styles.pill, {backgroundColor: color}]}>
-            <Text style={styles.pillText}>{statusLabel(claim.status, t)}</Text>
-          </View>
-        </View>
-        <Text style={[styles.meta, {color: theme.muted}]}>
-          {[claim.vehicleLabel, claim.vehiclePlate].filter((value) => typeof value === "string" && value !== "").join(" · ") || `#${claim.ticketId.slice(-6)}`}
-        </Text>
-        <Text style={[styles.meta, {color: theme.muted}]}>{`${t.bills.warranty}: ${billDateLabel(claim.warrantyUntil)}`}</Text>
-        <Text style={[styles.body, {color: theme.text}]}>{claim.reason}</Text>
-        {claim.shopResponse ? <Text style={[styles.meta, {color: theme.muted}]}>{claim.shopResponse}</Text> : null}
-        {claim.photoUrls.length > 0 ? (
-          <View style={styles.photoRow}>
-            {claim.photoUrls.map((path, index) => (
-              <PhotoThumb key={`${path}-${index}`} path={path} theme={theme} style={styles.photo} onPress={openPhoto} accessibilityLabel={`${t.assist.photos} ${index + 1}`} />
-            ))}
-          </View>
-        ) : null}
-        {providerView && claim.status === "OPEN" ? (
-          <View style={styles.actions}>
-            <Pressable style={[styles.primary, {backgroundColor: theme.primary}, busy && styles.disabled]} disabled={busy} onPress={() => void respond(claim, true)}>
-              <Text style={styles.primaryText}>{t.assist.accept}</Text>
-            </Pressable>
-            <Pressable style={[styles.secondary, {borderColor: theme.danger}, busy && styles.disabled]} disabled={busy} onPress={() => void respond(claim, false)}>
-              <Text style={[styles.primaryText, {color: theme.danger}]}>{t.provider.decline}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {!providerView && claim.status === "DECLINED" ? (
-          <Pressable style={[styles.secondary, {borderColor: theme.primary}]} onPress={() => void dispute(claim)}>
-            <Text style={[styles.primaryText, {color: theme.primary}]}>{t.provider.dispute}</Text>
-          </Pressable>
-        ) : null}
-        {claim.linkedTicketId ? (
-          <Pressable style={[styles.secondary, {borderColor: theme.border}]} onPress={() => navigation.navigate("Tabs" as never)}>
-            <Text style={[styles.primaryText, {color: theme.text}]}>{t.assist.viewTicket}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    );
-  }
+  const coverageGroups = groupCoverageByTicket(coverage, claims);
+  const claimGroups = groupClaimsByTicket(claims);
+  const providerGroups = groupClaimsByTicket(providerRows);
 
   return (
     <ScreenContainer>
@@ -224,43 +223,64 @@ export default function WarrantyScreen() {
                 </Pressable>
               ))}
             </View>
+            <GroupToggle
+              t={t}
+              theme={theme}
+              grouped={grouped}
+              onToggle={() => setGrouped((value) => !value)}
+            />
             {riderTab === "coverage" ? (
               coverage.length === 0 ? <Text style={[styles.meta, {color: theme.muted}]}>{t.vehicle.warrantyNoCoverage}</Text> :
-                coverage.map((row) => {
-                  const active = Date.parse(row.line.warrantyUntil ?? "") > Date.now();
+                grouped ? coverageGroups.map((group) => (
+                  <CoverageGroupCard
+                    key={group.ticketId}
+                    t={t}
+                    theme={theme}
+                    group={group}
+                    onOpen={(entry) => setDetailFor(coverageDetail(entry.coverage, entry.claim))}
+                  />
+                )) : coverage.map((row) => {
                   const claim = claims.find((item) => item.lineId === row.line.lineId) ?? null;
-                  const provider = row.item.provider ?? null;
                   return (
-                    <View key={`${row.item.ticketId}-${row.line.lineId}`} style={[styles.card, {borderColor: theme.border, backgroundColor: theme.paper}]}>
-                      <View style={styles.head}>
-                        <Pressable style={styles.headText} onPress={() => provider ? setShopFor(provider) : undefined} disabled={provider === null}>
-                          <Text style={[styles.title, {color: theme.text}]} numberOfLines={1}>{row.line.name}</Text>
-                          <View style={styles.providerRow}>
-                            <MaterialIcons name="storefront" size={12} color={theme.primary} />
-                            <Text style={[styles.providerName, {color: theme.primary}]} numberOfLines={1}>{provider?.name ?? row.item.providerName ?? row.item.ticketType}</Text>
-                            {provider ? <MaterialIcons name="chevron-right" size={14} color={theme.muted} /> : null}
-                          </View>
-                        </Pressable>
-                        <View style={[styles.pill, {backgroundColor: claim ? statusColor(claim.status, theme) : active ? theme.primary : theme.muted}]}>
-                          <Text style={styles.pillText}>{claim ? statusLabel(claim.status, t) : active ? t.vehicle.warrantyActive : t.flag.expired}</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.meta, {color: theme.muted}]}>{[row.profile.label, row.profile.plate].filter((value) => typeof value === "string" && value !== "").join(" · ")}</Text>
-                      <Text style={[styles.meta, {color: theme.muted}]}>{`${t.bills.warranty}: ${billDateLabel(row.line.warrantyUntil)}`}</Text>
-                      <View style={styles.rowBetween}>
-                        <Text style={[styles.amount, {color: theme.text}]}>{`${row.line.amount.toLocaleString()} VND`}</Text>
-                        {active && claim === null ? (
-                          <Pressable style={[styles.secondary, {borderColor: theme.primary}]} onPress={() => setClaimFor({ticketId: row.item.ticketId, lineId: row.line.lineId, name: row.line.name})}>
-                            <Text style={[styles.primaryText, {color: theme.primary}]}>{t.bills.claimWarranty}</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </View>
+                    <CoverageCard
+                      key={`${row.item.ticketId}-${row.line.lineId}`}
+                      t={t}
+                      theme={theme}
+                      row={row}
+                      claim={claim}
+                      onOpen={() => setDetailFor(coverageDetail(row, claim))}
+                      onClaim={() => setClaimFor({ticketId: row.item.ticketId, lineId: row.line.lineId, name: row.line.name})}
+                    />
                   );
                 })
             ) : (
               claims.length === 0 ? <Text style={[styles.meta, {color: theme.muted}]}>{t.vehicle.warrantyNoClaims}</Text> :
-                claims.map((claim) => claimCard(claim, false))
+                grouped ? claimGroups.map((group) => (
+                  <ClaimGroupCard
+                    key={group.ticketId}
+                    t={t}
+                    theme={theme}
+                    group={group}
+                    providerView={false}
+                    busy={busy}
+                    onOpen={(claim) => setDetailFor(claimDetail(claim, coverageForClaim(coverage, claim)))}
+                    onRespond={(claim, accept) => accept ? void acceptClaim(claim) : setDeclineFor(claim)}
+                    onDispute={(claim) => setDisputeFor(claim)}
+                  />
+                )) : claims.map((claim) => (
+                  <ClaimCard
+                    key={claim.id}
+                    t={t}
+                    theme={theme}
+                    claim={claim}
+                    providerView={false}
+                    busy={busy}
+                    onOpen={() => setDetailFor(claimDetail(claim, coverageForClaim(coverage, claim)))}
+                    onRespond={(accept) => accept ? void acceptClaim(claim) : setDeclineFor(claim)}
+                    onDispute={() => setDisputeFor(claim)}
+                    onPhoto={openPhoto}
+                  />
+                ))
             )}
           </>
         ) : (
@@ -274,7 +294,39 @@ export default function WarrantyScreen() {
                 </Pressable>
               ))}
             </View>
-            {providerRows.length === 0 ? <Text style={[styles.meta, {color: theme.muted}]}>{t.vehicle.warrantyNoClaims}</Text> : providerRows.map((claim) => claimCard(claim, true))}
+            <GroupToggle
+              t={t}
+              theme={theme}
+              grouped={grouped}
+              onToggle={() => setGrouped((value) => !value)}
+            />
+            {providerRows.length === 0 ? <Text style={[styles.meta, {color: theme.muted}]}>{t.vehicle.warrantyNoClaims}</Text> :
+              grouped ? providerGroups.map((group) => (
+                <ClaimGroupCard
+                  key={group.ticketId}
+                  t={t}
+                  theme={theme}
+                  group={group}
+                  providerView
+                  busy={busy}
+                  onOpen={(claim) => setDetailFor(claimDetail(claim, coverageForClaim(coverage, claim)))}
+                  onRespond={(claim, accept) => accept ? void acceptClaim(claim) : setDeclineFor(claim)}
+                  onDispute={(claim) => setDisputeFor(claim)}
+                />
+              )) : providerRows.map((claim) => (
+                <ClaimCard
+                  key={claim.id}
+                  t={t}
+                  theme={theme}
+                  claim={claim}
+                  providerView
+                  busy={busy}
+                  onOpen={() => setDetailFor(claimDetail(claim, coverageForClaim(coverage, claim)))}
+                  onRespond={(accept) => accept ? void acceptClaim(claim) : setDeclineFor(claim)}
+                  onDispute={() => setDisputeFor(claim)}
+                  onPhoto={openPhoto}
+                />
+              ))}
           </>
         )}
       </ScrollView>
@@ -301,6 +353,57 @@ export default function WarrantyScreen() {
           setClaimFor(null);
           setNotice(t.bills.warrantyClaimed);
           await load();
+        }}
+      />
+      {detailFor !== null ? (
+        <WarrantyDetailSheet
+          t={t}
+          theme={theme}
+          detail={detailFor}
+          providerView={role === "provider"}
+          busy={busy}
+          onClose={() => setDetailFor(null)}
+          onOpenShop={(provider) => {
+            setDetailFor(null);
+            setShopFor(provider);
+          }}
+          onClaim={claimFromDetail}
+          onDispute={(claim) => setDisputeFor(claim)}
+          onRespond={(claim, accept) => accept ? void acceptFromDetail(claim) : setDeclineFor(claim)}
+          onOpenLinked={(ticketId) => setTicketFor(ticketId)}
+          onOpenTicket={(ticketId) => setTicketFor(ticketId)}
+        />
+      ) : null}
+      {ticketFor !== null ? (
+        <WarrantyTicketSheet
+          ticketId={ticketFor}
+          onClose={() => setTicketFor(null)}
+        />
+      ) : null}
+      <WarrantyDeclineDialog
+        visible={declineFor !== null}
+        serviceName={declineFor?.serviceName ?? ""}
+        t={t}
+        theme={theme}
+        busy={busy}
+        error={declineError}
+        onSubmit={(reasonCode, note) => void submitDecline(reasonCode, note)}
+        onClose={() => {
+          setDeclineFor(null);
+          setDeclineError(null);
+        }}
+      />
+      <WarrantyDisputeDialog
+        visible={disputeFor !== null}
+        serviceName={disputeFor?.serviceName ?? ""}
+        t={t}
+        theme={theme}
+        busy={busy}
+        error={disputeError}
+        onSubmit={(note) => void submitDispute(note)}
+        onClose={() => {
+          setDisputeFor(null);
+          setDisputeError(null);
         }}
       />
       <Snack message={notice} severity="confirm" bottom={16} accentColor={theme.primary} onHide={() => setNotice(null)} />

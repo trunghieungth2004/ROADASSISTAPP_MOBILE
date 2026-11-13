@@ -274,7 +274,7 @@ export default function BookingScreen() {
             >
               <MaterialIcons name="search" size={20} color={theme.muted} />
               <Text style={[styles.searchInput, {color: theme.muted}]}>{t.bookings.searchPlaceholder}</Text>
-              <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+              
             </Pressable>
             {loading && bookings.length === 0 ? <ActivityIndicator color={theme.primary} /> : null}
             {error ? <Text style={[styles.error, {color: theme.danger}]}>{error}</Text> : null}

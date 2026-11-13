@@ -92,7 +92,7 @@ export default function PermissionGateScreen({t, states, busy, showBackground, c
             </View>
             <Pressable style={[styles.stepBtn, {borderColor: theme.border}]} onPress={onOpenBattery} accessibilityRole="button" accessibilityLabel={t.more.permOpenSettings}>
               <Text style={[styles.stepText, {color: theme.primary}]}>{t.more.permOpenSettings}</Text>
-              <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+              
             </Pressable>
           </View>
         ) : null}

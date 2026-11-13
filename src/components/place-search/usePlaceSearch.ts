@@ -61,9 +61,14 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
     timerRef.current = setTimeout(() => { void (async () => {
       const limits = limitForWidth(width);
       const want = (source: PlaceSource): boolean => sources === undefined || sources.includes(source);
+      const directoryOptions = filters === undefined ? undefined : {
+        ...(filters.minRating !== undefined ? {minRating: filters.minRating} : {}),
+        ...(filters.sortBy !== undefined && filters.sortBy !== "price" ? {sortBy: filters.sortBy} : {}),
+        ...(filters.ticketId ? {ticketId: filters.ticketId} : {}),
+      };
       const [base, directory, mapHits, shopEntries] = await Promise.all([
         want("saved") ? savedNow() : Promise.resolve([]),
-        want("directory") ? searchDirectory(value, token ?? "", limits.directory, filters) : Promise.resolve([]),
+        want("directory") ? searchDirectory(value, token ?? "", limits.directory, directoryOptions) : Promise.resolve([]),
         want("map") ? searchMapPlaces(value, lang, limits.total) : Promise.resolve([]),
         want("shop") && shops ? shops(value, filters).catch((): ShopEntry[] => []) : Promise.resolve([]),
       ]);
@@ -91,7 +96,7 @@ export function usePlaceSearch({token, lang, sources, shops, mapFilter, query, o
       return;
     }
     if (lastRef.current.trim().length >= MIN_QUERY_LEN) run(lastRef.current);
-  }, [filters?.sortBy, filters?.minRating]);
+  }, [filters?.sortBy, filters?.minRating, filters?.serviceCategory, filters?.ticketId]);
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     seqRef.current += 1;

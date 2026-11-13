@@ -1,4 +1,4 @@
-import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {onIdTokenChanged, signOut as firebaseSignOut} from "firebase/auth";
 import * as SecureStore from "expo-secure-store";
 import {auth} from "../auth/firebase";
@@ -48,17 +48,28 @@ export function AuthProvider({children}: {children: ReactNode}) {
     if (prev) await unsyncPushToken(prev.token).catch(() => undefined);
     await firebaseSignOut(auth).catch(() => undefined);
   }, [session]);
+  const refreshInFlight = useRef<Promise<string | null> | null>(null);
   const refreshToken = useCallback(async (): Promise<string | null> => {
-    const user = auth.currentUser;
-    if (!user) return null;
+    const running = refreshInFlight.current;
+    if (running !== null) return running;
+    const task = (async (): Promise<string | null> => {
+      const user = auth.currentUser;
+      if (!user) return null;
+      try {
+        const token = await user.getIdToken(true);
+        clearApiCache();
+        clearInflight();
+        await signIn(user.uid, token);
+        return token;
+      } catch {
+        return null;
+      }
+    })();
+    refreshInFlight.current = task;
     try {
-      const token = await user.getIdToken(true);
-      clearApiCache();
-      clearInflight();
-      await signIn(user.uid, token);
-      return token;
-    } catch {
-      return null;
+      return await task;
+    } finally {
+      if (refreshInFlight.current === task) refreshInFlight.current = null;
     }
   }, [signIn]);
   useEffect(() => {

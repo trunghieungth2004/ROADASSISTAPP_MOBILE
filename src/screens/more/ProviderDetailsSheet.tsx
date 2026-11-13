@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Pressable, Switch, StyleSheet, View} from "react-native";
+import {Switch, StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
 import {AppText as Text} from "../../components/ui/AppText";
@@ -18,7 +18,6 @@ type Props = {
   onClose: () => void;
   onEdit: () => void;
   onRemove: () => void;
-  onWarranty?: (() => void) | null;
   onChanged: () => void;
 };
 
@@ -48,7 +47,7 @@ function serviceMeta(service: ProviderService, provider: Provider, t: Strings): 
   return parts.join(" · ");
 }
 
-export default function ProviderDetailsSheet({t, theme, token, provider, onClose, onEdit, onRemove, onWarranty, onChanged}: Props) {
+export default function ProviderDetailsSheet({t, theme, token, provider, onClose, onEdit, onRemove, onChanged}: Props) {
   const [current, setCurrent] = useState(provider);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,14 +148,6 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
           ) : null}
         </View>
 
-        {!isTow && current.kind === "SHOP" && onWarranty ? (
-          <Pressable style={[styles.card, styles.linkCard, {borderColor: theme.border, backgroundColor: theme.paper}]} onPress={onWarranty} accessibilityRole="button" accessibilityLabel={t.provider.warrantyClaims}>
-            <MaterialIcons name="verified-user" size={18} color={theme.primary} />
-            <Text style={[styles.section, {color: theme.text, flex: 1}]}>{t.provider.warrantyClaims}</Text>
-            <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
-          </Pressable>
-        ) : null}
-
         {!isTow ? (
           <View style={[styles.card, {borderColor: theme.border, backgroundColor: theme.paper}]}>
             <Text style={[styles.section, {color: theme.text}]}>{t.provider.servicesTitle}</Text>
@@ -197,7 +188,6 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
 const styles = StyleSheet.create({
   body: {gap: 10},
   card: {borderWidth: 1, borderRadius: 14, padding: 12, gap: 8},
-  linkCard: {flexDirection: "row", alignItems: "center", gap: 8},
   head: {flexDirection: "row", alignItems: "center", gap: 10},
   icon: {width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center"},
   headText: {flex: 1, gap: 3},

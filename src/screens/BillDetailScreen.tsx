@@ -217,8 +217,13 @@ export default function BillDetailScreen() {
   const billId = params.billId;
   const payeeMode = params.scope === "payee";
   const readOnly = params.readOnly === true;
-  const payerMode = !payeeMode && !readOnly;
   const [bill, setBill] = useState<Bill | null>(null);
+  const viewer = bill?.viewer ?? null;
+  const payeeView = payeeMode || viewer === "PAYEE";
+  const riderView = viewer === "RIDER";
+  const adminView = viewer === "ADMIN";
+  const operatorView = viewer === "OPERATOR";
+  const payerMode = !payeeMode && !readOnly && riderView;
   const [loading, setLoading] = useState(true);
   const [busyTicket, setBusyTicket] = useState<string | null>(null);
   const [sepayCheckout, setSepayCheckout] = useState<{ticketId: string; status: string; url: string; checkout: TicketPayment["checkout"]} | null>(null);
@@ -243,7 +248,7 @@ export default function BillDetailScreen() {
     }
   }
   const requestItemRefund = (item: BillItem): void => {
-    if (!token || !item.payment) return;
+    if (!token || !item.payment || !payerMode) return;
     Alert.alert(t.bills.refundRequest, t.bills.refundHint, [
       {text: t.common.cancel, style: "cancel"},
       {
@@ -275,8 +280,8 @@ export default function BillDetailScreen() {
     }
   }, [token, ticketId, billId, payeeMode]);
   useEffect(() => {
-    navigation.setOptions({title: payeeMode ? t.payments.detailTitle : t.bills.title});
-  }, [navigation, t, payeeMode]);
+    navigation.setOptions({title: payeeView ? t.payments.detailTitle : t.bills.title});
+  }, [navigation, t, payeeView]);
   useFocusEffect(useCallback(() => {
     void load();
   }, [load]));
@@ -287,7 +292,7 @@ export default function BillDetailScreen() {
     return () => sub.remove();
   }, [load]);
   async function pay(item: BillItem, method: "SEPAY" | "CASH"): Promise<void> {
-    if (!token || busyTicket !== null || readOnly || payeeMode || !bill?.canPay) return;
+    if (!token || busyTicket !== null || readOnly || payeeMode || !payerMode || !bill?.canPay) return;
     setBusyTicket(item.ticketId);
     setError(null);
     try {
@@ -378,7 +383,7 @@ export default function BillDetailScreen() {
     );
   }
   async function confirmCash(item: BillItem): Promise<void> {
-    if (!token || busyTicket !== null || readOnly || !item.payment?.canConfirmCash) return;
+    if (!token || busyTicket !== null || readOnly || viewer !== "PAYEE" || !item.payment?.canConfirmCash) return;
     setBusyTicket(item.ticketId);
     setError(null);
     try {
@@ -393,11 +398,11 @@ export default function BillDetailScreen() {
     }
   }
   const item = bill?.items[0] ?? null;
-  const header = bill ? billHeroStatus(bill, payeeMode, t, theme) : null;
+  const header = bill ? billHeroStatus(bill, payeeView, t, theme) : null;
   const meta = bill ? [
     billDateTimeLabel(bill.createdAt),
     billItemCount(bill, t),
-    payeeMode ? null : billPayeeLabel(bill),
+    payeeView ? null : billPayeeLabel(bill),
   ].filter((value) => typeof value === "string" && value !== "").join(" · ") : "";
   const actionItem = bill?.items.find((row) => row.status === "UNPAID" && bill.canPay) ??
     bill?.items.find((row) => row.status === "PENDING") ?? bill?.items[0] ?? null;
@@ -405,7 +410,7 @@ export default function BillDetailScreen() {
     bill,
     actionItem,
     payerMode,
-    payeeMode,
+    payeeMode: payeeView,
     readOnly,
     busyTicket,
     invoiceBusy,
@@ -432,7 +437,19 @@ export default function BillDetailScreen() {
               <Text style={[styles.bannerText, {color: theme.muted}]}>{t.bills.readOnly}</Text>
             </View>
           ) : null}
-          {payeeMode ? (
+          {adminView ? (
+            <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+              <MaterialIcons name="admin-panel-settings" size={18} color={theme.muted} />
+              <Text style={[styles.bannerText, {color: theme.muted}]}>{t.bills.adminReadOnly}</Text>
+            </View>
+          ) : null}
+          {operatorView ? (
+            <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
+              <MaterialIcons name="visibility" size={18} color={theme.muted} />
+              <Text style={[styles.bannerText, {color: theme.muted}]}>{t.bills.readOnly}</Text>
+            </View>
+          ) : null}
+          {payeeView ? (
             <View style={[styles.banner, {borderColor: theme.border, backgroundColor: theme.paper}]}>
               <MaterialIcons name="lock-outline" size={18} color={theme.muted} />
               <Text style={[styles.bannerText, {color: theme.muted}]}>{t.payments.payeeOnly}</Text>
@@ -448,16 +465,16 @@ export default function BillDetailScreen() {
           ) : null}
           {bill ? (
             <>
-              <BillHeroCard bill={bill} payeeMode={payeeMode} header={header} meta={meta} t={t} theme={theme} />
+              <BillHeroCard bill={bill} payeeMode={payeeView} header={header} meta={meta} t={t} theme={theme} />
               {item ? (
                 <>
                   <BillPartiesCard item={item} t={t} theme={theme} lang={lang} />
                   <BillChargesCard item={item} t={t} theme={theme} />
-                  <BillTotalsCard bill={bill} payee={payeeMode} t={t} theme={theme} />
-                  <BillPaymentCard item={item} payee={payeeMode} t={t} theme={theme} />
+                  <BillTotalsCard bill={bill} payee={payeeView} t={t} theme={theme} />
+                  <BillPaymentCard item={item} payee={payeeView} t={t} theme={theme} />
                   <BillExtras
                     item={item}
-                    payeeMode={payeeMode}
+                    payeeMode={payeeView}
                     payerMode={payerMode}
                     theme={theme}
                     t={t}

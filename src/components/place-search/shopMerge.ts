@@ -1,5 +1,5 @@
 import {distBetween} from "../../screens/navigation/navUtils";
-import {searchProviders} from "../../api/providers";
+import {searchProviders, type ServiceCategory} from "../../api/providers";
 import type {Place} from "./PlaceSearch.types";
 
 export const SHOP_DUPLICATE_RADIUS_M = 150;
@@ -19,6 +19,13 @@ export type ShopEntry = {
   openNow?: boolean | null;
   accepting?: boolean | null;
   bookingEnabled?: boolean | null;
+  estimatedServicePrice?: number | null;
+  estimatedTravelFee?: number | null;
+  estimatedTotal?: number | null;
+  pricingMode?: "FIXED" | "QUOTE" | "SERVICE_FEE" | null;
+  matchedServiceCode?: string | null;
+  matchedServiceName?: string | null;
+  estimatedDistanceKm?: number | null;
   services?: Array<{code: string; name: string; displayPrice: number; quoteRequired: boolean; channels?: Array<"BOOKING" | "ASSIST">}> | null;
 };
 
@@ -106,6 +113,13 @@ export function toShopPlace(shop: ShopEntry & {lat: number; lng: number}): Place
     ...(typeof shop.openNow === "boolean" ? {openNow: shop.openNow} : {}),
     ...(typeof shop.accepting === "boolean" ? {accepting: shop.accepting} : {}),
     ...(typeof shop.bookingEnabled === "boolean" ? {bookingEnabled: shop.bookingEnabled} : {}),
+    ...(typeof shop.estimatedServicePrice === "number" ? {estimatedServicePrice: shop.estimatedServicePrice} : shop.estimatedServicePrice === null ? {estimatedServicePrice: null} : {}),
+    ...(typeof shop.estimatedTravelFee === "number" ? {estimatedTravelFee: shop.estimatedTravelFee} : shop.estimatedTravelFee === null ? {estimatedTravelFee: null} : {}),
+    ...(typeof shop.estimatedTotal === "number" ? {estimatedTotal: shop.estimatedTotal} : shop.estimatedTotal === null ? {estimatedTotal: null} : {}),
+    ...(typeof shop.estimatedDistanceKm === "number" ? {estimatedDistanceKm: shop.estimatedDistanceKm} : shop.estimatedDistanceKm === null ? {estimatedDistanceKm: null} : {}),
+    ...(shop.pricingMode !== undefined ? {pricingMode: shop.pricingMode} : {}),
+    ...(shop.matchedServiceCode !== undefined ? {matchedServiceCode: shop.matchedServiceCode} : {}),
+    ...(shop.matchedServiceName !== undefined ? {matchedServiceName: shop.matchedServiceName} : {}),
     ...(Array.isArray(shop.services) ? {services: shop.services} : {}),
     ...(shop.kind ? {providerKind: shop.kind} : {}),
   };
@@ -113,8 +127,9 @@ export function toShopPlace(shop: ShopEntry & {lat: number; lng: number}): Place
 
 export type ShopSearchFilters = {
   minRating?: number;
-  sortBy?: "distance" | "rating";
+  sortBy?: "distance" | "rating" | "price";
   ticketId?: string;
+  serviceCategory?: string;
   acceptingOnly?: boolean;
 };
 
@@ -134,6 +149,7 @@ export async function fetchShopPlaces(
     ...(filters?.minRating !== undefined ? {minRating: filters.minRating} : {}),
     ...(filters?.sortBy ? {sortBy: filters.sortBy} : {}),
     ...(filters?.ticketId ? {ticketId: filters.ticketId} : {}),
+    ...(filters?.serviceCategory ? {serviceCategory: filters.serviceCategory as ServiceCategory} : {}),
   });
   return shops
     .filter((s) => !shopOnly || s.kind === "SHOP")
@@ -152,6 +168,13 @@ export async function fetchShopPlaces(
       ...(typeof s.openNow === "boolean" ? {openNow: s.openNow} : {}),
       ...(typeof s.accepting === "boolean" ? {accepting: s.accepting} : {}),
       ...(typeof s.bookingEnabled === "boolean" ? {bookingEnabled: s.bookingEnabled} : {}),
+      ...(typeof s.estimatedServicePrice === "number" ? {estimatedServicePrice: s.estimatedServicePrice} : s.estimatedServicePrice === null ? {estimatedServicePrice: null} : {}),
+      ...(typeof s.estimatedTravelFee === "number" ? {estimatedTravelFee: s.estimatedTravelFee} : s.estimatedTravelFee === null ? {estimatedTravelFee: null} : {}),
+      ...(typeof s.estimatedTotal === "number" ? {estimatedTotal: s.estimatedTotal} : s.estimatedTotal === null ? {estimatedTotal: null} : {}),
+      ...(typeof s.estimatedDistanceKm === "number" ? {estimatedDistanceKm: s.estimatedDistanceKm} : s.estimatedDistanceKm === null ? {estimatedDistanceKm: null} : {}),
+      ...(s.pricingMode !== undefined ? {pricingMode: s.pricingMode} : {}),
+      ...(s.matchedServiceCode !== undefined ? {matchedServiceCode: s.matchedServiceCode} : {}),
+      ...(s.matchedServiceName !== undefined ? {matchedServiceName: s.matchedServiceName} : {}),
       ...(Array.isArray(s.services) ? {services: s.services} : {}),
     }));
 }

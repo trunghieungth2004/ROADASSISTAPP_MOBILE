@@ -16,6 +16,8 @@ type Props = {
   onClearMapSel: () => void;
   onNavigateMapSel: () => void;
   onRegisterShop: () => void;
+  symptom?: string | null;
+  onSymptom?: (value: string | null) => void;
   shopSel: Provider | null;
   walkRoute: RouteOption | null;
   walkBusy: boolean;
@@ -38,6 +40,24 @@ export default function ShopsSection(props: Props) {
           {props.query ? props.query : t.shop.searchPlaceholder}
         </Text>
       </Pressable>
+      {props.onSymptom !== undefined ? (
+        <View style={styles.symptomWrap}>
+          {(Object.keys(t.services.categories) as Array<keyof Strings["services"]["categories"]>).map((category) => {
+            const selected = props.symptom === category;
+            return (
+              <Pressable
+                key={category}
+                style={[styles.symptomChip, {borderColor: selected ? theme.primary : theme.border}, selected && {backgroundColor: `${theme.primary}22`}]}
+                onPress={() => props.onSymptom?.(selected ? null : category)}
+                accessibilityRole="button"
+                accessibilityState={{selected}}
+              >
+                <Text style={{color: selected ? theme.primary : theme.text, fontSize: 12}}>{t.services.categories[category]}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       {props.mapSel ? (
             <View style={[styles.innerCard, styles.activeCard, {backgroundColor: theme.paper, borderColor: theme.primary}]}>
               <View style={styles.selectedRow}>
@@ -84,6 +104,8 @@ export default function ShopsSection(props: Props) {
 const styles = StyleSheet.create({
   wrap: {gap: 8},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
+  symptomWrap: {flexDirection: "row", flexWrap: "wrap", gap: 6},
+  symptomChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   coords: {fontSize: 12},
   innerCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 6},
   activeCard: {borderWidth: 2},

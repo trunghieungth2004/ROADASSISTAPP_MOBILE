@@ -1,4 +1,5 @@
 import {api} from "./client";
+import {CACHE_TTL_MS, withCache} from "../services/cache";
 
 export type BillViewer = "RIDER" | "PAYEE" | "OPERATOR" | "ADMIN";
 
@@ -17,6 +18,10 @@ export type BillPayment = {
   payoutAt: string | null;
   payoutStatus: BillPayoutStatus;
   canConfirmCash: boolean;
+  disputeId?: string | null;
+  disputedAt?: string | null;
+  disputeHold?: boolean;
+  disputeResolvedAt?: string | null;
   createdAt?: string | null;
   confirmedAt?: string | null;
 };
@@ -56,6 +61,25 @@ export type BillItem = {
     transferRef: string | null;
     requestedAt: string;
   } | null;
+  dispute?: {
+    id: string;
+    status: string;
+    type: string;
+    reasonCode: string;
+    outcome: string | null;
+    resolution: string | null;
+    createdAt: string;
+    resolvedAt: string | null;
+  } | null;
+  disputes?: Array<{
+    id: string;
+    status: string;
+    type: string;
+    reasonCode: string;
+    outcome: string | null;
+    createdAt: string;
+    resolvedAt: string | null;
+  }>;
   breakdown?: Array<{
     code?: string;
     label: string;
@@ -145,7 +169,8 @@ export async function myBills(token: string, limit?: number): Promise<Bill[]> {
 }
 
 export async function payeeBills(token: string, limit?: number): Promise<Bill[]> {
-  return api.post<Bill[]>("/bills/payee", typeof limit === "number" ? {limit} : {}, token);
+  const key = `billsPayee:${token}:${limit ?? 0}`;
+  return withCache(key, CACHE_TTL_MS.billsPayee, () => api.post<Bill[]>("/bills/payee", typeof limit === "number" ? {limit} : {}, token));
 }
 
 export async function fetchBill(token: string, params: {ticketId?: string; billId?: string; scope?: "payee"}): Promise<Bill> {

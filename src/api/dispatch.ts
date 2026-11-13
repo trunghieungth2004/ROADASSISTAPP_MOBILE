@@ -98,7 +98,6 @@ export const DECLINE_REASONS = ["FULL", "CLOSED", "PARTS_DELAY", "OTHER"] as con
 
 export type DeclineReason = (typeof DECLINE_REASONS)[number];
 
-
 export type TowFare = {
   estimate: number;
   ceiling: number;
@@ -147,6 +146,7 @@ export type DispatchTicket = {
   lat: number;
   lng: number;
   note?: string | null;
+  symptom?: string | null;
   status: string;
   vehicleId?: string | null;
   vehicleType?: string | null;
@@ -283,9 +283,12 @@ export type DispatchTicket = {
     type: string;
     reasonCode: string;
     filedBy: string;
+    filedByRole?: string | null;
     accusedKind: string;
     accusedId: string | null;
     hold: boolean;
+    note?: string | null;
+    photoUrls?: string[];
     outcome?: string | null;
     resolution?: string | null;
     at: string;
@@ -337,8 +340,10 @@ export function myTickets(token: string): Promise<DispatchTicket[]> {
   return withCache(`ticketsMine:${token}`, CACHE_TTL_MS.ticketsMine, () => api.post<DispatchTicket[]>("/dispatch/mine", {}, token));
 }
 
-export function feedTickets(limit: number | undefined, token: string): Promise<FeedTicket[]> {
-  return withCache(`ticketsFeed:${token}`, CACHE_TTL_MS.ticketsMine, () => api.post<FeedTicket[]>("/dispatch/feed", {limit}, token));
+export function feedTickets(limit: number | undefined, token: string, fresh = false): Promise<FeedTicket[]> {
+  const key = `ticketsFeed:${token}`;
+  if (fresh) cacheDel(key);
+  return withCache(key, CACHE_TTL_MS.ticketsMine, () => api.post<FeedTicket[]>("/dispatch/feed", {limit}, token));
 }
 
 export function getTicket(ticketId: string, token: string): Promise<DispatchTicket> {
@@ -372,6 +377,7 @@ function bustTicketCaches(token: string): void {
   cacheDel(`ticketsMine:${token}`);
   cacheDel(`ticketsFeed:${token}`);
   cacheClear(`ticketsNear:${token}:`);
+  cacheClear(`billsPayee:${token}:`);
 }
 
 export {bustTicketCaches};
@@ -566,26 +572,16 @@ export function riderMovedMeters(ticket: Pick<DispatchTicket, "lat" | "lng" | "p
 }
 
 export const RIDER_DISPUTE_REASONS = [
-  "LATE",
-  "NO_SHOW",
   "OVERCHARGE",
-  "WRONG_ROUTE",
-  "UNSAFE",
-  "RUDE",
   "FIX_NOT_DONE",
   "POOR_QUALITY",
   "UNFIXABLE_DISAGREE",
-  "OTHER",
 ] as const;
 
 export type RiderDisputeReason = (typeof RIDER_DISPUTE_REASONS)[number];
 
 export const PROVIDER_DISPUTE_REASONS = [
-  "RIDER_NO_SHOW",
-  "RIDER_UNREACHABLE",
   "RIDER_REFUSED_PAYMENT",
-  "RIDER_ABUSIVE",
-  "OTHER",
 ] as const;
 
 export type ProviderDisputeReason = (typeof PROVIDER_DISPUTE_REASONS)[number];
@@ -672,6 +668,7 @@ export type FileDisputePayload = {
   reason: string;
   note?: string;
   photoUrl?: string;
+  photoUrls?: string[];
 };
 
 export async function fileDispute(payload: FileDisputePayload, token: string): Promise<{id: string}> {
@@ -697,6 +694,10 @@ export type TicketPayment = {
   checkout?: SepayCheckout | null;
   waitingFee?: number | null;
   unfixable?: boolean | null;
+  disputeId?: string | null;
+  disputedAt?: string | null;
+  disputeHold?: boolean;
+  disputeResolvedAt?: string | null;
 };
 
 type PaymentWire = TicketPayment;
@@ -732,6 +733,12 @@ function toTicketPayment(raw: PaymentWire): TicketPayment {
     checkout,
     waitingFee: typeof raw.waitingFee === "number" ? raw.waitingFee : null,
     unfixable: raw.unfixable === true ? true : null,
+    disputeId: typeof raw.disputeId === "string" ? raw.disputeId : null,
+    disputedAt: typeof raw.disputedAt === "string" ? raw.disputedAt : null,
+    disputeHold: raw.disputeHold === true,
+    disputeResolvedAt: typeof raw.disputeResolvedAt === "string" ?
+      raw.disputeResolvedAt :
+      null,
   };
 }
 

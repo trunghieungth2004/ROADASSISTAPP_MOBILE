@@ -1,25 +1,9 @@
-
 import {ActivityIndicator, Keyboard, StyleSheet, View} from "react-native";
-
-
 
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 
-
-
-
-
-
-
-
-
-
-
 import {fetchShopPlaces} from "../components/place-search/shopMerge";
-
-
-
 
 import PlaceSearchScreen from "./PlaceSearchScreen";
 import Overlay from "../components/overlay/Overlay";
@@ -39,7 +23,6 @@ import {flagStatusColor, flagStatusLabel} from "../components/flags/flagStatus";
 
 import {HCMC_CENTER} from "./route/types";
 
-
 import MapPickOverlay from "../components/map/MapPickOverlay";
 
 import RouteMapView from "./route/RouteMapView";
@@ -48,7 +31,6 @@ import VehiclePickerSheet from "../components/vehicles/VehiclePickerSheet";
 import {Fab, FabColumn} from "../components/ui/Fab";
 import {FAB_SIZE, rightColumnBottom} from "./route/fabLayout";
 import {snackBottom} from "../components/ui/snackOffset";
-
 
 import useRouteController from "./route/useRouteController";
 

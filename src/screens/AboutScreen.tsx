@@ -97,7 +97,7 @@ export default function AboutScreen() {
             <Pressable style={styles.listRow} onPress={() => void onCheckUpdates()} accessibilityRole="button" accessibilityLabel={t.more.checkUpdates}>
               <MaterialIcons name="system-update" size={20} color={theme.primary} />
               <Text style={[styles.listText, {color: theme.text}]}>{t.more.checkUpdates}</Text>
-              {updateChecking ? <ActivityIndicator size="small" color={theme.primary} /> : <MaterialIcons name="chevron-right" size={20} color={theme.muted} />}
+              {updateChecking ? <ActivityIndicator size="small" color={theme.primary} /> : null}
             </Pressable>
             <View style={[styles.divider, {backgroundColor: theme.divider}]} />
             <Pressable style={styles.listRow} onPress={() => void onToggleAutoUpdate(!autoUpdate)} accessibilityRole="switch" accessibilityState={{checked: autoUpdate}} accessibilityLabel={t.more.autoUpdate}>
@@ -111,7 +111,7 @@ export default function AboutScreen() {
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Diagnostics" as never)} accessibilityRole="button" accessibilityLabel={t.more.diagnostics}>
             <MaterialIcons name="bug-report" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.diagnostics}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => void Linking.openURL(GITHUB_URL)} accessibilityRole="button" accessibilityLabel={t.more.sourceCode}>

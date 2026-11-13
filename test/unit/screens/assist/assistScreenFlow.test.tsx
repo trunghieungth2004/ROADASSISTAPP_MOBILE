@@ -233,7 +233,6 @@ export async function tapTab(renderer: ReturnType<typeof create>, label: string)
   });
 }
 
-
 export async function openRecord(renderer: ReturnType<typeof create>, title: string): Promise<void> {
   const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
   await act(async () => {
@@ -368,7 +367,6 @@ export function hasTopOffset(style: unknown): boolean {
   const flat = Array.isArray(style) ? style : [style];
   return flat.some((s) => s !== null && typeof s === "object" && typeof (s as {top?: unknown}).top === "number");
 }
-
 
 test("request tab opens a ticket modal from the sos button", async () => {
   const renderer = await mount();

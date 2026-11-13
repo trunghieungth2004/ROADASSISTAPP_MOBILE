@@ -15,6 +15,7 @@ import {
   payoutStatusColor,
   payoutStatusLabel,
 } from "./billLabels";
+import {disputeLabel} from "../assist/disputeLabels";
 import {ColumnHead, PhoneLink, PlaceLine} from "../assist/detail/parts";
 
 const money = (value: number): string => `${value.toLocaleString()} VND`;
@@ -294,7 +295,35 @@ export function BillPaymentCard({item, payee, t, theme}: {
         <BillStatusPill label={payment.method === "SEPAY" ? "SePay" : "Cash"} color={theme.border} theme={theme} />
         <BillStatusPill label={billItemStatusLabel(item.status, t)} color={billItemStatusColor(item.status, theme)} theme={theme} />
         {payee ? <BillStatusPill label={payoutStatusLabel(payout, t)} color={payoutStatusColor(payout, theme)} theme={theme} /> : null}
+        {payment.disputeId && !payment.disputeResolvedAt ? (
+          <BillStatusPill label={t.bills.dispute} color={theme.danger} theme={theme} />
+        ) : null}
       </View>
+      {payment.disputeHold ? (
+        <Text style={[styles.small, {color: theme.danger}]}>{t.bills.disputeHold}</Text>
+      ) : null}
+      {item.dispute && item.dispute.status !== "OPEN" ? (
+        <Text style={[styles.small, {color: theme.muted}]}>
+          {`${t.bills.dispute}: ${item.dispute.status}${item.dispute.outcome ? ` · ${item.dispute.outcome}` : ""}`}
+        </Text>
+      ) : null}
+      {item.disputes && item.disputes.length > 1 ? (
+        <View style={{gap: 4}}>
+          <Text style={[styles.small, {color: theme.muted}]}>{t.bills.dispute}</Text>
+          {item.disputes.map((row) => (
+            <View key={row.id} style={styles.row}>
+              <Text style={[styles.small, {color: theme.muted, flexGrow: 1}]} numberOfLines={1}>
+                {`${disputeLabel(row.type, row.reasonCode, t)}${row.outcome ? ` · ${row.outcome}` : ""}`}
+              </Text>
+              <BillStatusPill
+                label={row.status}
+                color={row.status === "OPEN" ? theme.danger : theme.border}
+                theme={theme}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
       {payment.createdAt ? <AmountRow label={t.payments.opened} value={billDateTimeLabel(payment.createdAt)} theme={theme} /> : null}
       {payment.confirmedAt ? <AmountRow label={t.payments.confirmed} value={billDateTimeLabel(payment.confirmedAt)} theme={theme} /> : null}
       {payee && received ? <AmountRow label={t.payments.netPayout} value={money(itemNetPayout(item))} theme={theme} color={theme.success} /> : null}

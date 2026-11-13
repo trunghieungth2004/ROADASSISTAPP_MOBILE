@@ -102,7 +102,7 @@ export default function VehicleScreen() {
                     {[p.plate, vehicleMeta(p.baseWidth, p.baseHeight)].filter((value) => typeof value === "string" && value !== "").join(" · ")}
                   </Text>
                 </View>
-                <MaterialIcons name="chevron-right" size={22} color={theme.muted} />
+                
               </Pressable>
             )}
           />

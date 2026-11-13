@@ -19,7 +19,6 @@ test("mobile shop can cancel only a matched SOS", () => {
   expect(canCancelSosShop("TOW", "2", true)).toBe(false);
 });
 
-
 test("delay reports only on holdable statuses", () => {
   for (const s of ["2", "3", "6", "10", "9", "11", "13", "14", "7"]) {
     expect(canReportDelay(s)).toBe(true);

@@ -247,7 +247,6 @@ export async function tapTab(renderer: ReturnType<typeof create>, label: string)
   });
 }
 
-
 export async function openRecord(renderer: ReturnType<typeof create>, title: string): Promise<void> {
   const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
   await act(async () => {
@@ -382,7 +381,6 @@ export function hasTopOffset(style: unknown): boolean {
   const flat = Array.isArray(style) ? style : [style];
   return flat.some((s) => s !== null && typeof s === "object" && typeof (s as {top?: unknown}).top === "number");
 }
-
 
 test("tow radius pick opens the details sheet with a drop-off action", async () => {
   const renderer = await mount();
@@ -961,7 +959,7 @@ test("rating rows show author faces and names", async () => {
       {id: "r1", targetId: "shop9", targetKind: "SHOP", byUserId: "rider9", byUserName: "Rider Nine", score: 5, text: "Fixed fast", reply: "Thanks", repliedByName: "Fix Shop", repliedAt: null},
     ];
     await openRecord(renderer, "Walk-in · Completed");
-    expect(hasText(renderer.root, en.rating.yourRating)).toBe(true);
+    expect(hasText(renderer.root, en.rating.allReviews)).toBe(true);
     expect(hasText(renderer.root, "Rider Nine")).toBe(true);
     expect(hasText(renderer.root, "R")).toBe(true);
     expect(hasText(renderer.root, "Fix Shop")).toBe(true);

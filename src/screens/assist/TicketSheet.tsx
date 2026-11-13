@@ -60,7 +60,7 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, symptom
       actions={actions}
     >
       <View style={styles.body}>
-        {ticketType === "SOS" && onSymptom !== undefined ? (
+        {ticketType !== "WALK_IN" && onSymptom !== undefined ? (
           <View style={styles.symptomBlock}>
             <Text style={[styles.symptomLabel, {color: theme.muted}]}>{t.assist.symptom}</Text>
             <View style={styles.symptomWrap}>

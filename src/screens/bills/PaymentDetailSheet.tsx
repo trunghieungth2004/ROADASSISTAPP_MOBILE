@@ -107,6 +107,10 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const payee = scope === "payee";
   const [bill, setBill] = useState<Bill | null>(null);
+  const viewer = bill?.viewer ?? null;
+  const payeeView = payee || viewer === "PAYEE";
+  const riderView = viewer === "RIDER";
+  const adminView = viewer === "ADMIN";
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,9 +140,9 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
   const preview = previewOf(ticket);
   const showPreview = preview !== null && !loading &&
     (bill === null || bill.items.length === 0);
-  const summary = bill && payee ? payeeSummary(bill) : null;
+  const summary = bill && payeeView ? payeeSummary(bill) : null;
   const pendingSepay = item?.status === "PENDING" && item.payment?.method === "SEPAY";
-  const status = bill ? billHeroStatus(bill, payee, t, theme) : null;
+  const status = bill ? billHeroStatus(bill, payeeView, t, theme) : null;
 
   function reload(): void {
     void load();
@@ -147,7 +151,7 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
   }
 
   async function pay(method: "SEPAY" | "CASH"): Promise<void> {
-    if (!token || busy) return;
+    if (!token || busy || viewer !== "RIDER") return;
     setBusy(true);
     setError(null);
     try {
@@ -178,7 +182,7 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
   }
 
   async function confirmCash(): Promise<void> {
-    if (!token || busy) return;
+    if (!token || busy || viewer !== "PAYEE") return;
     setBusy(true);
     setError(null);
     try {
@@ -193,7 +197,7 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
 
   const actions: OverlayAction[] = [];
   if (bill && item) {
-    if (!payee && bill.canPay) {
+    if (riderView && bill.canPay) {
       if (item.status === "UNPAID") {
         actions.push({label: t.bills.paySepay, tone: "primary", busy, onPress: () => void pay("SEPAY")});
         actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => void pay("CASH")});
@@ -202,7 +206,7 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
         actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => void pay("CASH")});
       }
     }
-    if (payee && item.payment?.canConfirmCash === true) {
+    if (payeeView && item.payment?.canConfirmCash === true) {
       actions.push({label: t.assist.cashConfirmReceipt, tone: "primary", busy, onPress: () => void confirmCash()});
     }
     if (bill.status === "PAID") {
@@ -256,11 +260,12 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
                 </View>
                 <BillPartiesCard item={item} t={t} theme={theme} lang={lang} />
                 <BillChargesCard item={item} t={t} theme={theme} />
-                <BillTotalsCard bill={bill} payee={payee} t={t} theme={theme} />
-                <BillPaymentCard item={item} payee={payee} t={t} theme={theme} />
-                {pendingSepay && !payee ? <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text> : null}
+                <BillTotalsCard bill={bill} payee={payeeView} t={t} theme={theme} />
+                <BillPaymentCard item={item} payee={payeeView} t={t} theme={theme} />
+                {adminView ? <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.adminReadOnly}</Text> : null}
+                {pendingSepay && !payeeView ? <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text> : null}
                 {item.status === "PENDING" && item.payment?.method === "CASH" ? (
-                  <Text style={[styles.hint, {color: theme.muted}]}>{payee ? t.payments.cashPending : t.bills.cashArmed}</Text>
+                  <Text style={[styles.hint, {color: theme.muted}]}>{payeeView ? t.payments.cashPending : t.bills.cashArmed}</Text>
                 ) : null}
               </>
             ) : showPreview && preview !== null ? (

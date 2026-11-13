@@ -13,11 +13,12 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {createProvider, myProviders, type Provider} from "../api/providers";
-import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim} from "../api/warranty";
+import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim, type WarrantyDeclineReason} from "../api/warranty";
 import {getNotificationPrefs, updateNotificationPrefs, type NotificationPrefs} from "../api/notifications";
 import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
 import type {MobileShopDraft, ShopDraft, TowDraft} from "./OnboardingScreen";
 import OnboardingScreen from "./OnboardingScreen";
+import WarrantyDeclineDialog from "./warranty/WarrantyDeclineDialog";
 import Overlay from "../components/overlay/Overlay";
 import {useThemeMode} from "../context/ThemeContext";
 import {toMessage} from "../api/client";
@@ -44,6 +45,8 @@ export default function SettingsScreen() {
   const [warrantyClaims, setWarrantyClaims] = useState<WarrantyClaim[]>([]);
   const [warrantyBusy, setWarrantyBusy] = useState(false);
   const [warrantyError, setWarrantyError] = useState<string | null>(null);
+  const [declineFor, setDeclineFor] = useState<WarrantyClaim | null>(null);
+  const [declineError, setDeclineError] = useState<string | null>(null);
   const [myWarrantyOpen, setMyWarrantyOpen] = useState(false);
   const [myClaims, setMyClaims] = useState<WarrantyClaim[]>([]);
   const [myWarrantyError, setMyWarrantyError] = useState<string | null>(null);
@@ -93,15 +96,37 @@ export default function SettingsScreen() {
     }
   };
 
-  const respondClaim = async (claim: WarrantyClaim, accept: boolean): Promise<void> => {
+  const respondClaim = async (claim: WarrantyClaim): Promise<void> => {
     if (!token || warrantyBusy) return;
     setWarrantyBusy(true);
     try {
-      await respondWarrantyClaim(token, claim.id, accept);
-      setNotice(accept ? t.provider.warrantyAccepted : t.provider.warrantyDeclined);
+      await respondWarrantyClaim(token, claim.id, true);
+      setNotice(t.provider.warrantyAccepted);
       await loadWarranty();
     } catch (err) {
       setWarrantyError(toMessage(err));
+    } finally {
+      setWarrantyBusy(false);
+    }
+  };
+
+  const submitDecline = async (
+    reasonCode: WarrantyDeclineReason,
+    note: string,
+  ): Promise<void> => {
+    if (!token || !declineFor || warrantyBusy) return;
+    setWarrantyBusy(true);
+    setDeclineError(null);
+    try {
+      await respondWarrantyClaim(token, declineFor.id, false, {
+        reasonCode,
+        note,
+      });
+      setDeclineFor(null);
+      setNotice(t.provider.warrantyDeclined);
+      await loadWarranty();
+    } catch (err) {
+      setDeclineError(toMessage(err));
     } finally {
       setWarrantyBusy(false);
     }
@@ -201,23 +226,23 @@ export default function SettingsScreen() {
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
+          <Pressable style={styles.listRow} onPress={() => { setServicesError(null); setServicesOpen(true); }}><MaterialIcons name="bookmark" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.services}</Text></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => void Linking.openURL("tel:112")} accessibilityRole="button" accessibilityLabel={t.more.emergency}>
             <MaterialIcons name="emergency" size={20} color={theme.danger} />
             <Text style={[styles.listText, {color: theme.danger}]}>{t.more.emergency}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Permissions" as never)} accessibilityRole="button" accessibilityLabel={t.more.permissions}>
             <MaterialIcons name="lock" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.permissions}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.myWarrantyClaims}>
             <MaterialIcons name="verified" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.provider.myWarrantyClaims}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           {providers.length > 0 ? (
             <>
@@ -225,14 +250,14 @@ export default function SettingsScreen() {
               <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.warrantyClaims}>
                 <MaterialIcons name="storefront" size={20} color={theme.primary} />
                 <Text style={[styles.listText, {color: theme.text}]}>{t.provider.warrantyClaims}</Text>
-                <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+                
               </Pressable>
             </>
           ) : null}
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Providers" as never)} accessibilityRole="button" accessibilityLabel={t.provider.title}>
             <MaterialIcons name="store" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.provider.title}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
         </View>
         {token ? (
@@ -276,7 +301,7 @@ export default function SettingsScreen() {
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           <Pressable style={styles.listRow} onPress={toggleTheme} accessibilityRole="switch" accessibilityState={{checked: scheme === "dark"}}><MaterialIcons name={scheme === "dark" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text><View pointerEvents="none"><Switch value={scheme === "dark"} onValueChange={() => toggleTheme()} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View></Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
-          <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text><MaterialIcons name="chevron-right" size={20} color={theme.muted} /></Pressable>
+          <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text></Pressable>
         </View>
         <Overlay visible={servicesOpen} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => setServicesOpen(false)}>
           {servicesOpen ? (
@@ -291,6 +316,19 @@ export default function SettingsScreen() {
       ) : (
         <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       )}
+      <WarrantyDeclineDialog
+        visible={declineFor !== null}
+        serviceName={declineFor?.serviceName ?? ""}
+        t={t}
+        theme={theme}
+        busy={warrantyBusy}
+        error={declineError}
+        onSubmit={(reasonCode, note) => void submitDecline(reasonCode, note)}
+        onClose={() => {
+          setDeclineFor(null);
+          setDeclineError(null);
+        }}
+      />
       <Overlay
         visible={warrantyOpen}
         variant="sheet"
@@ -307,10 +345,10 @@ export default function SettingsScreen() {
             <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${claim.status} · ${claim.reason}`}</Text>
             {claim.status === "OPEN" ? (
               <View style={{flexDirection: "row", gap: 8}}>
-                <Pressable style={[styles.primary, {backgroundColor: theme.primary}]} disabled={warrantyBusy} onPress={() => void respondClaim(claim, true)}>
+                <Pressable style={[styles.primary, {backgroundColor: theme.primary}]} disabled={warrantyBusy} onPress={() => void respondClaim(claim)}>
                   <Text style={styles.primaryText}>{t.assist.accept}</Text>
                 </Pressable>
-                <Pressable style={[styles.primary, {borderWidth: 1, borderColor: theme.danger}]} disabled={warrantyBusy} onPress={() => void respondClaim(claim, false)}>
+                <Pressable style={[styles.primary, {borderWidth: 1, borderColor: theme.danger}]} disabled={warrantyBusy} onPress={() => setDeclineFor(claim)}>
                   <Text style={[styles.primaryText, {color: theme.danger}]}>{t.provider.decline}</Text>
                 </Pressable>
               </View>
@@ -347,10 +385,12 @@ export default function SettingsScreen() {
         title={t.provider.dispute}
         closeLabel={t.common.cancel}
         onClose={() => setDisputeFor(null)}
+        scrollable={false}
         actions={[{
           label: t.provider.disputeSubmit,
           tone: "primary",
           busy: disputeBusy,
+          disabled: disputeNote.trim().length < 5,
           onPress: () => void submitDispute(),
         }]}
       >

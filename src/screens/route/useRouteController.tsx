@@ -4,7 +4,6 @@ import {useAppMode} from "../../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useNavigation, useIsFocused} from "@react-navigation/native";
 
-
 import * as Location from "expo-location";
 import {type CameraRef} from "@maplibre/maplibre-react-native";
 import {safeCameraCall} from "../../components/map/safeCamera";
@@ -22,19 +21,11 @@ import {useProfile} from "../../context/ProfileContext";
 import {useStrings} from "../../context/LanguageContext";
 import {darkTheme, lightTheme} from "../../theme";
 
-
-
-
 import {useNavSession} from "../../context/NavSessionContext";
-
-
 
 import type {FlagReport} from "../../components/flags/FlagSheet";
 
-
 import {bustFlagCaches, confirmFlag, denyFlag, submitFlag, unflag, type Flag} from "../../api/flags";
-
-
 
 import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../../storage/votedFlags";
 import {HCMC_CENTER, MAX_STOPS, type Point, type SearchField, type Stop} from "./types";
@@ -43,13 +34,7 @@ import {useRouteDrag} from "./useRouteDrag";
 
 import {shouldRetryCenter} from "./cameraIntent";
 
-
-
-
-
-
 import {ROUTE_RETOUCH_MS, isRouteStale, pausedSnackKey, touchCapReached} from "./routeFresh";
-
 
 export default function useRouteController() {
   const {t, lang} = useStrings();

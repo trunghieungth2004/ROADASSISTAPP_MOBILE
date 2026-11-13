@@ -48,7 +48,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
-  const [sortBy, setSortBy] = useState<"distance" | "rating">(filters?.sortBy ?? "distance");
+  const [sortBy, setSortBy] = useState<"distance" | "rating" | "price">(filters?.sortBy ?? "distance");
   const [minRating, setMinRating] = useState<number | undefined>(filters?.minRating);
   const showFilters = shops !== undefined && filters !== undefined;
   const internal = usePlaceSearch({token, lang, shops, sources, mapFilter, query, onQuery, filters: filters === undefined ? undefined : {...filters, sortBy, minRating}});
@@ -190,6 +190,7 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
             {([
               {value: "distance" as const, label: t.shop.sortDistance},
               {value: "rating" as const, label: t.shop.sortRating},
+              {value: "price" as const, label: t.shop.sortPrice},
             ]).map(({value, label}) => (
               <Pressable key={value} style={[styles.filterChip, {borderColor: sortBy === value ? theme.primary : theme.border}, sortBy === value && {backgroundColor: theme.primary}]} onPress={() => setSortBy(value)} accessibilityRole="button" accessibilityState={{selected: sortBy === value}} accessibilityLabel={label}>
                 <Text style={[styles.filterChipText, {color: sortBy === value ? "#fff" : theme.text}]}>{label}</Text>
@@ -247,6 +248,21 @@ export default function PlaceSearchScreen({t, token, lang, title, placeholder, o
             <View style={styles.rowCol}>
               <Text style={[styles.rowText, {color: declined ? theme.muted : theme.text}]}>{row.item.label}</Text>
               {meta.length > 0 ? <Text style={[styles.rowNote, {color: theme.muted}]}>{meta.join(" · ")}</Text> : null}
+              {typeof row.item.estimatedTotal === "number" ? (
+                <Text style={[styles.rowPrice, {color: theme.primary}]}>
+                  {t.shop.estimatedTotal.replace("{price}", row.item.estimatedTotal.toLocaleString())}
+                </Text>
+              ) : row.item.pricingMode === "QUOTE" ? (
+                <Text style={[styles.rowNote, {color: theme.muted}]}>{t.shop.quoteRequired}</Text>
+              ) : null}
+              {typeof row.item.estimatedTotal === "number" ? (
+                <Text style={[styles.rowNote, {color: theme.muted}]}>
+                  {t.shop.estimatedBreakdown
+                    .replace("{service}", (row.item.estimatedServicePrice ?? 0).toLocaleString())
+                    .replace("{travel}", (row.item.estimatedTravelFee ?? 0).toLocaleString())
+                    .replace("{km}", (row.item.estimatedDistanceKm ?? 0).toFixed(1))}
+                </Text>
+              ) : null}
               {note ? <Text style={[styles.rowNote, {color: disabled ? theme.muted : theme.primary}]}>{note}</Text> : null}
             </View>
             {requireBookable && bookable ? (
@@ -330,6 +346,7 @@ const styles = StyleSheet.create({
   rowText: {flex: 1, fontSize: 14, minWidth: 0},
   rowCol: {flex: 1, minWidth: 0, gap: 2},
   rowNote: {fontSize: 12},
+  rowPrice: {fontSize: 13, fontWeight: "700"},
   disabledRow: {opacity: 0.5},
   bookBadge: {borderWidth: 1, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
   bookBadgeText: {fontSize: 11, fontWeight: "700"},

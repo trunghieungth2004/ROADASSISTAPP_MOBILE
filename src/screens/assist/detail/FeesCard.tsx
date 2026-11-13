@@ -206,7 +206,7 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
         <Pressable style={[styles.linkRow, {borderColor: theme.border}]} onPress={() => onOpenBill?.(ticket)} accessibilityRole="button" accessibilityLabel={t.payments.detailTitle}>
           <MaterialIcons name="receipt-long" size={16} color={theme.primary} />
           <Text style={[detailStyles.muted, {color: theme.primary, flex: 1}]}>{t.payments.detailTitle}</Text>
-          <MaterialIcons name="chevron-right" size={18} color={theme.muted} />
+          
         </Pressable>
       ) : null}
     </DetailCard>

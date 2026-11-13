@@ -9,16 +9,22 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {darkTheme, lightTheme, type AppTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
-import {myFlags} from "../api/flags";
 import {myProviders, type Provider} from "../api/providers";
+import {receivedRatings, type ReceivedRatings} from "../api/ratings";
+import {eligibleAppeals, fileAppeal, type AppealItem, type AppealReason, type EligibleAppeals} from "../api/appeals";
 import Overlay from "../components/overlay/Overlay";
 import DutySection from "./DutySection";
 import {useThemeMode} from "../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {uploadPhotoPaths} from "../services/photos";
+import AppealsSheet from "./more/AppealsSheet";
+import AppealSheet from "./more/AppealSheet";
+import CaseDetailSheet from "./more/CaseDetailSheet";
+import ScoreBar from "../components/ui/ScoreBar";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -26,6 +32,37 @@ function initials(name: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+function scoreColor(kind: "trust" | "standing", value: number, theme: AppTheme): string {
+  if (kind === "trust") {
+    return value >= 70 ? theme.success : value >= 40 ? "#b45309" : theme.danger;
+  }
+  return value >= 60 ? theme.success : value >= 50 ? "#b45309" : theme.danger;
+}
+
+function issueFor(input: {
+  restricted: boolean;
+  openAppeal: boolean;
+  reportAction: boolean;
+  danger: string;
+  reason: string;
+  t: ReturnType<typeof useStrings>["t"];
+}) {
+  if (input.restricted) {
+    return {
+      color: input.danger,
+      title: input.t.more.issueRestricted,
+      text: input.reason,
+    };
+  }
+  if (input.openAppeal) {
+    return {color: "#b45309", title: input.t.more.issueOpenAppeal, text: ""};
+  }
+  if (input.reportAction) {
+    return {color: "#b45309", title: input.t.more.issueWarning, text: ""};
+  }
+  return null;
+}
+
 export default function MoreScreen() {
   const {t} = useStrings();
   const {signOut, token} = useAuth();
@@ -41,24 +78,82 @@ export default function MoreScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [dutyError, setDutyError] = useState<string | null>(null);
   const navigation = useNavigation();
-  const [reportCount, setReportCount] = useState(0);
-  const [confirmedCount, setConfirmedCount] = useState(0);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [received, setReceived] = useState<ReceivedRatings | null>(null);
+  const [eligible, setEligible] = useState<EligibleAppeals | null>(null);
+  const [appealsOpen, setAppealsOpen] = useState(false);
+  const [appealFor, setAppealFor] = useState<AppealItem | null>(null);
+  const [caseFor, setCaseFor] = useState<AppealItem | null>(null);
+  const [appealBusy, setAppealBusy] = useState(false);
+  const [appealError, setAppealError] = useState<string | null>(null);
   useFocusEffect(useCallback(() => {
     if (!token) return;
-    void myFlags(token)
-      .then((rows) => {
-        setReportCount(rows.length);
-        setConfirmedCount(rows.filter((f) => f.status === "CONFIRMED").length);
-      })
-      .catch(() => undefined);
+    void refresh();
     void myProviders(token).then(setProviders).catch(() => undefined);
-  }, [token]));
+    void receivedRatings(token).then(setReceived).catch(() => undefined);
+    void eligibleAppeals(token).then(setEligible).catch(() => undefined);
+  }, [token, refresh]));
   const displayName = user?.displayName || user?.email || "—";
   const services = user?.services ?? [];
   const isAdmin = user?.role === "1";
   const profileKinds = profileServiceKinds(services, providers);
+  const restricted = user?.bookingBlocked === true ||
+    (typeof user?.restrictedUntil === "string" &&
+      Date.parse(user.restrictedUntil) > Date.now());
+  const openAppeal = eligible !== null &&
+    [...eligible.ratings, ...eligible.reports, ...eligible.disputes]
+      .some((item) => item.appealStatus === "OPEN");
+  const reportAction = eligible !== null &&
+    eligible.reports.some((item) =>
+      typeof item.snapshot.action === "string" &&
+      item.snapshot.action !== "NONE" &&
+      item.appealResolution !== "OVERTURN");
+  const issue = issueFor({
+    restricted,
+    openAppeal,
+    reportAction,
+    danger: theme.danger,
+    reason: user?.restrictionReason ?? "",
+    t,
+  });
   function openEdit() { setNameDraft(user?.displayName ?? ""); setEditError(null); setEditOpen(true); }
+  async function onSubmitAppeal(
+    reason: AppealReason,
+    note: string,
+    uris: string[],
+  ): Promise<void> {
+    if (!token || !appealFor || appealBusy) return;
+    setAppealBusy(true);
+    setAppealError(null);
+    try {
+      const photoUrls = uris.length > 0 ?
+        (await uploadPhotoPaths(
+          `appeals/${appealFor.subjectKind}-${appealFor.subjectId}`,
+          uris,
+        )).filter((item): item is string => typeof item === "string") :
+        [];
+      await fileAppeal({
+        subjectKind: appealFor.subjectKind,
+        subjectId: appealFor.subjectId,
+        reason,
+        note,
+        photoUrls,
+      }, token);
+      setAppealFor(null);
+      setNotice(t.more.appealFiled);
+      const [fresh, freshEligible] = await Promise.all([
+        receivedRatings(token),
+        eligibleAppeals(token),
+      ]);
+      setReceived(fresh);
+      setEligible(freshEligible);
+      setAppealsOpen(true);
+    } catch (err) {
+      setAppealError(toMessage(err));
+    } finally {
+      setAppealBusy(false);
+    }
+  }
   async function onSaveName() {
     if (!token || !nameDraft.trim() || nameBusy) return;
     Keyboard.dismiss();
@@ -69,7 +164,11 @@ export default function MoreScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
-        <View style={[styles.headerCard, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+        <View style={[styles.headerCard, {
+          backgroundColor: theme.paper,
+          borderColor: issue?.color ?? theme.border,
+          borderWidth: issue ? 2 : 1,
+        }]}>
           <View style={styles.headerRow}>
             <View>
               <View style={[styles.avatar, {backgroundColor: theme.primary}]}><Text style={styles.avatarText}>{initials(displayName)}</Text></View>
@@ -86,21 +185,89 @@ export default function MoreScreen() {
               </View>
             </View>
           </View>
-          <View style={styles.statRow}>
-            <View style={styles.stat}>
-              <Text style={[styles.statNumber, {color: theme.text}]}>{user?.points ?? 0}</Text>
-              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.points}</Text>
+          {issue && !restricted ? (
+            <View style={[styles.issueBanner, {borderColor: issue.color}]}>
+              <MaterialIcons name="report-problem" size={16} color={issue.color} />
+              <View style={styles.issueBody}>
+                <Text style={[styles.issueTitle, {color: issue.color}]}>{issue.title}</Text>
+                {issue.text ? <Text style={[styles.issueText, {color: theme.muted}]}>{issue.text}</Text> : null}
+              </View>
+              <Pressable
+                onPress={() => setAppealsOpen(true)}
+                style={[styles.issueButton, {borderColor: issue.color}]}
+                accessibilityRole="button"
+                accessibilityLabel={t.more.viewCases}
+              >
+                <Text style={[styles.issueButtonText, {color: issue.color}]}>{t.more.viewCases}</Text>
+              </Pressable>
             </View>
-            <View style={styles.stat}>
-              <Text style={[styles.statNumber, {color: theme.text}]}>{reportCount}</Text>
-              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.reports}</Text>
+          ) : null}
+          {restricted ? (
+            <View style={[styles.restriction, {borderColor: theme.danger}]}>
+              <MaterialIcons name="lock" size={16} color={theme.danger} />
+              <View style={styles.restrictionText}>
+                <Text style={[styles.restrictionTitle, {color: theme.danger}]}>
+                  {t.more.restricted}
+                </Text>
+                <Text style={[styles.restrictionHint, {color: theme.muted}]}>
+                  {[
+                    typeof user?.restrictedUntil === "string" ?
+                      `${t.more.restrictedUntil}: ${new Date(user.restrictedUntil).toLocaleDateString()}` :
+                      null,
+                    user?.restrictionReason ?? null,
+                  ].filter((part): part is string => part !== null && part !== "").join(" · ")}
+                </Text>
+              </View>
             </View>
-            <View style={styles.stat}>
-              <Text style={[styles.statNumber, {color: theme.text}]}>{confirmedCount}</Text>
-              <Text style={[styles.statLabel, {color: theme.muted}]}>{t.more.confirmed}</Text>
-            </View>
+          ) : null}
+          <View style={styles.scoreStack}>
+            <ScoreBar
+              label={t.more.trust}
+              value={user?.trustScore ?? 0}
+              color={scoreColor("trust", user?.trustScore ?? 0, theme)}
+              theme={theme}
+            />
+            <ScoreBar
+              label={t.more.standing}
+              value={user?.standingScore ?? 100}
+              color={scoreColor("standing", user?.standingScore ?? 100, theme)}
+              theme={theme}
+            />
           </View>
         </View>
+        {(received !== null &&
+          (received.rider.count > 0 ||
+            received.providers.some((provider) => provider.count > 0))) ||
+        (eligible !== null &&
+          eligible.ratings.length + eligible.reports.length +
+            eligible.disputes.length > 0) ? (
+          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <Pressable
+              style={styles.listRow}
+              onPress={() => setAppealsOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t.more.cases}
+            >
+              <MaterialIcons name="gavel" size={20} color={theme.primary} />
+              <View style={styles.ratingInfo}>
+                <Text style={[styles.listText, {color: theme.text}]}>{t.more.cases}</Text>
+                <Text style={[styles.ratingSummary, {color: theme.muted}]}>
+                  {[
+                    received !== null && received.rider.count > 0 ?
+                      `${t.more.ratingAsRider} ${received.rider.avg.toFixed(1)} (${received.rider.count})` :
+                      null,
+                    ...(eligible === null ? [] : [
+                      `${t.more.appealSubjectRating} ${eligible.ratings.length}`,
+                      `${t.more.appealSubjectReport} ${eligible.reports.length}`,
+                      `${t.more.appealSubjectDispute} ${eligible.disputes.length}`,
+                    ]),
+                  ].filter((part): part is string => part !== null).join(" · ")}
+                </Text>
+              </View>
+              
+            </Pressable>
+          </View>
+        ) : null}
         <DutySection
           providers={providers}
           onProvidersChanged={() => {
@@ -126,19 +293,19 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Providers" as never)} accessibilityRole="button" accessibilityLabel={t.more.provider}>
             <MaterialIcons name="storefront" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.provider}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Vehicle" as never)} accessibilityRole="button" accessibilityLabel={t.tabs.vehicle}>
             <MaterialCommunityIcons name="motorbike" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.tabs.vehicle}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Payments" as never)} accessibilityRole="button" accessibilityLabel={t.payments.title}>
             <MaterialIcons name="payments" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.payments.title}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           {services.includes("RIDER") || providers.length > 0 ? (
             <>
@@ -146,7 +313,7 @@ export default function MoreScreen() {
               <Pressable style={styles.listRow} onPress={() => navigation.navigate("Warranty" as never)} accessibilityRole="button" accessibilityLabel={t.provider.warrantyClaims}>
                 <MaterialIcons name="verified" size={20} color={theme.primary} />
                 <Text style={[styles.listText, {color: theme.text}]}>{t.provider.warrantyTitle}</Text>
-                <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+                
               </Pressable>
             </>
           ) : null}
@@ -155,19 +322,19 @@ export default function MoreScreen() {
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Support" as never)} accessibilityRole="button" accessibilityLabel={t.support.title}>
             <MaterialIcons name="support-agent" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.support.title}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("Settings" as never)} accessibilityRole="button" accessibilityLabel={t.more.settings}>
             <MaterialIcons name="settings" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.settings}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={() => navigation.navigate("About" as never)} accessibilityRole="button" accessibilityLabel={t.more.about}>
             <MaterialIcons name="info" size={20} color={theme.primary} />
             <Text style={[styles.listText, {color: theme.text}]}>{t.more.about}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={theme.muted} />
+            
           </Pressable>
         </View>
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
@@ -177,6 +344,43 @@ export default function MoreScreen() {
       <Snack message={notice} severity="confirm" bottom={snackBottom(insets.bottom)} accentColor={theme.primary} onHide={() => setNotice(null)} />
       {dutyError ? (
         <Snack message={dutyError} severity="error" bottom={snackBottom(insets.bottom)} dangerColor={theme.danger} onHide={() => setDutyError(null)} />
+      ) : null}
+      {appealsOpen && eligible !== null ? (
+        <AppealsSheet
+          t={t}
+          eligible={eligible}
+          received={received}
+          onClose={() => setAppealsOpen(false)}
+          onOpen={(item) => {
+            setAppealsOpen(false);
+            setCaseFor(item);
+          }}
+        />
+      ) : null}
+      {caseFor !== null ? (
+        <CaseDetailSheet
+          t={t}
+          item={caseFor}
+          onClose={() => setCaseFor(null)}
+          onAppeal={(item) => {
+            setCaseFor(null);
+            setAppealError(null);
+            setAppealFor(item);
+          }}
+        />
+      ) : null}
+      {appealFor !== null ? (
+        <AppealSheet
+          t={t}
+          subjectKind={appealFor.subjectKind}
+          busy={appealBusy}
+          error={appealError}
+          onSubmit={(reason, note, uris) => void onSubmitAppeal(reason, note, uris)}
+          onClose={() => {
+            setAppealFor(null);
+            setAppealError(null);
+          }}
+        />
       ) : null}
     </ScreenContainer>
   );
@@ -188,10 +392,17 @@ const styles = StyleSheet.create({
   avatar: {width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center"},
   avatarText: {color: "#fff", fontWeight: "700", fontSize: 18},
   avatarEdit: {position: "absolute", right: -6, bottom: -6, width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center"},
-  statRow: {flexDirection: "row", marginTop: 4},
-  stat: {flex: 1, alignItems: "center", gap: 2},
-  statNumber: {fontSize: 18, fontWeight: "700"},
-  statLabel: {fontSize: 11},
+  restriction: {flexDirection: "row", alignItems: "flex-start", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10},
+  issueBanner: {flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10},
+  issueBody: {flex: 1, gap: 2},
+  issueTitle: {fontSize: 13, fontWeight: "700"},
+  issueText: {fontSize: 11, lineHeight: 15},
+  issueButton: {borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10, alignSelf: "center"},
+  issueButtonText: {fontSize: 11, fontWeight: "700"},
+  restrictionText: {flex: 1, gap: 2},
+  restrictionTitle: {fontSize: 13, fontWeight: "700"},
+  restrictionHint: {fontSize: 11, lineHeight: 15},
+  scoreStack: {gap: 10, marginTop: 4},
   headerText: {flex: 1, minWidth: 0, gap: 2},
   name: {fontSize: 18, fontWeight: "700"},
   email: {fontSize: 13},
@@ -204,6 +415,8 @@ const styles = StyleSheet.create({
   error: {fontSize: 12, marginBottom: 6},
   card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
   listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
-  listText: {flex: 1, fontSize: 15, fontWeight: "500"},
+  listText: {fontSize: 15, fontWeight: "500"},
+  ratingInfo: {flex: 1, gap: 2, minWidth: 0},
+  ratingSummary: {fontSize: 11, lineHeight: 15},
   divider: {height: 1, marginHorizontal: 16},
 });

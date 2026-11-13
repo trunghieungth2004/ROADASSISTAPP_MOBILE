@@ -7,7 +7,7 @@ import {Camera, GeoJSONSource, Images, Marker, type CameraRef} from "@maplibre/m
 import MapSurface from "../../components/map/MapSurface";
 import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {nearProviders, providerRatings, type Provider, type ProviderRating} from "../../api/providers";
+import {nearProviders, providerRatings, type Provider, type ProviderRating, type ServiceCategory} from "../../api/providers";
 import {toMessage} from "../../api/client";
 import {darkTheme, lightTheme} from "../../theme";
 import {requireMapStyle} from "../../map/style";
@@ -42,6 +42,8 @@ type Props = {
   radius: number;
   onRadius: (radius: number) => void;
   mode: "browse" | "tow";
+  sortBy?: "distance" | "rating" | "price";
+  serviceCategory?: string;
   card: RadiusCardHandlers;
   onUseShop: (shop: Provider) => void;
   onClose: () => void;
@@ -57,7 +59,7 @@ function pillFor(shop: Provider, t: Strings): string | null {
   return `~${walkMinutes(shop.distance)} ${t.route.min}`;
 }
 
-export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, radius, onRadius, mode, card, onUseShop, onClose}: Props) {
+export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, radius, onRadius, mode, sortBy, serviceCategory, card, onUseShop, onClose}: Props) {
   const scheme = useAppMode();
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const insets = useSafeAreaInsets();
@@ -93,6 +95,8 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
         kind: "SHOP",
         acceptingOnly: true,
         ...(vehicleClass ? {vehicleClass} : {}),
+        ...(sortBy ? {sortBy} : {}),
+        ...(serviceCategory ? {serviceCategory: serviceCategory as ServiceCategory} : {}),
       });
       setShops(found);
     } catch (err) {
@@ -100,7 +104,7 @@ export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, r
     } finally {
       setLoading(false);
     }
-  }, [token, gps?.lat, gps?.lng, radius, vehicleClass]);
+  }, [token, gps?.lat, gps?.lng, radius, vehicleClass, sortBy, serviceCategory]);
   useEffect(() => {
     void load();
   }, [load]);

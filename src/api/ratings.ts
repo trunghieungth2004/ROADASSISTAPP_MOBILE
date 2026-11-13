@@ -37,6 +37,8 @@ export type UserRating = {
   ticketId?: string;
   repliedAt?: string | null;
   createdAt?: string;
+  excluded?: boolean;
+  appealStatus?: string | null;
 };
 
 export type UserRatings = {
@@ -51,4 +53,43 @@ export async function userRatings(userId: string, targetKind: "RIDER", ticketId:
 
 export async function ratingsByTicket(ticketId: string, token: string): Promise<UserRating[]> {
   return api.post<UserRating[]>("/ratings/by-ticket", {ticketId}, token);
+}
+
+export type RatingAppealStatus = "OPEN" | "RESOLVED" | "DISMISSED" | null;
+
+export type ReceivedRating = {
+  id: string;
+  score: number;
+  text: string | null;
+  ticketId: string;
+  createdAt: string;
+  byUserId: string;
+  byUserName: string | null;
+  excluded: boolean;
+  appealStatus: RatingAppealStatus;
+  appealResolution: string | null;
+  appealReason?: string | null;
+  appealNote?: string | null;
+  appealCreatedAt?: string | null;
+  appealDecidedAt?: string | null;
+  canAppeal: boolean;
+};
+
+export type ReceivedRatingGroup = {
+  id: string;
+  name: string;
+  avg: number;
+  count: number;
+  window: number;
+  ratings: ReceivedRating[];
+};
+
+export type ReceivedRatings = {
+  rider: ReceivedRatingGroup;
+  providers: ReceivedRatingGroup[];
+};
+
+
+export async function receivedRatings(token: string): Promise<ReceivedRatings> {
+  return api.post<ReceivedRatings>("/ratings/received", {}, token);
 }

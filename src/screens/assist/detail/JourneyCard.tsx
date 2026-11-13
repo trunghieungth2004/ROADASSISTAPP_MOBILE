@@ -74,7 +74,7 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
             <Text style={[detailStyles.pillText, {color: onColor(partyStateColor)}]}>{party.openNow ? t.shop.open : t.shop.closed}</Text>
           </View>
         ) : null}
-        {partyOnPress !== null ? <MaterialIcons name="chevron-right" size={18} color={theme.muted} /> : null}
+        
       </View>
       {party.kind === "SHOP" || party.kind === "MOBILE_SHOP" ? (
         party.label !== null ? <Text style={[detailStyles.labelText, {color: theme.muted}]}>{party.label}</Text> : null
@@ -106,7 +106,7 @@ export default function JourneyCard({t, lang, theme, ticket, inbound, party, par
                   <Text style={[detailStyles.pillText, {color: onColor(destStateColor)}]}>{destShop.openNow ? t.shop.open : t.shop.closed}</Text>
                 </View>
               ) : null}
-              {onOpenDestination !== null ? <MaterialIcons name="chevron-right" size={18} color={theme.muted} /> : null}
+              
             </View>
             <Stars theme={theme} avg={destShop.avg} count={destShop.count} />
             {destShop.phone !== null ? <PhoneLink theme={theme} phone={destShop.phone} /> : null}
