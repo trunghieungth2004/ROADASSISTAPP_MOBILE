@@ -6,7 +6,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {formatPoint} from "../api/places";
 import type {Place} from "../components/place-search/PlaceSearch.types";
 import type {Strings} from "../i18n/en";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {TOW_TYPES, isValidTowPlate, normalizeTowPlate, validateTowDraft} from "../services/towPlates";
 import {DOW, buildOpenHours, emptyWeek, summarizeWeek, type Day, type WeekHours} from "./more/shopHours";
 import PlaceSearchScreen from "./PlaceSearchScreen";
@@ -41,7 +41,7 @@ function RoleIcon({name, active, theme}: {name: (typeof ROLE_ICONS)[keyof typeof
 
 export default function OnboardingScreen({t, lang, token, busy, error, selectedServices, registered, onFinish, onSkip}: OnboardingProps) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const shopChosen = (selectedServices ?? []).includes("SHOP");
   const towChosen = (selectedServices ?? []).includes("TOW");
   const mobileShopChosen = (selectedServices ?? []).includes("MOBILE_SHOP");

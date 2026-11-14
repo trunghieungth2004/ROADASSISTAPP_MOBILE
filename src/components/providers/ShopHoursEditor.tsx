@@ -3,7 +3,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {DOW, formatTimeInput, isOvernight, isValidTime, type Day} from "../../screens/more/shopHours";
 
 type Props = {
@@ -24,7 +24,7 @@ function applyAll(setDay: Props["setDay"], open: string, close: string, days: re
 
 export default function ShopHoursEditor({t, week, setDay}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <View style={styles.editor}>
       <View style={styles.row}>

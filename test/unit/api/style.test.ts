@@ -47,7 +47,15 @@ test("dark scheme builds a different basemap on the same tileset", () => {
   expect(dark.sources).toHaveProperty("maptiler_planet_v4");
 });
 
+test("amoled scheme uses a true-black background and preserves the tileset", () => {
+  const amoled = buildMapStyle("test-key-123", "amoled");
+  expect(JSON.stringify(backgroundOf(amoled))).toContain("#000000");
+  expect(JSON.stringify(amoled)).toContain("test-key-123");
+  expect(amoled.sources).toHaveProperty("maptiler_planet_v4");
+});
+
 test("bundledMapStyle defaults to light and switches on scheme", () => {
   expect(backgroundOf(bundledMapStyle())).toEqual(backgroundOf(buildMapStyle("x", "light")));
   expect(backgroundOf(bundledMapStyle("dark"))).not.toEqual(backgroundOf(bundledMapStyle("light")));
+  expect(JSON.stringify(backgroundOf(bundledMapStyle("amoled")))).toContain("#000000");
 });

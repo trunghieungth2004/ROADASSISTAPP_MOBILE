@@ -221,6 +221,58 @@ test("the record opens the journey bill", async () => {
   }
 });
 
+test("prior tower travel shows its distance in the payment card", async () => {
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "TOW",
+      status: "1",
+      direction: "out",
+      towFeeHistory: [{
+        shopId: "old",
+        shopName: "Old Tow",
+        amount: 50000,
+        deadheadKm: 2.5,
+        loadedKm: 5,
+        at: "2026-01-01T00:00:00.000Z",
+        reasonCode: "TOWER_CANCEL_BREAKDOWN",
+      }],
+    }),
+  });
+  try {
+    expect(texts(renderer)).toContain(
+      en.assist.priorTowDistance.replace("{km}", "7.50"),
+    );
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("an in-progress SOS keeps its payment total and details link", async () => {
+  const onOpenBill = jest.fn();
+  const {renderer} = await render({
+    ticket: ticket({
+      ticketType: "SOS",
+      status: "6",
+      direction: "out",
+      assignedShopId: "mobile1",
+      finalAmount: 120000,
+      otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"},
+    }),
+    onOpenBill,
+  });
+  try {
+    expect(texts(renderer)).toContain("120,000 VND");
+    expect(actionLabels(renderer)).toContain(en.payments.detailTitle);
+    const open = tap(renderer, en.payments.detailTitle);
+    await act(async () => {
+      open?.props.onPress?.();
+    });
+    expect(onOpenBill).toHaveBeenCalledWith(expect.objectContaining({id: "t1"}));
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("an active tow opens payment details before a bill exists", async () => {
   const onOpenBill = jest.fn();
   const {renderer} = await render({

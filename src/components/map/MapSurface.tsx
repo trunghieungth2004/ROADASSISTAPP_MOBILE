@@ -5,7 +5,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../ui/AppText";
 import {useStrings} from "../../context/LanguageContext";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {config} from "../../config";
 
 type MapProps = ComponentProps<typeof Map>;
@@ -26,7 +26,7 @@ export default function MapSurface({
 }: Props) {
   const {t} = useStrings();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [retryKey, setRetryKey] = useState(0);
   const [mapFailed, setMapFailed] = useState(false);
   const [probeFailed, setProbeFailed] = useState(false);

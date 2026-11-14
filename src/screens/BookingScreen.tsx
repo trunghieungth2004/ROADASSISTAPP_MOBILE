@@ -10,7 +10,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useAppMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {toMessage} from "../api/client";
 import {arriveBooking, cancelBooking, createBookingTow, depositCheckout, myBookings, type Booking, type BookingStatus} from "../api/bookings";
 import {myProviders, type Provider, type ProviderService} from "../api/providers";
@@ -46,7 +46,7 @@ export default function BookingScreen() {
   const route = useRoute();
   const params = (route.params ?? {}) as RouteParams;
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const locale = lang === "vi" ? "vi-VN" : "en-US";
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -381,13 +381,13 @@ export default function BookingScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {padding: 16, gap: 12},
+  scroll: {padding: 16, gap: 14},
   headRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between"},
   title: {fontSize: 22, fontWeight: "800"},
   bookBtn: {flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12},
   bookBtnText: {fontSize: 13, fontWeight: "700"},
   section: {fontSize: 11, fontWeight: "700", letterSpacing: 0.8, marginTop: 8},
-  card: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 8},
+  card: {borderWidth: 1, borderRadius: 18, padding: 16, gap: 10},
   cardHead: {flexDirection: "row", alignItems: "flex-start", gap: 10},
   cardHeadText: {flex: 1, gap: 2},
   shopName: {fontSize: 16, fontWeight: "700"},
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   secondaryText: {fontSize: 13, fontWeight: "600"},
   primary: {borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16},
   primaryText: {color: "#fff", fontSize: 13, fontWeight: "700"},
-  empty: {borderWidth: 1, borderRadius: 16, padding: 24, alignItems: "center", gap: 8},
+  empty: {borderWidth: 1, borderRadius: 20, padding: 28, alignItems: "center", gap: 8},
   emptyTitle: {fontSize: 16, fontWeight: "700"},
   emptyHint: {fontSize: 13, textAlign: "center"},
   error: {fontSize: 12},

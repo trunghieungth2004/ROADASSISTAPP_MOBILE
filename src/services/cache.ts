@@ -2,6 +2,7 @@ type Entry = {value: unknown; expiresAt: number};
 
 const store = new Map<string, Entry>();
 const pending = new Map<string, Promise<unknown>>();
+const generations = new Map<string, number>();
 
 export const CACHE_TTL_MS: Record<string, number> = {
   savedPlaces: 30000,
@@ -31,22 +32,37 @@ export function cacheSet(key: string, value: unknown, ttlMs: number): void {
   store.set(key, {value, expiresAt: Date.now() + ttlMs});
 }
 
+const bumpGeneration = (key: string): void => {
+  generations.set(key, (generations.get(key) ?? 0) + 1);
+};
+
 export function cacheDel(key: string): void {
   store.delete(key);
+  pending.delete(key);
+  bumpGeneration(key);
 }
 
 export function cacheClear(prefix?: string): void {
   if (!prefix) {
     store.clear();
+    for (const key of pending.keys()) bumpGeneration(key);
+    pending.clear();
     return;
   }
   for (const key of [...store.keys()]) {
     if (key.startsWith(prefix)) store.delete(key);
   }
+  for (const key of [...pending.keys()]) {
+    if (key.startsWith(prefix)) {
+      pending.delete(key);
+      bumpGeneration(key);
+    }
+  }
 }
 
 export function clearApiCache(): void {
   store.clear();
+  for (const key of pending.keys()) bumpGeneration(key);
   pending.clear();
 }
 
@@ -55,15 +71,18 @@ export async function withCache<T>(key: string, ttlMs: number, loader: () => Pro
   if (hit !== null) return hit;
   const ongoing = pending.get(key);
   if (ongoing) return ongoing as Promise<T>;
+  const generation = generations.get(key) ?? 0;
   const task = (async (): Promise<T> => {
     const value = await loader();
-    cacheSet(key, value, ttlMs);
+    if ((generations.get(key) ?? 0) === generation) {
+      cacheSet(key, value, ttlMs);
+    }
     return value;
   })();
   pending.set(key, task);
   try {
     return await task;
   } finally {
-    pending.delete(key);
+    if (pending.get(key) === task) pending.delete(key);
   }
 }

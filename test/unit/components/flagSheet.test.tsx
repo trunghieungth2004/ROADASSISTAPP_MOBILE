@@ -181,6 +181,7 @@ test("add tile disappears at the three-photo cap", async () => {
     ttlMinutes: 120,
     note: "",
     photoUris: ["a.jpg", "b.jpg", "c.jpg"],
+    photoBusy: false,
     photoError: null,
     setType: () => undefined,
     setRadiusMeters: () => undefined,

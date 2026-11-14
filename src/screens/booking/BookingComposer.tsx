@@ -3,7 +3,7 @@ import {ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View} f
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {useStrings} from "../../context/LanguageContext";
 import {toMessage} from "../../api/client";
 import {
@@ -53,7 +53,7 @@ type Props = {
 export default function BookingComposer({token, providerId, providerName, services, onCreated, onClose, inModal = false}: Props) {
   const {t, lang} = useStrings();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const locale = lang === "vi" ? "vi-VN" : "en-US";
   const dates = useMemo(() => Array.from({length: DAYS_AHEAD}, (_, i) => localDateKey(i)), []);
   const [date, setDate] = useState(dates[0]);

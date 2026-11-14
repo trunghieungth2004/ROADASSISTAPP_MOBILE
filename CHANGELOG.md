@@ -7,6 +7,40 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
+### Added
+
+- Dashboard with a rider/provider switch for trips, spending, jobs and payouts.
+- Rider Booking flow: shop search, available slots, deposit checkout and my bookings.
+- Refunds tab in Payments, with refund status, reason, transfer reference and a
+  link to the related payment.
+- SOS cancel sheet with cancel-whole-request and find-another-shop actions.
+- Live TOW tower position and tower-origin route updates while a job is active.
+- Provider location updates continue during active TOW and mobile-shop jobs.
+- TOW payment choice after delivery: cash or SePay, including switching a
+  pending cash payment to SePay.
+
+### Changed
+
+- Cases are combined across rider and provider roles; the dashboard switch only
+  filters dashboard data.
+- A delivered TOW bill starts unpaid instead of forcing cash on the tower.
+- Refund details now use payment wording and open the payment sheet.
+- Profile service chips include TOW and mobile-shop provider roles.
+- More dashboard entry and the mobile dashboard card were simplified.
+
+### Fixed
+
+- TOW cancellation now keeps prior-tower travel payable and shows the correct
+  distance.
+- Refunds are requested for unfixable SePay and confirmed payments, including
+  SOS call-out-only closes.
+- Unfixable tickets refresh immediately and no longer leave stale actions.
+- Cached ticket feeds are invalidated after actions.
+- SOS billing and status handling for in-progress and completed work.
+- Map route focus and route-key updates during tower movement.
+
 ## [0.3.1] - 2026-11-13
 
 ### Added

@@ -136,7 +136,7 @@ function breakdownDetail(code: string | undefined, row: {detail: string | null},
   if (code === "NIGHT") {
     return item.nightMultiplier !== null && item.nightMultiplier !== undefined ? t.bills.nightMultiplierDetail.replace("{mult}", String(item.nightMultiplier)) : t.bills.nightApplied;
   }
-  if (code === "PRIOR_TOW") return t.bills.priorTowerTravelHint;
+  if (code === "PRIOR_TOW") return row.detail ?? t.bills.priorTowerTravelHint;
   if (code === "CEILING") return null;
   if (code === "ROUNDING") return t.bills.roundingHint;
   return row.detail;

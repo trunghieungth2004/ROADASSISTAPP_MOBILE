@@ -3,7 +3,7 @@ import {Pressable, StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import type {Strings} from "../../i18n/en";
 
@@ -23,7 +23,7 @@ type Props = {
 
 export default function ReturnTowSheet({t, current, origin, destination, onOpenSearch, busy, error, onConfirm, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [choice, setChoice] = useState<"CURRENT" | "ORIGIN">(
     current !== null ? "CURRENT" : "ORIGIN",
   );

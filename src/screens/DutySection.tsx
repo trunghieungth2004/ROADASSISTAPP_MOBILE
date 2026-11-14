@@ -10,7 +10,7 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 
 type Props = {
   providers: Provider[];
@@ -23,7 +23,7 @@ export default function DutySection({providers, onProvidersChanged, onNotice, on
   const {t} = useStrings();
   const {token} = useAuth();
   const {mode} = useThemeMode();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const [providerBusy, setProviderBusy] = useState(false);
   const [tick, setTick] = useState(0);
   useFocusEffect(useCallback(() => {

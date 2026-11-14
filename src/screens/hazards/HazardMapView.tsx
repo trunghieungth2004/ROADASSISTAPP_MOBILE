@@ -10,7 +10,7 @@ import FlagMapLayers from "../../components/flags/FlagMapLayers";
 import FlagPinImages from "../../components/flags/MapPinImages";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
 import {useStyleVeil} from "../../components/map/useStyleVeil";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {HCMC_CENTER} from "../route/types";
 import {shouldAutoFit} from "../route/cameraIntent";
 
@@ -22,7 +22,7 @@ type Props = {
 
 export default function HazardMapView(props: Props) {
   const scheme = useAppMode();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const veilBackground = scheme === "dark" ? darkTheme.background : lightTheme.background;
   const cameraRef = useRef<CameraRef | null>(null);

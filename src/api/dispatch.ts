@@ -442,6 +442,12 @@ export async function declineMobileFix(ticketId: string, reason: string | undefi
   return res;
 }
 
+export async function changeMobileShop(ticketId: string, reason: string | undefined, token: string): Promise<{changed: boolean; requeued: boolean; noCandidates: boolean}> {
+  const res = await api.post<{changed: boolean; requeued: boolean; noCandidates: boolean}>("/dispatch/mobile-shop/change", {ticketId, ...(reason ? {reason} : {})}, token);
+  bustTicketCaches(token);
+  return res;
+}
+
 export async function declineQuote(ticketId: string, reason: string | undefined, token: string): Promise<{declined: boolean; status: string}> {
   const res = await api.post<{declined: boolean; status: string}>("/dispatch/quote/decline", {ticketId, ...(reason ? {reason} : {})}, token);
   bustTicketCaches(token);

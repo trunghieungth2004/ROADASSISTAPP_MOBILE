@@ -1,6 +1,6 @@
 import {describe, expect, it} from "@jest/globals";
 import type {FeedTicket} from "../../../../src/api/dispatch";
-import {jobRouteKeyFor} from "../../../../src/screens/assist/jobRoute";
+import {isLiveJob, jobRouteKeyFor} from "../../../../src/screens/assist/jobRoute";
 
 const base = {
   id: "t1",
@@ -13,7 +13,20 @@ const base = {
   destinationSnapshot: {id: "shop1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP"},
 } as FeedTicket;
 
+describe("isLiveJob", () => {
+  it("keeps an in-progress SOS on the map", () => {
+    expect(isLiveJob({...base, ticketType: "SOS", status: "6"} as FeedTicket)).toBe(true);
+    expect(isLiveJob({...base, status: "6"} as FeedTicket)).toBe(false);
+  });
+});
+
 describe("jobRouteKeyFor", () => {
+  it("uses the pickup when the tower fix is missing on arrival", () => {
+    const key = jobRouteKeyFor({...base, status: "3", towerFix: null} as FeedTicket, null);
+    expect(key).not.toBeNull();
+    expect(key).toContain(`${base.lat.toFixed(4)}:${base.lng.toFixed(4)}`);
+  });
+
   it("changes when the tower position becomes available", () => {
     const before = jobRouteKeyFor(base, null);
     const after = jobRouteKeyFor({...base, towerFix: {lat: 10.69, lng: 106.59, at: "2026-01-01T00:00:00.000Z"}}, null);
@@ -36,10 +49,17 @@ describe("jobRouteKeyFor", () => {
     expect(second).not.toBe(first);
   });
 
+  it("updates the route key on small tower movement", () => {
+    const inbound = {...base, direction: "in", towerFix: null} as FeedTicket;
+    const first = jobRouteKeyFor(inbound, null, {lat: 10.69121, lng: 106.59121});
+    const moved = jobRouteKeyFor(inbound, null, {lat: 10.69136, lng: 106.59136});
+    expect(moved).not.toBe(first);
+  });
+
   it("keeps the key stable while the tower is parked", () => {
     const inbound = {...base, direction: "in", towerFix: null} as FeedTicket;
-    const first = jobRouteKeyFor(inbound, null, {lat: 10.6912, lng: 106.5912});
-    const parked = jobRouteKeyFor(inbound, null, {lat: 10.6914, lng: 106.5914});
+    const first = jobRouteKeyFor(inbound, null, {lat: 10.69121, lng: 106.59121});
+    const parked = jobRouteKeyFor(inbound, null, {lat: 10.69124, lng: 106.59124});
     expect(parked).toBe(first);
   });
 

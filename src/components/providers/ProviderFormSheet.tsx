@@ -5,7 +5,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {formatPoint} from "../../api/places";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme, type AppTheme} from "../../theme";
+import {themeForMode, type AppTheme} from "../../theme";
 import ShopHoursEditor from "./ShopHoursEditor";
 import {TOW_TYPES} from "../../services/towPlates";
 import type {ProviderDraftState} from "./useProviderDraft";
@@ -28,7 +28,7 @@ function SectionTitle({label, theme}: {label: string; theme: AppTheme}) {
 
 export default function ProviderFormSheet({t, draft, pricingLimits = null}: Props) {
   const scheme = useAppMode();
-  const theme: AppTheme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme: AppTheme = themeForMode(scheme);
   const {kind, provider} = draft;
   const [openService, setOpenService] = useState<number | null>(null);
   const limitLabel = (min?: number, max?: number): string => {

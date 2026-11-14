@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme, type AppTheme} from "../../theme";
+import {themeForMode, type AppTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 import {resolvePhotoUrl} from "../../services/photos";
@@ -70,7 +70,7 @@ export default function DisputeDetailSheet({
   onClose: () => void;
 }) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const photoViewer = usePhotoViewer(t.common.cancel);
   const photos = (Array.isArray(dispute.photoUrls) ? dispute.photoUrls : []).slice(0, 5);
   const result = disputeResultLabel(dispute.status, dispute.outcome, t);

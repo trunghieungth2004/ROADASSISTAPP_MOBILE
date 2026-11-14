@@ -19,7 +19,7 @@ import type {Place} from "../../components/place-search";
 import {useAuth} from "../../context/AuthContext";
 import {useProfile} from "../../context/ProfileContext";
 import {useStrings} from "../../context/LanguageContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 
 import {useNavSession} from "../../context/NavSessionContext";
 
@@ -42,7 +42,7 @@ export default function useRouteController() {
   const navigation = useNavigation();
   const {vehicles, activeVehicle, activateVehicle, hasVehicle} = useProfile();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraRef | null>(null);
   const seqRef = useRef(0);

@@ -9,7 +9,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useAppMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {toMessage} from "../api/client";
 import {
   createSupportTicket,
@@ -30,7 +30,7 @@ export default function SupportScreen() {
   const {t} = useStrings();
   const {token} = useAuth();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [rows, setRows] = useState<SupportTicket[]>([]);
   const [category, setCategory] = useState<SupportCategory>("APP");
@@ -129,15 +129,15 @@ export default function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {padding: 16, gap: 12},
+  scroll: {padding: 16, gap: 14},
   title: {fontSize: 22, fontWeight: "800"},
   hint: {fontSize: 12, lineHeight: 18},
-  card: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 10},
+  card: {borderWidth: 1, borderRadius: 20, padding: 16, gap: 12},
   chips: {flexDirection: "row", flexWrap: "wrap", gap: 8},
   chip: {borderWidth: 1, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12},
   chipText: {fontSize: 12, fontWeight: "600"},
-  input: {borderWidth: 1, borderRadius: 10, padding: 10, minHeight: 110, textAlignVertical: "top"},
-  submit: {borderRadius: 10, paddingVertical: 11, alignItems: "center"},
+  input: {borderWidth: 1, borderRadius: 14, padding: 12, minHeight: 110, textAlignVertical: "top"},
+  submit: {borderRadius: 14, paddingVertical: 12, alignItems: "center"},
   submitText: {color: "#fff", fontSize: 14, fontWeight: "700"},
   section: {fontSize: 11, fontWeight: "700", letterSpacing: 0.8, marginTop: 8},
   rowHead: {flexDirection: "row", justifyContent: "space-between", gap: 8},

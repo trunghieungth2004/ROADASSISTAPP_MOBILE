@@ -1,5 +1,5 @@
 import {useCallback, useState} from "react";
-import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
+import {ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useFocusEffect} from "@react-navigation/native";
@@ -8,7 +8,7 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
@@ -22,11 +22,12 @@ export default function ProvidersScreen() {
   const {t} = useStrings();
   const {token} = useAuth();
   const {mode} = useThemeMode();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const insets = useSafeAreaInsets();
   const [notice, setNotice] = useState<string | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerBusy, setProviderBusy] = useState(false);
+  const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | "MOBILE_SHOP" | null>(null);
   const [providerDetail, setProviderDetail] = useState<Provider | null>(null);
@@ -37,12 +38,17 @@ export default function ProvidersScreen() {
   const loadProviders = useCallback(async (): Promise<void> => {
     if (!token) {
       setProviders([]);
+      setProvidersLoading(false);
       return;
     }
+    setProvidersLoading(true);
+    setProviderError(null);
     try {
       setProviders(await myProviders(token));
     } catch (err) {
       setProviderError(toMessage(err));
+    } finally {
+      setProvidersLoading(false);
     }
   }, [token]);
   useFocusEffect(useCallback(() => {
@@ -84,7 +90,7 @@ export default function ProvidersScreen() {
         <View style={styles.header}>
           <Text style={[styles.title, {color: theme.text}]}>{t.provider.title}</Text>
           {missing.shop || missing.tow || missing.mobileShop ? (
-            <View style={styles.headerBtns}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.headerBtns}>
               {missing.mobileShop ? (
                 <Pressable style={[styles.addBtn, {backgroundColor: theme.primary}]} onPress={() => setProviderCreate("MOBILE_SHOP")} accessibilityRole="button" accessibilityLabel={t.provider.addMobileShop}>
                   <MaterialIcons name="build" size={20} color="#fff" />
@@ -103,9 +109,23 @@ export default function ProvidersScreen() {
                   <Text style={styles.addBtnText}>{t.provider.registerTow}</Text>
                 </Pressable>
               ) : null}
-            </View>
+            </ScrollView>
           ) : null}
         </View>
+        {providersLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={{color: theme.muted}}>{t.common.loading}</Text>
+          </View>
+        ) : null}
+        {!providersLoading && providers.length === 0 ? (
+          <View style={[styles.emptyState, {backgroundColor: theme.paper, borderColor: theme.border}]}>
+            <MaterialIcons name="storefront" size={32} color={theme.muted} />
+            <Text style={[styles.emptyTitle, {color: theme.text}]}>{t.provider.none}</Text>
+            <Text style={[styles.emptyText, {color: theme.muted}]}>{t.provider.noneHint}</Text>
+          </View>
+        ) : null}
+        {providers.length > 0 ? (
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
           {providers.map((provider, index) => {
             const pill = providerPill(provider, t);
@@ -156,6 +176,7 @@ export default function ProvidersScreen() {
             );
           })}
         </View>
+        ) : null}
         {revokeFor ? (
           <Overlay
             visible
@@ -209,13 +230,13 @@ export default function ProvidersScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {padding: 16, gap: 12},
+  scroll: {padding: 16, gap: 14},
   header: {gap: 12},
-  title: {fontSize: 20, fontWeight: "700"},
-  headerBtns: {flexDirection: "row", gap: 8},
-  addBtn: {flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 8, padding: 12},
+  title: {fontSize: 22, fontWeight: "800"},
+  headerBtns: {gap: 8},
+  addBtn: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, padding: 13, minWidth: 150},
   addBtnText: {color: "#fff", fontWeight: "700"},
-  card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
+  card: {borderWidth: 1, borderRadius: 20, overflow: "hidden"},
   listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},
   permText: {flex: 1, minWidth: 0, gap: 2},
@@ -226,4 +247,8 @@ const styles = StyleSheet.create({
   permBtnText: {fontSize: 13, fontWeight: "700"},
   divider: {height: 1, marginHorizontal: 16},
   providerCtas: {flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 14},
+  loadingState: {alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 28},
+  emptyState: {alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 20, padding: 24},
+  emptyTitle: {fontSize: 16, fontWeight: "800"},
+  emptyText: {fontSize: 13, textAlign: "center", lineHeight: 19},
 });

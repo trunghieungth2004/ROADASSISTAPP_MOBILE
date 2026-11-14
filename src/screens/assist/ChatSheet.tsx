@@ -6,11 +6,11 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import {delayReasonLabel} from "./delayReasons";
-import {darkTheme, lightTheme, onColor, type AppTheme} from "../../theme";
+import {themeForMode, onColor, type AppTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {chatMessages, openChat, sendChatMessage, type ChatMessage, type ChatScope} from "../../api/chat";
 import {toMessage} from "../../api/client";
-import {takePhoto, uploadPhotoPaths, resolvePhotoUrl} from "../../services/photos";
+import {isPhotoPermissionError, isPhotoUploadError, pickPhotos, takePhoto, uploadPhotoPaths, resolvePhotoUrl} from "../../services/photos";
 import PhotoThumb from "../../components/ui/PhotoThumb";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 import {statusPillColor, ticketStatusLabel, ticketTypeLabel, unfixableReasonLabel} from "./ticketLabels";
@@ -160,11 +160,12 @@ function systemColor(message: ChatMessage, theme: AppTheme): string {
 
 export default function ChatSheet({t, token, uid, scope, refId, title, ticketType, status, otherName, version, archived = false, readOnly = false, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [archivedNow, setArchivedNow] = useState(false);
@@ -224,12 +225,17 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
       clearInterval(timer);
     };
   }, [loadMessages, refId, scope, token]);
-  async function addPhoto(): Promise<void> {
+  async function addPhoto(source: "camera" | "library"): Promise<void> {
+    if (photoBusy || photos.length >= 3) return;
+    setPhotoBusy(true);
+    setError(null);
     try {
-      const picked = await takePhoto();
+      const picked = source === "camera" ? await takePhoto() : await pickPhotos(3, photos.length);
       if (picked.length > 0) setPhotos((prev) => [...prev, ...picked].slice(0, 3));
     } catch (err) {
-      setError(toMessage(err));
+      setError(isPhotoPermissionError(err) ? (source === "camera" ? t.photos.cameraDenied : t.photos.denied) : toMessage(err));
+    } finally {
+      setPhotoBusy(false);
     }
   }
   async function send(): Promise<void> {
@@ -246,7 +252,7 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
       setDraft("");
       setPhotos([]);
     } catch (err) {
-      setError(toMessage(err));
+      setError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setBusy(false);
     }
@@ -359,7 +365,9 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
               <View style={styles.pendingPhotos}>
                 {photos.map((path, index) => (
                   <View key={`${path}-${index}`} style={styles.pendingPhotoWrap}>
-                    <Image source={{uri: path}} style={styles.pendingPhoto} />
+                    <Pressable onPress={() => photoViewer.open(path)} accessibilityRole="button" accessibilityLabel={`${t.chat.photo} ${index + 1}`}>
+                      <Image source={{uri: path}} style={styles.pendingPhoto} />
+                    </Pressable>
                     <Pressable style={[styles.removePhoto, {backgroundColor: theme.danger}]} onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))} accessibilityRole="button" accessibilityLabel={t.common.delete}>
                       <MaterialIcons name="close" size={12} color="#fff" />
                     </Pressable>
@@ -368,8 +376,11 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
               </View>
             ) : null}
             <View style={styles.composer}>
-              <Pressable onPress={() => void addPhoto()} style={[styles.iconBtn, {borderColor: theme.border, backgroundColor: theme.paper}]} accessibilityRole="button" accessibilityLabel={t.photos.take}>
-                <MaterialIcons name="photo-camera" size={20} color={theme.primary} />
+              <Pressable onPress={() => void addPhoto("camera")} disabled={photoBusy || photos.length >= 3} style={[styles.iconBtn, {borderColor: theme.border, backgroundColor: theme.paper}, photoBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.photos.take}>
+                {photoBusy ? <ActivityIndicator color={theme.primary} /> : <MaterialIcons name="photo-camera" size={20} color={theme.primary} />}
+              </Pressable>
+              <Pressable onPress={() => void addPhoto("library")} disabled={photoBusy || photos.length >= 3} style={[styles.iconBtn, {borderColor: theme.border, backgroundColor: theme.paper}, photoBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.photos.choose}>
+                {photoBusy ? <ActivityIndicator color={theme.primary} /> : <MaterialIcons name="photo-library" size={20} color={theme.primary} />}
               </Pressable>
               <TextInput
                 style={[styles.input, {borderColor: theme.border, color: theme.text, backgroundColor: theme.paper}]}
@@ -435,6 +446,7 @@ const styles = StyleSheet.create({
   composerWrap: {borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 8, gap: 8},
   composer: {flexDirection: "row", alignItems: "center", gap: 8},
   iconBtn: {width: 42, height: 42, borderWidth: 1, borderRadius: 21, alignItems: "center", justifyContent: "center"},
+  disabled: {opacity: 0.6},
   input: {flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100},
   sendBtn: {width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center"},
   sendBtnDisabled: {opacity: 0.45},

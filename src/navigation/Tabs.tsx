@@ -4,14 +4,14 @@ import {useAppMode} from "../context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {AppText as Text} from "../components/ui/AppText";
 import {createBottomTabNavigator, type BottomTabBarProps} from "@react-navigation/bottom-tabs";
-import {MaterialCommunityIcons, MaterialIcons} from "@expo/vector-icons";
+import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {useBills} from "../context/BillsContext";
-import {darkTheme, lightTheme, onColor} from "../theme";
+import {themeForMode, onColor} from "../theme";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen, {type MobileShopDraft, type ShopDraft, type TowDraft} from "../screens/OnboardingScreen";
 import PermissionGateScreen from "../screens/PermissionGateScreen";
@@ -37,7 +37,7 @@ function TabBar({state, descriptors, navigation}: BottomTabBarProps) {
   const {t} = useStrings();
   const {dueCount} = useBills();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const focusedOptions = descriptors[state.routes[state.index].key]?.options as {tabBarStyle?: {display?: string}} | undefined;
   if (focusedOptions?.tabBarStyle?.display === "none") return null;
@@ -68,7 +68,7 @@ function UnsupportedRole() {
   const {signOut} = useAuth();
   const {refresh, loading} = useProfile();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <View style={[styles.center, {backgroundColor: theme.background}]}>
       <Text style={{color: theme.text}}>{t.roles.unsupported}</Text>
@@ -195,7 +195,7 @@ export default function Tabs() {
     }).catch(() => undefined);
   }, [token]);
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   if (!loaded || (token && loading && !bundle)) return <View style={styles.center}><ActivityIndicator /></View>;
   if (!token) return <LoginScreen />;
   if (!roleChosen) return <OnboardingGate />;
@@ -211,4 +211,16 @@ export default function Tabs() {
     </Tab.Navigator>
   );
 }
-const styles = StyleSheet.create({center: {flex: 1, alignItems: "center", justifyContent: "center", gap: 12}, primary: {borderRadius: 8, padding: 12}, disabled: {opacity: 0.6}, primaryText: {color: "#fff", fontWeight: "700"}, tabBar: {flexDirection: "row", borderTopWidth: 1, paddingTop: 6}, tabItem: {flex: 1, alignItems: "center", justifyContent: "center", minHeight: 58, gap: 3}, iconWrap: {alignItems: "center", justifyContent: "center"}, iconSlot: {width: 48, height: 32, borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center"}, badge: {position: "absolute", top: -4, right: 0, minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center"}, badgeText: {color: "#fff", fontSize: 10, fontWeight: "700"}, tabLabel: {fontSize: 11, fontWeight: "600", maxWidth: "100%"}});
+const styles = StyleSheet.create({
+  center: {flex: 1, alignItems: "center", justifyContent: "center", gap: 12},
+  primary: {borderRadius: 12, paddingVertical: 12, paddingHorizontal: 18},
+  disabled: {opacity: 0.6},
+  primaryText: {color: "#fff", fontWeight: "700"},
+  tabBar: {flexDirection: "row", borderTopWidth: 1, paddingTop: 8, minHeight: 72},
+  tabItem: {flex: 1, alignItems: "center", justifyContent: "center", minHeight: 58, gap: 4},
+  iconWrap: {alignItems: "center", justifyContent: "center"},
+  iconSlot: {width: 52, height: 34, borderRadius: 17, overflow: "hidden", alignItems: "center", justifyContent: "center"},
+  badge: {position: "absolute", top: -4, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center"},
+  badgeText: {color: "#fff", fontSize: 10, fontWeight: "700"},
+  tabLabel: {fontSize: 11, fontWeight: "700", maxWidth: "100%"},
+});

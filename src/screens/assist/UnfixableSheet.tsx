@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
 import {isPhotoPermissionError, pickPhotos, takePhoto, TICKET_PHOTO_MAX, type PhotoSource} from "../../services/photos";
@@ -28,7 +28,7 @@ type Props = {
 
 export default function UnfixableSheet({t, ticketLabel, status, busy, error, callOutWaived = false, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [reason, setReason] = useState<string | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);

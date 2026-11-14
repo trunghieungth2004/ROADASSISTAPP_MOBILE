@@ -7,13 +7,13 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {toMessage} from "../api/client";
 import {fetchBill, requestInvoice, type Bill, type BillItem} from "../api/bills";
 import {requestRefund} from "../api/refunds";
-import {cancelPayment, confirmCashReceipt, createPayment, fetchTicketPayments, type TicketPayment} from "../api/dispatch";
+import {cancelPayment, confirmCashReceipt, createPayment, DISPATCH_STATUS, fetchTicketPayments, type TicketPayment} from "../api/dispatch";
 import {useAuth} from "../context/AuthContext";
 import {useBills} from "../context/BillsContext";
 import {useStrings} from "../context/LanguageContext";
 import type {Strings} from "../i18n/en";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import {themeForMode, type AppTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
@@ -21,11 +21,14 @@ import SePayCheckoutSheet from "./assist/SePayCheckoutSheet";
 import WarrantyClaimDialog from "./bills/WarrantyClaimDialog";
 import {ActionFooter, type OverlayAction} from "../components/overlay/Overlay";
 import {
+  billDateLabel,
   billDateTimeLabel,
   billItemCount,
   billPayeeLabel,
   billTitle,
   payeeSummary,
+  refundStatusColor,
+  refundStatusLabel,
 } from "./bills/billLabels";
 import {
   BillChargesCard,
@@ -70,10 +73,11 @@ function BillHeroCard({bill, payeeMode, header, meta, t, theme}: {
   );
 }
 
-function BillExtras({item, payeeMode, payerMode, theme, t, onRefund, onClaim}: {
+function BillExtras({item, payeeMode, payerMode, canceledTow, theme, t, onRefund, onClaim}: {
   item: BillItem;
   payeeMode: boolean;
   payerMode: boolean;
+  canceledTow: boolean;
   theme: AppTheme;
   t: Strings;
   onRefund: () => void;
@@ -88,7 +92,7 @@ function BillExtras({item, payeeMode, payerMode, theme, t, onRefund, onClaim}: {
       ) : null}
       {item.refundRequest ? (
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <RefundLine request={item.refundRequest} theme={theme} label={t.bills.refund} />
+          <RefundLine request={item.refundRequest} theme={theme} t={t} />
         </View>
       ) : null}
       <WarrantyLinks item={item} theme={theme} t={t} canClaim={payerMode} onClaim={onClaim} />
@@ -98,7 +102,9 @@ function BillExtras({item, payeeMode, payerMode, theme, t, onRefund, onClaim}: {
         <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.cashPending}</Text>
       ) : null}
       {payerMode && item.status === "PENDING" && item.payment?.method === "CASH" ? (
-        <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.cashArmed}</Text>
+        <Text style={[styles.hint, {color: theme.muted}]}>
+          {canceledTow ? t.bills.cancellationCashHint : t.bills.cashArmed}
+        </Text>
       ) : null}
       {payerMode && item.status === "PENDING" && item.payment?.method === "SEPAY" ? (
         <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text>
@@ -122,14 +128,38 @@ function billActionsFor({bill, actionItem, payerMode, payeeMode, readOnly, busyT
   onInvoice: () => void;
 }): OverlayAction[] {
   const actions: OverlayAction[] = [];
+  const canceledTow = bill.ticketType === "TOW" &&
+    bill.ticketStatus === DISPATCH_STATUS.CANCELLED;
   if (actionItem !== null && payerMode && bill.canPay) {
     const busy = busyTicket === actionItem.ticketId;
     if (actionItem.status === "UNPAID") {
-      actions.push({label: t.bills.paySepay, tone: "primary", busy, onPress: () => onPay(actionItem, "SEPAY")});
-      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onPay(actionItem, "CASH")});
+      actions.push({
+        label: canceledTow ? t.bills.payCancellation : t.bills.paySepay,
+        tone: "primary",
+        busy,
+        onPress: () => onPay(actionItem, "SEPAY"),
+      });
+      if (!canceledTow) {
+        actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onPay(actionItem, "CASH")});
+      }
     } else if (actionItem.status === "PENDING" && actionItem.payment?.method === "SEPAY") {
-      actions.push({label: t.bills.openQr, tone: "primary", busy, onPress: () => onPay(actionItem, "SEPAY")});
-      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onSwitchToCash(actionItem)});
+      actions.push({
+        label: canceledTow ? t.bills.payCancellation : t.bills.openQr,
+        tone: "primary",
+        busy,
+        onPress: () => onPay(actionItem, "SEPAY"),
+      });
+      if (!canceledTow) {
+        actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onSwitchToCash(actionItem)});
+      }
+    } else if (actionItem.status === "PENDING" &&
+      actionItem.payment?.method === "CASH") {
+      actions.push({
+        label: canceledTow ? t.bills.payCancellation : t.bills.paySepay,
+        tone: "primary",
+        busy,
+        onPress: () => onPay(actionItem, "SEPAY"),
+      });
     }
   }
   if (actionItem !== null && payeeMode && !readOnly && actionItem.payment?.canConfirmCash === true) {
@@ -156,12 +186,46 @@ function RefundAction({item, theme, label, onPress}: {item: BillItem; theme: App
   );
 }
 
-function RefundLine({request, theme, label}: {request: BillItem["refundRequest"]; theme: AppTheme; label: string}) {
+function RefundLine({request, theme, t}: {
+  request: BillItem["refundRequest"];
+  theme: AppTheme;
+  t: Strings;
+}) {
   if (!request) return null;
+  const color = refundStatusColor(request.status, theme);
+  const open = request.status === "REQUESTED" ||
+    request.status === "APPROVED" ||
+    request.status === "SENT";
+  const rejected = request.status === "REJECTED" ||
+    request.status === "FAILED";
   return (
-    <Text style={[styles.muted, {color: theme.success}]}>
-      {`${label}: ${request.status} · ${request.amount.toLocaleString()} VND`}
-    </Text>
+    <>
+      <View style={styles.rowBetween}>
+        <Text style={[styles.cardTitle, {color: theme.text}]}>{t.bills.refund}</Text>
+        <BillStatusPill
+          label={refundStatusLabel(request.status, t)}
+          color={color}
+          theme={theme}
+        />
+      </View>
+      <Text style={[styles.muted, {color: theme.muted}]}>
+        {`${request.amount.toLocaleString()} VND · ${billDateLabel(request.requestedAt)}`}
+      </Text>
+      {request.transferRef ? (
+        <Text style={[styles.muted, {color: theme.muted}]}>
+          {`${t.payments.refundTransferRef}: ${request.transferRef}`}
+        </Text>
+      ) : null}
+      {open ? (
+        <Text style={[styles.hint, {color: theme.muted}]}>
+          {t.payments.refundPaidNote}
+        </Text>
+      ) : rejected ? (
+        <Text style={[styles.hint, {color: theme.danger}]}>
+          {t.payments.refundRejectedNote}
+        </Text>
+      ) : null}
+    </>
   );
 }
 
@@ -211,7 +275,7 @@ export default function BillDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const params = (route.params ?? {}) as BillParams;
   const ticketId = params.ticketId;
   const billId = params.billId;
@@ -404,6 +468,8 @@ export default function BillDetailScreen() {
     billItemCount(bill, t),
     payeeView ? null : billPayeeLabel(bill),
   ].filter((value) => typeof value === "string" && value !== "").join(" · ") : "";
+  const canceledTow = bill !== null && bill.ticketType === "TOW" &&
+    bill.ticketStatus === DISPATCH_STATUS.CANCELLED;
   const actionItem = bill?.items.find((row) => row.status === "UNPAID" && bill.canPay) ??
     bill?.items.find((row) => row.status === "PENDING") ?? bill?.items[0] ?? null;
   const actions: OverlayAction[] = bill ? billActionsFor({
@@ -476,6 +542,7 @@ export default function BillDetailScreen() {
                     item={item}
                     payeeMode={payeeView}
                     payerMode={payerMode}
+                    canceledTow={canceledTow}
                     theme={theme}
                     t={t}
                     onRefund={() => requestItemRefund(item)}
@@ -530,15 +597,15 @@ export default function BillDetailScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  scroll: {padding: 16, gap: 10, flexGrow: 1},
+  scroll: {padding: 16, gap: 14, flexGrow: 1},
   loader: {marginTop: 24},
-  banner: {borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", alignItems: "center", gap: 8},
+  banner: {borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", gap: 8},
   bannerText: {flex: 1, fontSize: 13, fontWeight: "600"},
-  errorCard: {borderWidth: 1, borderRadius: 12, padding: 12, gap: 8},
-  retryBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center"},
-  card: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 6},
+  errorCard: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 8},
+  retryBtn: {borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: "center"},
+  card: {borderWidth: 1, borderRadius: 20, padding: 16, gap: 8},
   cardTitle: {fontWeight: "700", fontSize: 17},
-  hero: {borderWidth: 1, borderRadius: 14, padding: 12, gap: 2, marginTop: 4},
+  hero: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 2, marginTop: 4},
   heroLabel: {fontSize: 11, fontWeight: "600"},
   heroAmount: {fontSize: 26, fontWeight: "800"},
   link: {fontSize: 13, fontWeight: "700"},

@@ -8,7 +8,7 @@ import MapSurface from "../../components/map/MapSurface";
 import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import type {RouteOption} from "../../api/routes";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {requireMapStyle} from "../../map/style";
 import StyledLayer from "../../components/map/StyledLayer";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
@@ -31,9 +31,9 @@ type Props = {
 
 export default function TowRoutePreview({t, summary, route, origin, pickup, dest, busy, onAccept, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const bounds = useMemo(

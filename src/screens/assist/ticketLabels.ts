@@ -87,6 +87,7 @@ export function statusStages(ticketType: string): string[] {
       DISPATCH_STATUS.MATCHED,
       DISPATCH_STATUS.ARRIVED,
       DISPATCH_STATUS.QUOTED,
+      DISPATCH_STATUS.IN_PROGRESS,
       DISPATCH_STATUS.READY,
       DISPATCH_STATUS.RESOLVED,
     ];

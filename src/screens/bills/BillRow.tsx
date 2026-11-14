@@ -81,13 +81,13 @@ export default function BillRow({bill, t, theme, mode = "rider", onPress}: Props
 }
 
 const styles = StyleSheet.create({
-  card: {borderWidth: 1, borderRadius: 16, padding: 14, gap: 10},
+  card: {borderWidth: 1, borderRadius: 18, padding: 16, gap: 12},
   head: {flexDirection: "row", alignItems: "center", gap: 10},
-  icon: {width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center"},
+  icon: {width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center"},
   headText: {flex: 1, gap: 2},
-  title: {fontWeight: "700", fontSize: 15},
+  title: {fontWeight: "700", fontSize: 15.5},
   meta: {fontSize: 11},
-  pill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
+  pill: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   pillText: {fontSize: 11, fontWeight: "700"},
   money: {gap: 3, marginTop: 2},
   moneyRow: {flexDirection: "row", justifyContent: "space-between", alignItems: "center"},

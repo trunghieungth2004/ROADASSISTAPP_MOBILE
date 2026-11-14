@@ -124,6 +124,23 @@ const CASH_PENDING_BILL: Bill = {
   ],
 };
 
+const CANCELLED_CASH_BILL: Bill = {
+  ...UNPAID_BILL,
+  ticketStatus: "5",
+  total: 50000,
+  paid: 0,
+  due: 50000,
+  items: [{
+    ...UNPAID_BILL.items[0],
+    ticketStatus: "5",
+    amount: 50000,
+    waitingFee: 0,
+    status: "PENDING",
+    breakdown: [{code: "PRIOR_TOW", label: "Prior tower travel", amount: 50000, detail: "7.50 km · Old Tow"}],
+    payment: {id: "p2", method: "CASH", status: "PENDING", amount: 50000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: false},
+  }],
+};
+
 const PAYEE_BILL: Bill = {
   billId: "tow1",
   ticketId: "tow1",
@@ -154,6 +171,20 @@ const CASH_PAYEE_BILL: Bill = {
       payment: {id: "p2", method: "CASH", status: "PENDING", amount: 150000, refundAmount: null, commissionRate: null, commissionAmount: null, payoutAmount: null, payoutRef: null, payoutAt: null, payoutStatus: "NONE", canConfirmCash: true},
     },
   ],
+};
+
+const REFUND_BILL: Bill = {
+  ...ARMED_BILL,
+  items: [{
+    ...ARMED_BILL.items[0],
+    refundRequest: {
+      id: "rf1",
+      status: "REQUESTED",
+      amount: 50000,
+      transferRef: "TRX1",
+      requestedAt: "2026-10-04T12:00:00.000Z",
+    },
+  }],
 };
 
 async function flush(times = 8): Promise<void> {
@@ -423,6 +454,25 @@ test("paying a cash item arms it without a checkout", async () => {
   }
 });
 
+test("a cancelled tow offers online payment for a pending cash charge", async () => {
+  mockFetchBill.mockResolvedValue(CANCELLED_CASH_BILL);
+  mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/cancel"});
+  const renderer = await mount();
+  try {
+    expect(texts(renderer)).toContain(en.bills.cancellationCashHint);
+    expect(texts(renderer)).toContain("7.50 km · Old Tow");
+    const pay = pressable(renderer, en.bills.payCancellation);
+    expect(pay).toBeDefined();
+    await act(async () => {
+      pay?.props.onPress?.();
+      await flush();
+    });
+    expect(mockCreatePayment).toHaveBeenCalledWith("tow1", "SEPAY", "tok");
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("an armed sepay item refreshes its payment page", async () => {
   mockFetchBill.mockResolvedValue(ARMED_BILL);
   mockCreatePayment.mockResolvedValue({checkoutUrl: "https://pay.example/fresh"});
@@ -473,6 +523,21 @@ test("a read-only bill hides the payment page and pay-first banner", async () =>
     expect(texts(renderer)).not.toContain(en.bills.payFirst);
     expect(texts(renderer)).toContain(en.bills.readOnly);
     expect(pressable(renderer, en.bills.openQr)).toBeUndefined();
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("shows the refund status and why the bill remains paid", async () => {
+  mockFetchBill.mockResolvedValue(REFUND_BILL);
+  const renderer = await mount();
+  try {
+    const all = texts(renderer);
+    expect(all).toContain(en.bills.refund);
+    expect(all).toContain(en.payments.refundStatusREQUESTED);
+    expect(all.some((value) => value.startsWith("50,000 VND · "))).toBe(true);
+    expect(all).toContain(`${en.payments.refundTransferRef}: TRX1`);
+    expect(all).toContain(en.payments.refundPaidNote);
   } finally {
     renderer.unmount();
   }

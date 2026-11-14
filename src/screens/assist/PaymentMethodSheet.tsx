@@ -2,7 +2,7 @@ import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {useAppMode} from "../../context/ThemeContext";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
@@ -20,7 +20,7 @@ type Props = {
 
 export default function PaymentMethodSheet({t, amount, status, busy, error, pendingSepay = false, onChoose, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <Overlay
       visible

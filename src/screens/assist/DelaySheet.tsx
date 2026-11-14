@@ -2,7 +2,7 @@ import {useState} from "react";
 import {Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import type {Strings} from "../../i18n/en";
 import type {FeedTicket} from "../../api/dispatch";
@@ -30,7 +30,7 @@ function etaIso(time: string): string | undefined {
 
 export default function DelaySheet({t, ticket, busy, error, onSubmit, onClear, canClear = false, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const reasons = delayReasonsFor(ticket.direction);
   const current = ticket.hold?.reason as DelayReason | undefined;
   const [reason, setReason] = useState<DelayReason>(

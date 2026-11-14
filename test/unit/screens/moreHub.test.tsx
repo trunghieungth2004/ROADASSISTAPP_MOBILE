@@ -106,6 +106,18 @@ test("hub exposes payments, settings and about rows that navigate", async () => 
   }
 });
 
+test("dashboard row opens the dashboard child screen", async () => {
+  const renderer = await mount();
+  try {
+    await act(async () => {
+      rowFor(renderer, en.more.dashboard)?.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("Dashboard");
+  } finally {
+    renderer.unmount();
+  }
+});
+
 test("hub no longer hosts permissions, providers, or saved places", async () => {
   const renderer = await mount();
   try {

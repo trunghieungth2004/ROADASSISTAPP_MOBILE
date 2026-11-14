@@ -267,8 +267,8 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   statusChip: {borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   statusText: {color: "#fff", fontSize: 12, fontWeight: "700"},
-  bottomContainer: {position: "absolute", left: 12, right: 12, bottom: 12, gap: 8},
+  bottomContainer: {position: "absolute", left: 16, right: 16, bottom: 16, gap: 10},
   fabRow: {flexDirection: "row", alignItems: "center", gap: 8},
   fabSpacer: {flex: 1},
-  hazardNumber: {fontSize: 20, fontWeight: "700", textAlign: "center"},
+  hazardNumber: {fontSize: 22, fontWeight: "800", textAlign: "center"},
 });

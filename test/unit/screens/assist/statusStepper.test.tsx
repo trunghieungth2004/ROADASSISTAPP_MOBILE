@@ -30,12 +30,12 @@ test("walk-in shows shop stages with accepted and at shop", async () => {
   }
 });
 
-test("sos shows the arrive stage instead", async () => {
+test("sos shows the arrive and repair stages", async () => {
   const renderer = await render("SOS", "2");
   try {
     const labels = shownLabels(renderer);
     expect(labels).toContain(en.assist.statusArrived);
-    expect(labels).not.toContain(en.assist.statusInProgress);
+    expect(labels).toContain(en.assist.statusInProgress);
     expect(labels).not.toContain(en.assist.statusAccepted);
   } finally {
     renderer.unmount();

@@ -10,6 +10,21 @@ export type TowRouteTicket = Pick<
   destinationParty?: FeedTicket["destinationParty"];
 };
 
+export function towProviderPoint(
+  ticket: Pick<TowRouteTicket, "direction" | "status" | "lat" | "lng" | "towerFix">,
+  localPoint: {lat: number; lng: number} | null,
+): {lat: number; lng: number} | null {
+  const tower = ticket.towerFix &&
+    typeof ticket.towerFix.lat === "number" &&
+    typeof ticket.towerFix.lng === "number" ?
+    {lat: ticket.towerFix.lat, lng: ticket.towerFix.lng} :
+    null;
+  if (ticket.direction === "in") return localPoint;
+  if (tower) return tower;
+  if (ticket.status === "3") return {lat: ticket.lat, lng: ticket.lng};
+  return null;
+}
+
 export function towDestOf(  ticket: Pick<TowRouteTicket, "destinationParty" | "destinationSnapshot" | "destinationPoint">,
 ): {lat: number; lng: number} | null {
   const party = ticket.destinationParty;

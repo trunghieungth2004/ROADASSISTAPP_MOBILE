@@ -3,7 +3,7 @@ import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import Snack from "../components/ui/Snack";
 import {SNACK_GAP} from "../components/ui/snackOffset";
 import PermissionRow from "../components/permissions/PermissionRow";
@@ -29,7 +29,7 @@ type Props = {
 
 export default function PermissionGateScreen({t, states, busy, showBackground, canDone, grantError, onHideGrantError, onGrantNotifications, onGrantCamera, onGrantPhotos, onGrantBackground, onOpenBattery, onSkip, onDone}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.root, {backgroundColor: theme.background, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16}]}>

@@ -22,7 +22,19 @@ export function canRate(status: string): boolean {
 }
 
 export function canCancel(status: string): boolean {
-  return status === DISPATCH_STATUS.PENDING || status === DISPATCH_STATUS.MATCHED || status === DISPATCH_STATUS.QUOTED;
+  return status === DISPATCH_STATUS.PENDING ||
+    status === DISPATCH_STATUS.MATCHED ||
+    status === DISPATCH_STATUS.ARRIVED ||
+    status === DISPATCH_STATUS.READY ||
+    status === DISPATCH_STATUS.QUOTED ||
+    status === DISPATCH_STATUS.FINAL_QUOTED ||
+    status === DISPATCH_STATUS.ESTIMATED ||
+    status === DISPATCH_STATUS.EST_APPROVED;
+}
+
+export function canRiderCancel(ticketType: string, status: string): boolean {
+  if (!canCancel(status)) return false;
+  return !(ticketType === "SOS" && status === DISPATCH_STATUS.READY);
 }
 
 export function canCancelSosShop(ticketType: string, status: string, assigned: boolean): boolean {

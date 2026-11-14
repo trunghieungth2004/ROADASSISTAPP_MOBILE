@@ -9,7 +9,7 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import StatusRow from "../components/ui/StatusRow";
@@ -24,7 +24,7 @@ export default function VehicleScreen() {
   const {token} = useAuth();
   const {activeVehicle, refresh} = useProfile();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [profiles, setProfiles] = useState<VehicleProfile[]>([]);
   const [detailFor, setDetailFor] = useState<string | null>(null);
@@ -140,11 +140,11 @@ export default function VehicleScreen() {
 const styles = StyleSheet.create({
   wrapper: {flex: 1},
   header: {padding: 16, paddingBottom: 4, gap: 12},
-  title: {fontSize: 20, fontWeight: "700"},
-  addBtn: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 8, padding: 12},
+  title: {fontSize: 22, fontWeight: "800"},
+  addBtn: {flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, padding: 13},
   addBtnText: {color: "#fff", fontWeight: "700"},
-  container: {padding: 16, gap: 8},
-  card: {borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", gap: 10},
+  container: {padding: 16, gap: 12},
+  card: {borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: "row", alignItems: "center", gap: 12},
   cardText: {flex: 1, minWidth: 0, gap: 3},
   titleRow: {flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap"},
   cardTitle: {fontSize: 15, fontWeight: "700"},

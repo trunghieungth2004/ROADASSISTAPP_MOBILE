@@ -17,7 +17,7 @@ import type {RouteOption} from "../api/routes";
 import {bustFlagCaches, confirmFlag, denyFlag, flagsNear, getFlag, submitFlag, unflag, type Flag} from "../api/flags";
 import {toMessage} from "../api/client";
 import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../storage/votedFlags";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
 import {useNavVoice} from "./navigation/useNavVoice";
 import {useNavTracking} from "./navigation/useNavTracking";
@@ -129,7 +129,7 @@ function NavigationContent({t, lang, token, initialRoute, dest, seed, stops, wid
     void warmAudio();
   }, []);
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const voice = useNavVoice(lang, () => {
     setVoiceError(t.nav.voiceUnavailable);

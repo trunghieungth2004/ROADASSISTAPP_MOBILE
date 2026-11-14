@@ -53,7 +53,7 @@ type Props = {
 
 export default function RouteMapView(props: Props) {
   const scheme = useAppMode();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const {t, theme} = props;
   const insets = useSafeAreaInsets();

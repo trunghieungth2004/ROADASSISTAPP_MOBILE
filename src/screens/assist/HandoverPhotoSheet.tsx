@@ -6,6 +6,7 @@ import Overlay from "../../components/overlay/Overlay";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 import {isPhotoPermissionError, pickPhotos, takePhoto} from "../../services/photos";
+import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 
 type Props = {
   t: Strings;
@@ -22,6 +23,7 @@ export default function HandoverPhotoSheet({t, theme, kind, busy, error, onConfi
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoViewer = usePhotoViewer(t.common.cancel);
 
   async function addPhoto(source: "camera" | "library"): Promise<void> {
     if (photoBusy || photos.length >= 5) return;
@@ -83,7 +85,9 @@ export default function HandoverPhotoSheet({t, theme, kind, busy, error, onConfi
         <View style={styles.grid}>
           {photos.map((path, index) => (
             <View key={`${path}-${index}`} style={styles.photoWrap}>
-              <Image source={{uri: path}} style={styles.photo} />
+              <Pressable onPress={() => photoViewer.open(path)} accessibilityRole="button" accessibilityLabel={`${t.assist.photos} ${index + 1}`}>
+                <Image source={{uri: path}} style={styles.photo} />
+              </Pressable>
               <Pressable
                 style={[styles.remove, {backgroundColor: theme.danger}]}
                 onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))}
@@ -97,6 +101,7 @@ export default function HandoverPhotoSheet({t, theme, kind, busy, error, onConfi
         </View>
         <Text style={[styles.hint, {color: theme.muted}]}>{t.assist.photosMax}</Text>
       </View>
+      {photoViewer.node}
     </Overlay>
   );
 }

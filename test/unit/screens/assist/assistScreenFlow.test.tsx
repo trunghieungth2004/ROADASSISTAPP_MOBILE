@@ -934,6 +934,51 @@ test("a request without an active vehicle opens the vehicle picker", async () =>
   }
 });
 
+test("can't fix refreshes the open ticket and clears the action", async () => {
+  const renderer = await mount(false, ["RIDER", "SHOP"]);
+  try {
+    mockOwnProviders = [{id: "shop9", kind: "SHOP", status: "ACTIVE"}];
+    mockFeed = [{id: "t2", userId: "rider2", ticketType: "WALK_IN", lat: 10.7, lng: 106.6, status: "6", providerId: "shop9", assignedShopId: "shop9", direction: "in", otherParty: null, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const provider = texts(renderer.root, en.assist.recordProvider).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await provider?.props.onPress();
+      await flush();
+    });
+    await openRecord(renderer, "Walk-in · Repairing");
+    const open = sheetAction(renderer, en.assist.unfixableAction);
+    expect(open).toBeDefined();
+    await act(async () => {
+      await open?.props.onPress();
+      await flush();
+    });
+    const other = sheetAction(renderer, en.assist.unfixableOther);
+    await act(async () => {
+      await other?.props.onPress();
+      await flush();
+    });
+    const add = renderer.root.find((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function");
+    await act(async () => {
+      await add.props.onPress();
+      await flush();
+    });
+    jest.mocked(uploadPhotoPaths).mockResolvedValue(["dispatch/t2/frame.jpg"]);
+    mockFeed = [{...mockFeed[0] as object, status: "15", unfixable: {reason: "OTHER", photoUrls: ["dispatch/t2/frame.jpg"]}}];
+    seen.length = 0;
+    const submits = texts(renderer.root, en.assist.unfixableAction).filter((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await submits[submits.length - 1]?.props.onPress();
+      await flush(10);
+    });
+    expect(seen.some((call) => call.path === "/dispatch/unfixable")).toBe(true);
+    expect(hasText(renderer.root, en.assist.unfixableTitle)).toBe(true);
+    expect(texts(renderer.root, en.assist.unfixableAction).filter((n) => typeof n.props?.onPress === "function")).toHaveLength(0);
+  } finally {
+    mockFeed = [];
+    mockOwnProviders = [];
+    teardown(renderer);
+  }
+});
+
 test("a failed photo upload blocks the SOS until the rider retries or sends without photos", async () => {
   const renderer = await mount();
   try {

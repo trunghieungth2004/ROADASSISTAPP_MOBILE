@@ -2,8 +2,8 @@ import {createContext, useContext, useEffect, useMemo, useState, type ReactNode}
 import {Appearance, useColorScheme} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-type ThemeMode = "light" | "dark";
-type ThemeState = {mode: ThemeMode; toggle: () => void};
+export type ThemeMode = "light" | "dark" | "amoled";
+type ThemeState = {mode: ThemeMode; setMode: (mode: ThemeMode) => void; toggle: () => void};
 const ThemeContext = createContext<ThemeState | null>(null);
 const THEME_KEY = "roadassist.theme";
 
@@ -14,22 +14,20 @@ export function ThemeProvider({children}: {children: ReactNode}) {
     let mounted = true;
     void AsyncStorage.getItem(THEME_KEY).then((saved) => {
       if (!mounted) return;
-      const next = saved === "dark" || saved === "light" ? saved : systemMode;
+      const next = saved === "dark" || saved === "light" || saved === "amoled" ? saved : systemMode;
       setMode(next);
     }).catch(() => undefined);
     return () => { mounted = false; };
   }, []);
   useEffect(() => {
-    Appearance.setColorScheme(mode);
+    Appearance.setColorScheme(mode === "light" ? "light" : "dark");
   }, [mode]);
-  const toggle = () => {
-    setMode((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      void AsyncStorage.setItem(THEME_KEY, next).catch(() => undefined);
-      return next;
-    });
+  const setPersistedMode = (next: ThemeMode): void => {
+    setMode(next);
+    void AsyncStorage.setItem(THEME_KEY, next).catch(() => undefined);
   };
-  const value = useMemo(() => ({mode, toggle}), [mode]);
+  const toggle = () => setPersistedMode(mode === "dark" ? "light" : "dark");
+  const value = useMemo(() => ({mode, setMode: setPersistedMode, toggle}), [mode]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
@@ -40,7 +38,7 @@ export function useThemeMode(): ThemeState {
 }
 
 export function useAppMode(): ThemeMode {
-  const systemMode = useColorScheme() === "dark" ? "dark" : "light";
+  const systemMode: ThemeMode = useColorScheme() === "dark" ? "dark" : "light";
   const ctx = useContext(ThemeContext);
   if (!ctx) return systemMode;
   return ctx.mode;

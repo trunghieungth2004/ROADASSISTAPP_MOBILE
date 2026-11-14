@@ -8,7 +8,7 @@ import * as Application from "expo-application";
 import {useFocusEffect, useNavigation} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
@@ -21,7 +21,7 @@ export default function AboutScreen() {
   const {t} = useStrings();
   const navigation = useNavigation();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [notice, setNotice] = useState<string | null>(null);
   const [updateRelease, setUpdateRelease] = useState<AppRelease | null>(null);

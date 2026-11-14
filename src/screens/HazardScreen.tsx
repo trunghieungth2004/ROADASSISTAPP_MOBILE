@@ -20,7 +20,7 @@ import {isStaleForRefresh} from "../components/ui/feedback";
 import {drainHazardLaunch, ensurePushConfigured, subscribeHazardPush, type HazardPushData} from "../services/push";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import type {Flag} from "../api/flags";
 import {bustFlagCaches, confirmFlag, denyFlag, unflag} from "../api/flags";
 import {loadDeniedIds, loadVotedIds, markDenied, markVoted} from "../storage/votedFlags";
@@ -38,7 +38,7 @@ export default function HazardScreen() {
   const {t, lang} = useStrings();
   const {token, uid} = useAuth();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const mine = useMyFlags(token);
   const [tab, setTab] = useState<"mine" | "nearby">("mine");
@@ -339,12 +339,12 @@ export default function HazardScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, padding: 16, gap: 12},
-  headerRow: {flexDirection: "row", alignItems: "center", gap: 8},
-  title: {flex: 1, fontSize: 20, fontWeight: "700"},
+  root: {flex: 1, padding: 16, gap: 14},
+  headerRow: {flexDirection: "row", alignItems: "center", gap: 10},
+  title: {flex: 1, fontSize: 22, fontWeight: "800"},
   tabRow: {flexDirection: "row", gap: 8},
-  tab: {flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: "center"},
-  mapPanel: {height: 260, borderWidth: 1, borderRadius: 16, overflow: "hidden"},
+  tab: {flex: 1, borderWidth: 1, borderRadius: 16, paddingVertical: 11, alignItems: "center"},
+  mapPanel: {height: 260, borderWidth: 1, borderRadius: 20, overflow: "hidden"},
   pillRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
   pill: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14},
   list: {gap: 8, paddingBottom: 8},

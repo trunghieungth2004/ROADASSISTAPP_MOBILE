@@ -6,6 +6,7 @@ import BillsScreen from "../../../src/screens/BillsScreen";
 import {en} from "../../../src/i18n/en";
 import type {Bill} from "../../../src/api/bills";
 import {billDateTimeLabel} from "../../../src/screens/bills/billLabels";
+import {BillsProvider} from "../../../src/context/BillsContext";
 
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
@@ -29,6 +30,7 @@ jest.mock("@react-navigation/native", () => {
   const React = require("react");
   return {
     useNavigation: () => ({navigate: (...args: unknown[]) => mockNavigate(...args), setOptions: () => undefined}),
+    useRoute: () => ({params: {}}),
     useFocusEffect: (cb: () => void | (() => void)) => React.useEffect(cb, []),
     useIsFocused: () => true,
   };
@@ -104,7 +106,9 @@ async function mount() {
   await act(async () => {
     renderer = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <BillsScreen />
+        <BillsProvider>
+          <BillsScreen />
+        </BillsProvider>
       </SafeAreaProvider>,
     );
     await flush();

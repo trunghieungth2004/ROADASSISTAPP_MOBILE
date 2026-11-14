@@ -1,15 +1,21 @@
 import {expect, test} from "@jest/globals";
-import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canReportDelay, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, returnTowPending, viewerRoleOf} from "../../../../src/screens/assist/recordActions";
+import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canRiderCancel, canDecline, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canReportDelay, canSeeRequestPhotos, canSendEstimate, canSendQuote, estimateStateOf, retargetableLiveTicket, announcesShopPush, returnTowPending, viewerRoleOf} from "../../../../src/screens/assist/recordActions";
 
 test("rate only on resolved", () => {
   expect(canRate("4")).toBe(true);
   for (const s of ["1", "2", "3", "5", "6", "7", "8"]) expect(canRate(s)).toBe(false);
 });
 
-test("cancel on pending and matched", () => {
-  expect(canCancel("1")).toBe(true);
-  expect(canCancel("2")).toBe(true);
-  for (const s of ["3", "4", "5", "6", "7", "8"]) expect(canCancel(s)).toBe(false);
+test("rider cancel follows the backend statuses", () => {
+  for (const s of ["1", "2", "3", "7", "9", "11", "13", "14"]) {
+    expect(canCancel(s)).toBe(true);
+  }
+  for (const s of ["4", "5", "6", "8", "10", "12", "15"]) {
+    expect(canCancel(s)).toBe(false);
+  }
+  expect(canRiderCancel("WALK_IN", "7")).toBe(true);
+  expect(canRiderCancel("SOS", "7")).toBe(false);
+  expect(canRiderCancel("SOS", "3")).toBe(true);
 });
 
 test("mobile shop can cancel only a matched SOS", () => {

@@ -11,6 +11,7 @@ export type RootStackParamList = {
   Warranty: undefined;
   Bills: undefined;
   Payments: {tab?: "pay" | "receive"; payoutId?: string} | undefined;
+  Dashboard: undefined;
   BillDetail: {
     ticketId?: string;
     billId?: string;

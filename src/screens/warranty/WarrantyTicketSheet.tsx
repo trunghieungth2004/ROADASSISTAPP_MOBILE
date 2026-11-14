@@ -4,7 +4,7 @@ import Overlay from "../../components/overlay/Overlay";
 import {useAuth} from "../../context/AuthContext";
 import {useStrings} from "../../context/LanguageContext";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {toMessage} from "../../api/client";
 import {getTicket, type FeedTicket} from "../../api/dispatch";
 import RecordDetailSheet from "../assist/RecordDetailSheet";
@@ -21,7 +21,7 @@ export default function WarrantyTicketSheet({ticketId, onClose}: Props) {
   const {t, lang} = useStrings();
   const {token, uid} = useAuth();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [ticket, setTicket] = useState<FeedTicket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

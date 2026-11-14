@@ -7,7 +7,7 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useAppMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {toMessage} from "../api/client";
 import {myBookings, type Booking} from "../api/bookings";
 import {getTicket, type DispatchTicket} from "../api/dispatch";
@@ -37,7 +37,7 @@ export default function JobSummaryScreen() {
   const route = useRoute();
   const {bookingId} = (route.params ?? {}) as Params;
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const locale = lang === "vi" ? "vi-VN" : "en-US";
   const [booking, setBooking] = useState<Booking | null>(null);
   const [tickets, setTickets] = useState<DispatchTicket[]>([]);

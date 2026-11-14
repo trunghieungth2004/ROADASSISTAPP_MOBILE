@@ -11,7 +11,7 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {SNACK_GAP} from "../components/ui/snackOffset";
@@ -20,7 +20,7 @@ export default function LoginScreen() {
   const {signIn} = useAuth();
   const {refresh} = useProfile();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [mode, setModeState] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");

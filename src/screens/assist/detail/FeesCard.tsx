@@ -58,6 +58,11 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
     ticket.towFeeHistory.reduce((sum, entry) =>
       sum + (typeof entry.amount === "number" ? entry.amount : 0), 0) :
     0;
+  const towHistoryKm = ticket.ticketType === "TOW" && Array.isArray(ticket.towFeeHistory) ?
+    ticket.towFeeHistory.reduce((sum, entry) =>
+      sum + (typeof entry.deadheadKm === "number" ? entry.deadheadKm : 0) +
+        (typeof entry.loadedKm === "number" ? entry.loadedKm : 0), 0) :
+    0;
   const callOutWaived = ticket.ticketType === "SOS" &&
     isUnfixableStatus(ticket.status) &&
     (ticket.mobileCallOutWaived === true || ticket.mobileCallOutFee === 0);
@@ -130,6 +135,14 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
         <View style={[styles.total, {borderTopColor: theme.divider}]}>
           <FeeRow theme={theme} label={total.label} value={vnd(total.amount)} strong />
         </View>
+      ) : null}
+      {towHistory > 0 && ticket.status === DISPATCH_STATUS.PENDING ? (
+        <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.towHistoryPending}</Text>
+      ) : null}
+      {towHistory > 0 && towHistoryKm > 0 ? (
+        <Text style={[detailStyles.muted, {color: theme.muted}]}>
+          {t.assist.priorTowDistance.replace("{km}", towHistoryKm.toFixed(2))}
+        </Text>
       ) : null}
       {callOutWaived ? <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.mobileCallOutWaived}</Text> : null}
       {estimateAmount !== null ? (

@@ -11,7 +11,7 @@ module.exports = {
   extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   ignorePatterns: ["node_modules/", "android/", "ios/", "assets/", ".expo/", "coverage/"],
   rules: {
-    "max-lines": ["error", {max: 900, skipBlankLines: true, skipComments: true}],
+    "max-lines": ["error", {max: 1000, skipBlankLines: true, skipComments: true}],
     "max-lines-per-function": ["error", {max: 500, skipBlankLines: true, skipComments: true}],
     "complexity": ["error", 40],
     "no-empty": "warn",

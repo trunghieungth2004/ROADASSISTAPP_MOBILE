@@ -41,7 +41,7 @@ type Props = {
 
 export default function NavMapView(props: Props) {
   const scheme = useAppMode();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {theme} = props;
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const coords = props.route.geometry.coordinates;

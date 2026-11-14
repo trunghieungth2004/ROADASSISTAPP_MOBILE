@@ -10,7 +10,7 @@ import {ThemeProvider, useThemeMode} from "./src/context/ThemeContext";
 import {NavSessionProvider} from "./src/context/NavSessionContext";
 import {BillsProvider} from "./src/context/BillsContext";
 import {APP_FONTS} from "./src/components/ui/AppText";
-import {darkTheme, lightTheme} from "./src/theme";
+import {themeForMode} from "./src/theme";
 import Tabs from "./src/navigation/Tabs";
 import NavigationScreen from "./src/screens/NavigationScreen";
 import DiagnosticsScreen from "./src/screens/DiagnosticsScreen";
@@ -22,6 +22,7 @@ import WarrantyScreen from "./src/screens/WarrantyScreen";
 import BillsScreen from "./src/screens/BillsScreen";
 import BillDetailScreen from "./src/screens/BillDetailScreen";
 import PaymentsScreen from "./src/screens/PaymentsScreen";
+import DashboardScreen from "./src/screens/more/DashboardScreen";
 import VehicleScreen from "./src/screens/VehicleScreen";
 import ShopBookingsScreen from "./src/screens/ShopBookingsScreen";
 import SupportScreen from "./src/screens/SupportScreen";
@@ -176,8 +177,8 @@ function ThemedApp() {
   const {mode} = useThemeMode();
   const [navReady, setNavReady] = useState(false);
   const scheme = mode;
-  const navTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const navTheme = scheme === "light" ? DefaultTheme : DarkTheme;
+  const theme = themeForMode(scheme);
   return (
     <SafeAreaProvider>
       <LanguageProvider>
@@ -205,6 +206,7 @@ function ThemedApp() {
                     <Stack.Screen name="Warranty" component={WarrantyScreen} />
                     <Stack.Screen name="Bills" component={BillsScreen} />
                     <Stack.Screen name="Payments" component={PaymentsScreen} />
+                    <Stack.Screen name="Dashboard" component={DashboardScreen} />
                     <Stack.Screen name="Vehicle" component={VehicleScreen} />
                     <Stack.Screen name="ShopBookings" component={ShopBookingsScreen} />
                     <Stack.Screen name="Support" component={SupportScreen} />
@@ -212,7 +214,7 @@ function ThemedApp() {
                     <Stack.Screen name="BillDetail" component={BillDetailScreen} />
                   </Stack.Navigator>
                 </NavigationContainer>
-                <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+                <StatusBar style={scheme === "light" ? "dark" : "light"} />
               </NavSessionProvider>
             </BillsProvider>
           </ProfileProvider>

@@ -31,7 +31,7 @@ type Props = {
 
 export default function AssistMapView(props: Props) {
   const scheme = useAppMode();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {theme} = props;
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   return (

@@ -4,7 +4,7 @@ import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {ALL_DIAG_TABS, CHECK_DEFS, type CheckStatus, type DiagTab} from "../services/diagnostics";
 import {clearCaptured, getCaptured, isRecording, startRecording, stopRecording, subscribeCaptured, type CapturedLine} from "../services/consoleCapture";
 import {useNavigation} from "@react-navigation/native";
@@ -26,7 +26,7 @@ export default function DiagnosticsScreen() {
   const {token: authToken} = useAuth();
   const navigation = useNavigation();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [tab, setTab] = useState<DiagTab | "logs">("push");
   const [selected, setSelected] = useState<DiagTab[]>(["push", "location", "audio", "network"]);
   const [results, setResults] = useState<Record<string, Entry>>({});

@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
 import {formatAmountInput, parseAmountInput} from "./money";
@@ -48,7 +48,7 @@ export default function MobileFixSheet({
   onClose,
 }: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [amount, setAmount] = useState(
     typeof initialAmount === "number" ? initialAmount.toLocaleString("en-US") : "",
   );
@@ -123,7 +123,7 @@ export default function MobileFixSheet({
     <Overlay
       visible
       variant="dialog"
-      title={`${t.assist.fixComplete} · ${ticketLabel}`}
+      title={`${t.assist.fixQuote} · ${ticketLabel}`}
       right={<TicketStatusPill t={t} theme={theme} status={status} />}
       closeLabel={t.common.cancel}
       onClose={onClose}

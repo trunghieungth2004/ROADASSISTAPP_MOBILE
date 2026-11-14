@@ -1,4 +1,5 @@
 import type {Bill, BillItem, BillPayoutStatus} from "../../api/bills";
+import type {RefundRequest} from "../../api/refunds";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 
@@ -61,6 +62,34 @@ export function payoutStatusColor(status: BillPayoutStatus, theme: AppTheme): st
   if (status === "PAID") return theme.success;
   if (status === "PENDING") return "#d97706";
   return theme.muted;
+}
+
+const OPEN_REFUND_STATUSES = new Set(["REQUESTED", "APPROVED", "SENT"]);
+
+export function refundStatusLabel(status: string, t: Strings): string {
+  if (status === "APPROVED") return t.payments.refundStatusAPPROVED;
+  if (status === "SENT") return t.payments.refundStatusSENT;
+  if (status === "CONFIRMED") return t.payments.refundStatusCONFIRMED;
+  if (status === "REJECTED") return t.payments.refundStatusREJECTED;
+  if (status === "FAILED") return t.payments.refundStatusFAILED;
+  return t.payments.refundStatusREQUESTED;
+}
+
+export function refundStatusColor(status: string, theme: AppTheme): string {
+  if (status === "CONFIRMED") return theme.success;
+  if (status === "REJECTED" || status === "FAILED") return theme.danger;
+  if (status === "REQUESTED") return "#d97706";
+  return theme.primary;
+}
+
+export function refundOpenAmount(refunds: RefundRequest[]): number {
+  return refunds.reduce((sum, refund) =>
+    OPEN_REFUND_STATUSES.has(refund.status) ? sum + refund.amount : sum, 0);
+}
+
+export function refundReceivedAmount(refunds: RefundRequest[]): number {
+  return refunds.reduce((sum, refund) =>
+    refund.status === "CONFIRMED" ? sum + refund.amount : sum, 0);
 }
 
 export function billStatusLabel(status: string, t: Strings): string {

@@ -8,7 +8,7 @@ import {useEffect, useState} from "react";
 import {useAuth} from "../../context/AuthContext";
 import {useStrings} from "../../context/LanguageContext";
 import {fetchMeBundle, type MeVehicle} from "../../api/users";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {useAppMode} from "../../context/ThemeContext";
 import {providerPricingLimits, type Provider, type ProviderPricingLimits} from "../../api/providers";
 import type {Strings} from "../../i18n/en";
@@ -45,7 +45,7 @@ export default function ProviderFormDialog({t, token, kind, provider, onClose, o
     };
   }, [token]);
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const draft = useProviderDraft(kind, provider, t, vehicles);
   async function save(): Promise<void> {
     if (!token) return;

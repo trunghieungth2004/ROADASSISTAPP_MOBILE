@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {AppText as Text} from "../ui/AppText";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 
 export type OverlayVariant = "fullScreen" | "dialog" | "sheet";
 export type OverlayActionLayout = "primary" | "confirm" | "ticket";
@@ -44,7 +44,7 @@ function dismissAnd(run: () => void): void {
 
 function DismissButton({closeLabel, onClose}: {closeLabel: string; onClose: () => void}) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <Pressable
       style={styles.closeBtn}
@@ -59,7 +59,7 @@ function DismissButton({closeLabel, onClose}: {closeLabel: string; onClose: () =
 
 function Header({title, leading, right, trailing}: {title?: string; leading?: ReactNode; right?: ReactNode; trailing?: ReactNode}) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <View style={styles.headRow}>
       {leading}
@@ -72,7 +72,7 @@ function Header({title, leading, right, trailing}: {title?: string; leading?: Re
 
 export function ActionFooter({actions, layout}: {actions: OverlayAction[]; layout: OverlayActionLayout}) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const secondary = actions.filter((action) => action.group === "secondary" || (action.iconOnly === true && action.group !== "primary"));
   const primary = actions.filter((action) => !secondary.includes(action));
   const renderAction = (action: OverlayAction) => {
@@ -135,7 +135,7 @@ export function ActionFooter({actions, layout}: {actions: OverlayAction[]; layou
 
 export default function Overlay({visible, variant, title, leading, right, closeLabel, onClose, actions, actionLayout = "primary", scrollable, children}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   if (variant === "fullScreen") {
     return (
@@ -156,7 +156,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
   if (variant === "sheet") {
     return (
       <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-        <View style={styles.sheetRoot}>
+        <View style={[styles.sheetRoot, {backgroundColor: theme.overlay}]}>
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => dismissAnd(onClose)}
@@ -175,7 +175,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
   }
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.dialogRoot}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.dialogRoot, {backgroundColor: theme.overlay}]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={() => dismissAnd(onClose)}
@@ -183,7 +183,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
           accessibilityLabel={closeLabel}
         />
         <View style={styles.dialogWrap} pointerEvents="box-none">
-          <View style={[styles.dialog, !scrolls && styles.dialogFree, {backgroundColor: theme.paper}]}>
+          <View style={[styles.dialog, !scrolls && styles.dialogFree, {backgroundColor: theme.paper, borderColor: theme.border}]}>
             <Header title={title} leading={leading} right={right} />
             {body}
             {footed ? <ActionFooter actions={actions} layout={actionLayout} /> : null}
@@ -206,12 +206,12 @@ export default function Overlay({visible, variant, title, leading, right, closeL
 
 const styles = StyleSheet.create({
   full: {flex: 1},
-  dialogRoot: {flex: 1, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)"},
+  dialogRoot: {flex: 1, justifyContent: "center"},
   dialogWrap: {width: "100%", paddingHorizontal: 24},
-  dialog: {borderRadius: 16, padding: 16, gap: 12, maxHeight: "85%", width: "100%"},
+  dialog: {borderRadius: 22, borderWidth: 1, padding: 18, gap: 14, maxHeight: "85%", width: "100%"},
   dialogFree: {maxHeight: undefined},
-  sheetRoot: {flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)"},
-  sheet: {borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 12, gap: 8, maxHeight: "70%", width: "100%"},
+  sheetRoot: {flex: 1, justifyContent: "flex-end"},
+  sheet: {borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 16, gap: 10, maxHeight: "76%", width: "100%"},
   handle: {width: 40, height: 4, borderRadius: 2, backgroundColor: "#a3a3a3", alignSelf: "center"},
   headRow: {flexDirection: "row", alignItems: "center", gap: 8},
   title: {flex: 1, fontSize: 16, fontWeight: "700"},
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   ticketPrimaryRow: {flexDirection: "row", alignItems: "center", gap: 8},
   fullRow: {width: "100%"},
   secondaryRow: {flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap"},
-  actionBtn: {flexGrow: 1, borderRadius: 8, padding: 10, alignItems: "center", minWidth: 96},
+  actionBtn: {flexGrow: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, alignItems: "center", minWidth: 96},
   iconBtn: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
   actionText: {fontWeight: "700"},
   cancelRow: {borderWidth: 1, borderRadius: 8, padding: 10, alignItems: "center"},

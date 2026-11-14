@@ -2,6 +2,7 @@ import {config} from "../config";
 import type {StyleSpecification} from "@maplibre/maplibre-gl-style-spec";
 import base from "./streets-v4.json";
 import darkBase from "./streets-dark-v4.json";
+import amoledBase from "./streets-amoled-v4.json";
 
 export const mapDefaults = {
   center: [106.6602, 10.7626] as [number, number],
@@ -9,16 +10,17 @@ export const mapDefaults = {
 };
 
 const KEY_TOKEN = "__MAPTILER_KEY__";
+export type MapStyleScheme = "light" | "dark" | "amoled";
 
-export function buildMapStyle(key: string, scheme: "light" | "dark" = "light"): StyleSpecification {
+export function buildMapStyle(key: string, scheme: MapStyleScheme = "light"): StyleSpecification {
   return JSON.parse(
-    JSON.stringify(scheme === "dark" ? darkBase : base).split(KEY_TOKEN).join(key),
+    JSON.stringify(scheme === "amoled" ? amoledBase : scheme === "dark" ? darkBase : base).split(KEY_TOKEN).join(key),
   ) as StyleSpecification;
 }
 
 const styleCache = new Map<string, {key: string; style: StyleSpecification}>();
 
-export function bundledMapStyle(scheme: "light" | "dark" = "light"): StyleSpecification | undefined {
+export function bundledMapStyle(scheme: MapStyleScheme = "light"): StyleSpecification | undefined {
   if (!config.maptilerKey) return undefined;
   const cached = styleCache.get(scheme);
   if (cached && cached.key === config.maptilerKey) return cached.style;
@@ -27,7 +29,7 @@ export function bundledMapStyle(scheme: "light" | "dark" = "light"): StyleSpecif
   return style;
 }
 
-export function requireMapStyle(scheme: "light" | "dark" = "light"): StyleSpecification {
+export function requireMapStyle(scheme: MapStyleScheme = "light"): StyleSpecification {
   const style = bundledMapStyle(scheme);
   if (!style) throw new Error("Missing EXPO_PUBLIC_MAPTILER_KEY");
   return style;

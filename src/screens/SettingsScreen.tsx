@@ -8,7 +8,7 @@ import {missingKinds} from "./more/providerUi";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
@@ -20,16 +20,16 @@ import type {MobileShopDraft, ShopDraft, TowDraft} from "./OnboardingScreen";
 import OnboardingScreen from "./OnboardingScreen";
 import WarrantyDeclineDialog from "./warranty/WarrantyDeclineDialog";
 import Overlay from "../components/overlay/Overlay";
-import {useThemeMode} from "../context/ThemeContext";
+import {useThemeMode, type ThemeMode} from "../context/ThemeContext";
 import {toMessage} from "../api/client";
 
 export default function SettingsScreen() {
   const {t, lang, toggle} = useStrings();
   const {token} = useAuth();
   const {user, refresh, markOnboarded} = useProfile();
-  const {mode, toggle: toggleTheme} = useThemeMode();
+  const {mode, setMode} = useThemeMode();
   const scheme = mode;
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [notice, setNotice] = useState<string | null>(null);
@@ -299,7 +299,30 @@ export default function SettingsScreen() {
           </View>
         ) : null}
         <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-          <Pressable style={styles.listRow} onPress={toggleTheme} accessibilityRole="switch" accessibilityState={{checked: scheme === "dark"}}><MaterialIcons name={scheme === "dark" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text><View pointerEvents="none"><Switch value={scheme === "dark"} onValueChange={() => toggleTheme()} trackColor={{false: theme.divider, true: theme.primary}} thumbColor="#ffffff" /></View></Pressable>
+          <View style={styles.optionBlock}>
+            <View style={styles.settingRow}>
+              <MaterialIcons name={mode === "light" ? "light-mode" : "dark-mode"} size={20} color={theme.primary} />
+              <Text style={[styles.listText, {color: theme.text}]}>{t.more.appearance}</Text>
+            </View>
+            <View style={styles.optionRow}>
+              {([
+                ["light", t.more.themeLight, "light-mode"],
+                ["dark", t.more.themeDark, "dark-mode"],
+                ["amoled", t.more.themeAmoled, "contrast"],
+              ] as const).map(([value, label, icon]) => (
+                <Pressable
+                  key={value}
+                  style={[styles.optChip, {borderColor: theme.primary}, mode === value && {backgroundColor: theme.primary}]}
+                  onPress={() => setMode(value as ThemeMode)}
+                  accessibilityRole="radio"
+                  accessibilityState={{selected: mode === value}}
+                >
+                  <MaterialIcons name={icon} size={18} color={mode === value ? theme.onPrimary : theme.primary} />
+                  <Text style={[styles.optText, {color: mode === value ? theme.onPrimary : theme.text}]}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
           <View style={[styles.divider, {backgroundColor: theme.divider}]} />
           <Pressable style={styles.listRow} onPress={toggle}><MaterialIcons name="translate" size={20} color={theme.primary} /><Text style={[styles.listText, {color: theme.text}]}>{t.more.language}</Text><Text style={[styles.listSecondary, {color: theme.muted}]}>{lang === "en" ? "EN" : "VI"}</Text></Pressable>
         </View>
@@ -425,7 +448,7 @@ const styles = StyleSheet.create({
   optionBlock: {gap: 8, paddingVertical: 14, paddingHorizontal: 16},
   optionLabel: {fontSize: 13, fontWeight: "700"},
   optionRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
-  optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16},
+  optChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 6},
   optText: {fontSize: 13, fontWeight: "600"},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 72, textAlignVertical: "top"},
 });

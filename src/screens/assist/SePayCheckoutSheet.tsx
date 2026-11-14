@@ -6,7 +6,7 @@ import {WebView} from "react-native-webview";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import type {SepayCheckout} from "../../api/dispatch";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {useAppMode} from "../../context/ThemeContext";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
@@ -52,7 +52,7 @@ function checkoutHtml(checkout: SepayCheckout): string {
 
 export default function SePayCheckoutSheet({t, url, checkout, status, busy, error, onClose, onSuccess, onCancel, onFailure, onSwitchToCash}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const webRef = useRef<WebView>(null);
   const finished = useRef(false);

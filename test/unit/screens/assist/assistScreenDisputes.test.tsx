@@ -443,14 +443,14 @@ test("mobile shop SOS arrived sends a fix quote without completing it", async ()
     mockOwnProviders = [{id: "mobile1", kind: "MOBILE_SHOP", status: "ACTIVE", accepting: true}];
     mockFeed = [{id: "sos3", userId: "rider9", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "3", assignedShopId: "mobile1", finalAmount: 120000, direction: "in", otherParty: {id: "rider9", name: "Rider Nine", kind: "RIDER"}, createdAt: "2026-01-01T00:00:00.000Z"}];
     await openRecord(renderer, "SOS · Arrived");
-    expect(sheetAction(renderer, en.assist.fixComplete)).toBeDefined();
+    expect(sheetAction(renderer, en.assist.fixQuote)).toBeDefined();
     expect(sheetAction(renderer, en.assist.unfixableAction)).toBeDefined();
     expect(sheetAction(renderer, en.assist.cancel)).toBeUndefined();
     expect(sheetAction(renderer, en.assist.mobileFixAction)).toBeUndefined();
     expect(sheetAction(renderer, en.assist.startWork)).toBeUndefined();
     seen.length = 0;
     await act(async () => {
-      await sheetAction(renderer, en.assist.fixComplete)?.props.onPress();
+      await sheetAction(renderer, en.assist.fixQuote)?.props.onPress();
       await flush(12);
     });
     await act(async () => {

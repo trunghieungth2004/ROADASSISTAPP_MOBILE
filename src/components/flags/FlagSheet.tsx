@@ -5,10 +5,10 @@ import {AppText as Text, AppTextInput as TextInput} from "../ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {FlagType} from "../../api/flags";
 import {toMessage} from "../../api/client";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {hazardKind} from "./hazardStyle";
 import type {Strings} from "../../i18n/en";
-import {isPhotoPermissionError, takePhoto} from "../../services/photos";
+import {isPhotoPermissionError, pickPhotos, takePhoto} from "../../services/photos";
 import {usePhotoViewer} from "../ui/PhotoViewer";
 
 export type FlagReport = {type: FlagType; radiusMeters: number; note?: string; photoUrls?: string[]; ttlMinutes?: number};
@@ -19,12 +19,13 @@ export type FlagDraftState = {
   ttlMinutes: number;
   note: string;
   photoUris: string[];
+  photoBusy: boolean;
   photoError: string | null;
   setType: (next: FlagType) => void;
   setRadiusMeters: (next: number) => void;
   setTtlMinutes: (next: number) => void;
   setNote: (next: string) => void;
-  addPhoto: () => Promise<void>;
+  addPhoto: (source: "camera" | "library") => Promise<void>;
   removePhoto: (uri: string) => void;
   build: () => FlagReport;
 };
@@ -36,14 +37,21 @@ export function useFlagDraft(t: Strings): FlagDraftState {
   const [note, setNote] = useState("");
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  async function addPhoto(): Promise<void> {
+  const [photoBusy, setPhotoBusy] = useState(false);
+  async function addPhoto(source: "camera" | "library"): Promise<void> {
+    if (photoBusy || photoUris.length >= 3) return;
+    setPhotoBusy(true);
     setPhotoError(null);
     try {
-      const picked = await takePhoto();
+      const picked = source === "camera" ? await takePhoto() : await pickPhotos(3, photoUris.length);
       if (picked.length === 0) return;
       setPhotoUris((prev) => [...prev, ...picked].slice(0, 3));
     } catch (err) {
-      setPhotoError(isPhotoPermissionError(err) ? t.photos.cameraDenied : toMessage(err));
+      setPhotoError(isPhotoPermissionError(err) ?
+        (source === "camera" ? t.photos.cameraDenied : t.photos.denied) :
+        toMessage(err));
+    } finally {
+      setPhotoBusy(false);
     }
   }
   function removePhoto(uri: string): void {
@@ -55,6 +63,7 @@ export function useFlagDraft(t: Strings): FlagDraftState {
     ttlMinutes,
     note,
     photoUris,
+    photoBusy,
     photoError,
     setType,
     setRadiusMeters,
@@ -78,7 +87,7 @@ const RADII = [25, 50, 100, 200, 250];
 
 export default function FlagSheet({t, draft}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const photoViewer = usePhotoViewer(t.common.cancel);
   const typeLabel = (id: FlagType): string => (id === "FLOOD" ? t.flag.flood : id === "ACCIDENT" ? t.flag.accident : t.flag.obstruction);
   return (
@@ -95,10 +104,16 @@ export default function FlagSheet({t, draft}: Props) {
           </View>
         ))}
         {draft.photoUris.length < 3 ? (
-          <Pressable style={[styles.photoAdd, {borderColor: theme.primary}]} onPress={() => void draft.addPhoto()} accessibilityRole="button" accessibilityLabel={t.photos.take}>
-            <MaterialIcons name="photo-camera" size={16} color={theme.primary} />
-            <Text style={{color: theme.primary}}>{t.photos.take}</Text>
-          </Pressable>
+          <View style={styles.photoActions}>
+            <Pressable style={[styles.photoAdd, {borderColor: theme.primary}, draft.photoBusy && styles.disabled]} disabled={draft.photoBusy} onPress={() => void draft.addPhoto("camera")} accessibilityRole="button" accessibilityLabel={t.photos.take}>
+              <MaterialIcons name="photo-camera" size={16} color={theme.primary} />
+              <Text style={{color: theme.primary}}>{t.photos.take}</Text>
+            </Pressable>
+            <Pressable style={[styles.photoAdd, {borderColor: theme.primary}, draft.photoBusy && styles.disabled]} disabled={draft.photoBusy} onPress={() => void draft.addPhoto("library")} accessibilityRole="button" accessibilityLabel={t.photos.choose}>
+              <MaterialIcons name="photo-library" size={16} color={theme.primary} />
+              <Text style={{color: theme.primary}}>{t.photos.choose}</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
       {draft.photoError ? <Text style={[styles.photoError, {color: theme.danger}]}>{draft.photoError}</Text> : null}
@@ -179,7 +194,9 @@ const styles = StyleSheet.create({
   photoStripWrap: {position: "relative", width: "100%"},
   photoStrip: {width: "100%", height: 48, borderRadius: 8},
   photoRemove: {position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center"},
-  photoAdd: {width: "100%", height: 48, minHeight: 48, borderWidth: 1, borderStyle: "dashed", borderRadius: 8, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6},
+  photoActions: {flexDirection: "row", gap: 8},
+  photoAdd: {flex: 1, height: 48, minHeight: 48, borderWidth: 1, borderStyle: "dashed", borderRadius: 8, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6},
+  disabled: {opacity: 0.6},
   photoError: {fontSize: 12},
   fieldBlock: {gap: 6},
   typeRow: {flexDirection: "row", gap: 8, justifyContent: "space-between"},

@@ -5,7 +5,7 @@ import {useAppMode} from "../context/ThemeContext";
 import {AppText as Text} from "./ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import Overlay from "./overlay/Overlay";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {downloadAndInstall, type AppRelease} from "../services/appUpdate";
 import {openAppSettings} from "../services/permissions";
 import type {Strings} from "../i18n/en";
@@ -21,7 +21,7 @@ type Phase = "idle" | "busy" | "error";
 
 export default function UpdateDialog({t, release, onSkip, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);

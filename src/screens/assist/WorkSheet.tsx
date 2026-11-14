@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {statusPillColor, ticketStatusLabel} from "./ticketLabels";
 import {formatAmountInput, parseAmountInput} from "./money";
@@ -56,7 +56,7 @@ function draftsFrom(items: WorkItem[] | null | undefined): ItemDraft[] {
 
 export default function WorkSheet({t, ticketLabel, mode, status, busy, error, initialWorkType, initialInvoiceRef, initialItems, catalog, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [workType, setWorkType] = useState(typeof initialWorkType === "string" ? initialWorkType : "");
   const [amount, setAmount] = useState("");
   const [invoiceRef, setInvoiceRef] = useState(typeof initialInvoiceRef === "string" ? initialInvoiceRef : "");

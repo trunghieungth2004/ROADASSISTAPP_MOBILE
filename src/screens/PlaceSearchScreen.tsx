@@ -17,7 +17,7 @@ import {listSavedPlaces, removeSavedPlace, savePlace, type SavedPlace} from "../
 import {getFix} from "../services/geo";
 import {toMessage} from "../api/client";
 import {hasBookingService} from "../services/serviceChannels";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import type {Strings} from "../i18n/en";
 const CATEGORY_ICONS: Record<string, ComponentProps<typeof MaterialIcons>["name"]> = {
   park: "park",
@@ -46,7 +46,7 @@ function resultIcon(item: Place): ComponentProps<typeof MaterialIcons>["name"] {
 type Props = {t: Strings; token?: string; lang: string; title: string; placeholder: string; onPick: (place: Place) => void; onPickOnMap?: () => void; onBrowseNearby?: () => void; onClose: () => void; search?: PlaceSearch; shops?: ShopFetcher; sources?: PlaceSource[]; mapFilter?: (place: Place) => boolean; query?: string; onQuery?: (q: string) => void; disabledIds?: Set<string>; disabledNote?: string; filters?: ShopSearchFilters; requireBookable?: boolean; shopPreviewChannel?: "BOOKING" | "ASSIST"};
 export default function PlaceSearchScreen({t, token, lang, title, placeholder, onPick, onPickOnMap, onBrowseNearby, onClose, search: provided, shops, sources, mapFilter, query, onQuery, disabledIds, disabledNote, filters, requireBookable = false, shopPreviewChannel}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [sortBy, setSortBy] = useState<"distance" | "rating" | "price">(filters?.sortBy ?? "distance");
   const [minRating, setMinRating] = useState<number | undefined>(filters?.minRating);

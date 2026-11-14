@@ -20,7 +20,7 @@ import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import {themeForMode, type AppTheme} from "../theme";
 import {vehicleIcon} from "./route/routeGeo";
 import {vehicleMeta, vehicleTypeName} from "../components/vehicles/vehicleMeta";
 import {billDateLabel} from "./bills/billLabels";
@@ -75,7 +75,7 @@ export default function VehicleDetailsSheet({profileId, onClose, onChanged}: Pro
   const {token} = useAuth();
   const {activeVehicle, activateVehicle, refresh} = useProfile();
   const {mode} = useThemeMode();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const [profile, setProfile] = useState<VehicleProfile | null>(null);
   const [history, setHistory] = useState<VehicleHistory | null>(null);
   const [loading, setLoading] = useState(true);

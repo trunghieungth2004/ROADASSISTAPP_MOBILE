@@ -9,12 +9,14 @@ import {toMessage} from "../api/client";
 import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
-import {darkTheme, lightTheme, type AppTheme} from "../theme";
+import {themeForMode, type AppTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {myProviders, type Provider} from "../api/providers";
 import {receivedRatings, type ReceivedRatings} from "../api/ratings";
+import {buildCasesSummary} from "./more/dashboardData";
+import MoreDashboardCard from "./more/MoreDashboardCard";
 import {eligibleAppeals, fileAppeal, type AppealItem, type AppealReason, type EligibleAppeals} from "../api/appeals";
 import Overlay from "../components/overlay/Overlay";
 import DutySection from "./DutySection";
@@ -69,7 +71,7 @@ export default function MoreScreen() {
   const {user, refresh} = useProfile();
   const {mode} = useThemeMode();
   const scheme = mode;
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [editOpen, setEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
@@ -161,6 +163,9 @@ export default function MoreScreen() {
     setEditError(null);
     try { await updateProfile({displayName: nameDraft.trim()}, token); await refresh(); setEditOpen(false); setNotice(t.more.saved); } catch (err) { setEditError(toMessage(err)); } finally { setNameBusy(false); }
   }
+  const cases = buildCasesSummary({received, eligible, t});
+  const hasCases = cases.hasCases;
+  const casesSummary = cases.summary;
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={[styles.scroll, {backgroundColor: theme.background}]}>
@@ -192,14 +197,6 @@ export default function MoreScreen() {
                 <Text style={[styles.issueTitle, {color: issue.color}]}>{issue.title}</Text>
                 {issue.text ? <Text style={[styles.issueText, {color: theme.muted}]}>{issue.text}</Text> : null}
               </View>
-              <Pressable
-                onPress={() => setAppealsOpen(true)}
-                style={[styles.issueButton, {borderColor: issue.color}]}
-                accessibilityRole="button"
-                accessibilityLabel={t.more.viewCases}
-              >
-                <Text style={[styles.issueButtonText, {color: issue.color}]}>{t.more.viewCases}</Text>
-              </Pressable>
             </View>
           ) : null}
           {restricted ? (
@@ -235,39 +232,14 @@ export default function MoreScreen() {
             />
           </View>
         </View>
-        {(received !== null &&
-          (received.rider.count > 0 ||
-            received.providers.some((provider) => provider.count > 0))) ||
-        (eligible !== null &&
-          eligible.ratings.length + eligible.reports.length +
-            eligible.disputes.length > 0) ? (
-          <View style={[styles.card, {backgroundColor: theme.paper, borderColor: theme.border}]}>
-            <Pressable
-              style={styles.listRow}
-              onPress={() => setAppealsOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel={t.more.cases}
-            >
-              <MaterialIcons name="gavel" size={20} color={theme.primary} />
-              <View style={styles.ratingInfo}>
-                <Text style={[styles.listText, {color: theme.text}]}>{t.more.cases}</Text>
-                <Text style={[styles.ratingSummary, {color: theme.muted}]}>
-                  {[
-                    received !== null && received.rider.count > 0 ?
-                      `${t.more.ratingAsRider} ${received.rider.avg.toFixed(1)} (${received.rider.count})` :
-                      null,
-                    ...(eligible === null ? [] : [
-                      `${t.more.appealSubjectRating} ${eligible.ratings.length}`,
-                      `${t.more.appealSubjectReport} ${eligible.reports.length}`,
-                      `${t.more.appealSubjectDispute} ${eligible.disputes.length}`,
-                    ]),
-                  ].filter((part): part is string => part !== null).join(" · ")}
-                </Text>
-              </View>
-              
-            </Pressable>
-          </View>
-        ) : null}
+        <MoreDashboardCard
+          t={t}
+          theme={theme}
+          hasCases={hasCases}
+          casesSummary={casesSummary}
+          onOpenDashboard={() => navigation.navigate("Dashboard" as never)}
+          onOpenCases={() => setAppealsOpen(true)}
+        />
         <DutySection
           providers={providers}
           onProvidersChanged={() => {
@@ -386,8 +358,8 @@ export default function MoreScreen() {
   );
 }
 const styles = StyleSheet.create({
-  scroll: {padding: 16, gap: 12},
-  headerCard: {borderWidth: 1, borderRadius: 16, padding: 16, gap: 12, overflow: "hidden"},
+  scroll: {padding: 16, gap: 14},
+  headerCard: {borderWidth: 1, borderRadius: 22, padding: 18, gap: 14, overflow: "hidden"},
   headerRow: {flexDirection: "row", alignItems: "center", gap: 12},
   avatar: {width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center"},
   avatarText: {color: "#fff", fontWeight: "700", fontSize: 18},
@@ -397,8 +369,6 @@ const styles = StyleSheet.create({
   issueBody: {flex: 1, gap: 2},
   issueTitle: {fontSize: 13, fontWeight: "700"},
   issueText: {fontSize: 11, lineHeight: 15},
-  issueButton: {borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10, alignSelf: "center"},
-  issueButtonText: {fontSize: 11, fontWeight: "700"},
   restrictionText: {flex: 1, gap: 2},
   restrictionTitle: {fontSize: 13, fontWeight: "700"},
   restrictionHint: {fontSize: 11, lineHeight: 15},
@@ -413,8 +383,8 @@ const styles = StyleSheet.create({
   serviceText: {fontSize: 12},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   error: {fontSize: 12, marginBottom: 6},
-  card: {borderWidth: 1, borderRadius: 16, overflow: "hidden"},
-  listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16},
+  card: {borderWidth: 1, borderRadius: 18, overflow: "hidden"},
+  listRow: {flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16, paddingHorizontal: 16},
   listText: {fontSize: 15, fontWeight: "500"},
   ratingInfo: {flex: 1, gap: 2, minWidth: 0},
   ratingSummary: {fontSize: 11, lineHeight: 15},

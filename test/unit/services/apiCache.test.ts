@@ -1,5 +1,5 @@
 import {afterEach, expect, jest, test} from "@jest/globals";
-import {cacheClear, clearApiCache, withCache} from "../../../src/services/cache";
+import {cacheClear, cacheDel, clearApiCache, withCache} from "../../../src/services/cache";
 import {listSavedPlaces} from "../../../src/api/places";
 import {listSavedRoutes} from "../../../src/api/routes";
 
@@ -39,6 +39,27 @@ test("concurrent withCache misses share one load", async () => {
   releases = [];
   await expect(pending).resolves.toEqual(["v", "v"]);
   expect(loader).toHaveBeenCalledTimes(1);
+});
+
+test("cacheDel prevents an in-flight stale load from being cached", async () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const stale = jest.fn(async () => {
+    await gate;
+    return "stale";
+  });
+  const first = withCache("probe:race", 30000, stale);
+  cacheDel("probe:race");
+  const fresh = jest.fn(async () => "fresh");
+  const second = withCache("probe:race", 30000, fresh);
+  release();
+  await expect(first).resolves.toBe("stale");
+  await expect(second).resolves.toBe("fresh");
+  await expect(withCache("probe:race", 30000, stale)).resolves.toBe("fresh");
+  expect(stale).toHaveBeenCalledTimes(1);
+  expect(fresh).toHaveBeenCalledTimes(1);
 });
 
 test("cacheClear with a prefix keeps other keys", async () => {

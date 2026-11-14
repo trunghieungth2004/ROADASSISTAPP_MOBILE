@@ -3,7 +3,7 @@ import {StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {statusPillColor, ticketStatusLabel} from "./ticketLabels";
 import {formatAmountInput, parseAmountInput} from "./money";
@@ -22,7 +22,7 @@ type Props = {
 
 export default function EstimateSheet({t, ticketLabel, status, busy, error, initialAmount, initialNote, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [amount, setAmount] = useState(typeof initialAmount === "number" ? formatAmountInput(String(initialAmount)) : "");
   const [note, setNote] = useState(typeof initialNote === "string" ? initialNote : "");
   const [localError, setLocalError] = useState<string | null>(null);

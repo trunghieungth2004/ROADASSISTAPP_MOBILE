@@ -4,7 +4,7 @@ import {MaterialIcons} from "@expo/vector-icons";
 import type {Strings} from "../../i18n/en";
 import type {AppealReason, AppealSubjectKind} from "../../api/appeals";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import {isPhotoPermissionError, pickPhotos, takePhoto, type PhotoSource} from "../../services/photos";
@@ -74,7 +74,7 @@ export default function AppealSheet({
   onClose: () => void;
 }) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [reason, setReason] = useState<AppealReason | null>(null);
   const [note, setNote] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);

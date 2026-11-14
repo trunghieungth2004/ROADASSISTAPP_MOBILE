@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import type {DispatchTicket} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
@@ -24,7 +24,7 @@ export default function RatingSheet({t, ticket, initialScore, initialComment, bu
   const [score, setScore] = useState(initialScore ?? 5);
   const [comment, setComment] = useState(initialComment ?? "");
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <Overlay
       visible

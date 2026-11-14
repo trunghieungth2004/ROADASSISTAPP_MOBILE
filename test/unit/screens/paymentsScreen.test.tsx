@@ -6,6 +6,7 @@ import PaymentsScreen from "../../../src/screens/PaymentsScreen";
 import {en} from "../../../src/i18n/en";
 import type {Bill} from "../../../src/api/bills";
 import type {Provider} from "../../../src/api/providers";
+import type {RefundRequest} from "../../../src/api/refunds";
 
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
@@ -54,6 +55,7 @@ const mockMyPayouts = jest.fn(async () => ({
   pending: {gross: 0, commission: 0, net: 0, refunded: 0, itemCount: 0},
   settled: {gross: 0, commission: 0, net: 0, itemCount: 0},
 }));
+const mockMyRefunds = jest.fn(async () => [] as RefundRequest[]);
 
 jest.mock("../../../src/api/bills", () => ({
   payeeBills: (...args: unknown[]) => (mockPayeeBills as (...a: unknown[]) => Promise<Bill[]>)(...args),
@@ -65,6 +67,10 @@ jest.mock("../../../src/api/providers", () => ({
 
 jest.mock("../../../src/api/payouts", () => ({
   myPayouts: (...args: unknown[]) => (mockMyPayouts as (...a: unknown[]) => Promise<unknown>)(...args),
+}));
+
+jest.mock("../../../src/api/refunds", () => ({
+  myRefunds: (...args: unknown[]) => (mockMyRefunds as (...a: unknown[]) => Promise<RefundRequest[]>)(...args),
 }));
 
 const metrics: Metrics = {
@@ -133,6 +139,17 @@ const PAYEE_BILL: Bill = {
   ],
 };
 
+const REFUND: RefundRequest = {
+  id: "rf1",
+  paymentId: "p1",
+  ticketId: "tow1",
+  amount: 50000,
+  status: "REQUESTED",
+  reason: "Shop ticket closed",
+  requestedAt: "2026-10-04T00:00:00.000Z",
+  transferRef: null,
+};
+
 const SHOP: Provider = {
   id: "shop1",
   kind: "SHOP",
@@ -185,17 +202,47 @@ beforeEach(() => {
     pending: {gross: 0, commission: 0, net: 0, refunded: 0, itemCount: 0},
     settled: {gross: 0, commission: 0, net: 0, itemCount: 0},
   });
+  mockMyRefunds.mockReset();
+  mockMyRefunds.mockResolvedValue([]);
 });
 
-test("a rider without a provider sees only the to-pay list", async () => {
+test("a rider sees both tabs and refunds to receive", async () => {
   mockBills.bills = [RIDER_BILL];
+  mockMyRefunds.mockResolvedValue([REFUND]);
   const renderer = await mount();
   try {
     const all = texts(renderer);
     expect(all).toContain(en.payments.toPay);
-    expect(all).not.toContain(en.payments.toReceive);
+    expect(all).toContain(en.payments.toReceive);
     expect(all).toContain(en.bills.towFare);
-    expect(mockPayeeBills).not.toHaveBeenCalled();
+    const receiveTab = pressable(renderer, en.payments.toReceive);
+    expect(receiveTab).toBeDefined();
+    await act(async () => {
+      receiveTab?.props.onPress?.();
+      await flush();
+    });
+    const receive = texts(renderer);
+    expect(receive).toContain(en.payments.refunds);
+    expect(receive).toContain("50,000 VND");
+    expect(receive).toContain(en.payments.refundStatusREQUESTED);
+    const row = pressable(renderer, `${en.bills.towFare} 50,000 VND`);
+    expect(row).toBeDefined();
+    await act(async () => {
+      row?.props.onPress?.();
+      await flush();
+    });
+    const detail = texts(renderer);
+    expect(detail).toContain(en.payments.refundDetails);
+    expect(detail).toContain(en.payments.refundStatusREQUESTED);
+    expect(detail).toContain("Shop ticket closed");
+    expect(mockNavigate).not.toHaveBeenCalled();
+    const openPayment = pressable(renderer, en.payments.openPayment);
+    expect(openPayment).toBeDefined();
+    await act(async () => {
+      openPayment?.props.onPress?.();
+      await flush();
+    });
+    expect(texts(renderer)).toContain(en.payments.detailTitle);
   } finally {
     renderer.unmount();
   }

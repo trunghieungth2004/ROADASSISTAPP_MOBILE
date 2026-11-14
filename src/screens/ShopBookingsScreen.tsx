@@ -8,7 +8,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useAppMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import ShopBookingsPanel from "./booking/ShopBookingsPanel";
 
 type Params = {providerId?: string};
@@ -18,7 +18,7 @@ export default function ShopBookingsScreen() {
   const {token} = useAuth();
   const {providerId} = (useRoute().params ?? {}) as Params;
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
   const [notice, setNotice] = useState<string | null>(null);
   return (

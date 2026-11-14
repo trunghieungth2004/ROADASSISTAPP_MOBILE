@@ -3,7 +3,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
 
@@ -21,7 +21,7 @@ type Props = {
 
 export default function SosContinuationSheet({t, ticketLabel, status, attempt, callOutTotal, busy, error, onConfirm, onCancel}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const body = t.assist.continueSosBody
     .replace("{n}", String(attempt))
     .replace("{total}", `${callOutTotal.toLocaleString()} VND`);

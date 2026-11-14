@@ -2,13 +2,13 @@ import {useCallback, useEffect, useState} from "react";
 import {ActivityIndicator, Linking, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/ui/AppText";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {useStrings} from "../../context/LanguageContext";
 import type {Strings} from "../../i18n/en";
 import {useAuth} from "../../context/AuthContext";
 import {toMessage} from "../../api/client";
-import {fetchBill, requestInvoice, type Bill} from "../../api/bills";
-import {confirmCashReceipt, createPayment, type DispatchTicket, type TicketPayment} from "../../api/dispatch";
+import {fetchBill, requestInvoice, type Bill, type BillItem} from "../../api/bills";
+import {confirmCashReceipt, createPayment, DISPATCH_STATUS, type DispatchTicket, type TicketPayment} from "../../api/dispatch";
 import {useBills} from "../../context/BillsContext";
 import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
 import ServiceIcon from "../../components/ui/ServiceIcon";
@@ -99,12 +99,67 @@ function TowFarePreviewCard({preview, theme, t}: {
   );
 }
 
+function riderActionsFor({
+  item,
+  bill,
+  canceledTow,
+  cashPending,
+  pendingSepay,
+  busy,
+  t,
+  onPay,
+}: {
+  item: BillItem;
+  bill: Bill;
+  canceledTow: boolean;
+  cashPending: boolean;
+  pendingSepay: boolean;
+  busy: boolean;
+  t: Strings;
+  onPay: (method: "SEPAY" | "CASH") => void;
+}): OverlayAction[] {
+  if (!bill.canPay) return [];
+  if (item.status === "UNPAID") {
+    const actions: OverlayAction[] = [{
+      label: canceledTow ? t.bills.payCancellation : t.bills.paySepay,
+      tone: "primary",
+      busy,
+      onPress: () => onPay("SEPAY"),
+    }];
+    if (!canceledTow) {
+      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onPay("CASH")});
+    }
+    return actions;
+  }
+  if (pendingSepay) {
+    const actions: OverlayAction[] = [{
+      label: canceledTow ? t.bills.payCancellation : t.bills.openQr,
+      tone: "primary",
+      busy,
+      onPress: () => onPay("SEPAY"),
+    }];
+    if (!canceledTow) {
+      actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => onPay("CASH")});
+    }
+    return actions;
+  }
+  if (cashPending) {
+    return [{
+      label: canceledTow ? t.bills.payCancellation : t.bills.paySepay,
+      tone: "primary",
+      busy,
+      onPress: () => onPay("SEPAY"),
+    }];
+  }
+  return [];
+}
+
 export default function PaymentDetailSheet({ticketId, scope, ticket = null, onClose, onChanged}: Props) {
   const {t, lang} = useStrings();
   const {token} = useAuth();
   const {refresh: refreshBills} = useBills();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const payee = scope === "payee";
   const [bill, setBill] = useState<Bill | null>(null);
   const viewer = bill?.viewer ?? null;
@@ -142,6 +197,10 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
     (bill === null || bill.items.length === 0);
   const summary = bill && payeeView ? payeeSummary(bill) : null;
   const pendingSepay = item?.status === "PENDING" && item.payment?.method === "SEPAY";
+  const canceledTow = bill?.ticketType === "TOW" &&
+    bill.ticketStatus === DISPATCH_STATUS.CANCELLED;
+  const cashPending = item?.status === "PENDING" &&
+    item.payment?.method === "CASH";
   const status = bill ? billHeroStatus(bill, payeeView, t, theme) : null;
 
   function reload(): void {
@@ -197,14 +256,17 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
 
   const actions: OverlayAction[] = [];
   if (bill && item) {
-    if (riderView && bill.canPay) {
-      if (item.status === "UNPAID") {
-        actions.push({label: t.bills.paySepay, tone: "primary", busy, onPress: () => void pay("SEPAY")});
-        actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => void pay("CASH")});
-      } else if (pendingSepay) {
-        actions.push({label: t.bills.openQr, tone: "primary", busy, onPress: () => void pay("SEPAY")});
-        actions.push({label: t.bills.payCash, tone: "neutral", outline: true, busy, onPress: () => void pay("CASH")});
-      }
+    if (riderView) {
+      actions.push(...riderActionsFor({
+        item,
+        bill,
+        canceledTow,
+        cashPending,
+        pendingSepay,
+        busy,
+        t,
+        onPay: (method) => void pay(method),
+      }));
     }
     if (payeeView && item.payment?.canConfirmCash === true) {
       actions.push({label: t.assist.cashConfirmReceipt, tone: "primary", busy, onPress: () => void confirmCash()});
@@ -265,7 +327,9 @@ export default function PaymentDetailSheet({ticketId, scope, ticket = null, onCl
                 {adminView ? <Text style={[styles.hint, {color: theme.muted}]}>{t.bills.adminReadOnly}</Text> : null}
                 {pendingSepay && !payeeView ? <Text style={[styles.hint, {color: theme.muted}]}>{t.payments.awaitingRider}</Text> : null}
                 {item.status === "PENDING" && item.payment?.method === "CASH" ? (
-                  <Text style={[styles.hint, {color: theme.muted}]}>{payeeView ? t.payments.cashPending : t.bills.cashArmed}</Text>
+                  <Text style={[styles.hint, {color: theme.muted}]}>
+                    {payeeView ? t.payments.cashPending : canceledTow ? t.bills.cancellationCashHint : t.bills.cashArmed}
+                  </Text>
                 ) : null}
               </>
             ) : showPreview && preview !== null ? (

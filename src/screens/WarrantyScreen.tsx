@@ -10,7 +10,7 @@ import {useAuth} from "../context/AuthContext";
 import {useProfile} from "../context/ProfileContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import {toMessage} from "../api/client";
 import {listProfiles, vehicleHistory} from "../api/vehicles";
 import {myProviders, type Provider} from "../api/providers";
@@ -44,7 +44,7 @@ export default function WarrantyScreen() {
   const {token} = useAuth();
   const {user} = useProfile();
   const {mode} = useThemeMode();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const navigation = useNavigation();
   const photoViewer = usePhotoViewer(t.common.cancel);
   const services = user?.services ?? [];
@@ -412,15 +412,15 @@ export default function WarrantyScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {padding: 16, gap: 10},
+  scroll: {padding: 16, gap: 14},
   pageTitle: {fontSize: 22, fontWeight: "800"},
-  segment: {borderWidth: 1, borderRadius: 12, padding: 3, flexDirection: "row", gap: 3},
+  segment: {borderWidth: 1, borderRadius: 16, padding: 4, flexDirection: "row", gap: 4},
   segmentItem: {flex: 1, borderRadius: 9, paddingVertical: 8, alignItems: "center"},
   segmentText: {fontSize: 13, fontWeight: "700"},
   tabs: {flexDirection: "row", gap: 6, flexWrap: "wrap"},
   tab: {borderWidth: 1, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12},
   tabText: {fontSize: 12, fontWeight: "700"},
-  card: {borderWidth: 1, borderRadius: 16, padding: 12, gap: 6},
+  card: {borderWidth: 1, borderRadius: 20, padding: 16, gap: 8},
   head: {flexDirection: "row", alignItems: "center", gap: 8},
   headText: {flex: 1, gap: 2},
   title: {fontSize: 15, fontWeight: "800", flexShrink: 1},
@@ -433,8 +433,8 @@ const styles = StyleSheet.create({
   photoRow: {flexDirection: "row", gap: 6, flexWrap: "wrap"},
   photo: {width: 56, height: 56, borderRadius: 8},
   actions: {flexDirection: "row", gap: 8},
-  primary: {flex: 1, borderRadius: 9, paddingVertical: 8, alignItems: "center"},
-  secondary: {borderWidth: 1, borderRadius: 9, paddingVertical: 8, paddingHorizontal: 10, alignItems: "center"},
+  primary: {flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: "center"},
+  secondary: {borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, alignItems: "center"},
   primaryText: {fontSize: 12, fontWeight: "700"},
   rowBetween: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8},
   amount: {fontSize: 13, fontWeight: "700"},

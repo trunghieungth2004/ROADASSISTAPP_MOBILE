@@ -9,6 +9,11 @@ export type RefundRequest = {
   reason: string | null;
   requestedAt: string;
   transferRef: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
+  sentAt?: string | null;
+  confirmedAt?: string | null;
+  failureReason?: string | null;
 };
 
 export function requestRefund(

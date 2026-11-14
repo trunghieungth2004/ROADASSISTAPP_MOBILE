@@ -24,6 +24,10 @@ export function isPhotoPermissionError(err: unknown): boolean {
   return err instanceof Error && err.message === PHOTO_PERMISSION_ERROR;
 }
 
+export function isPhotoUploadError(err: unknown): boolean {
+  return err instanceof Error && (err.message === "photo-upload-unavailable" || err.message === "photo-empty" || err.message.startsWith("photo-too-large-"));
+}
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
@@ -151,7 +155,8 @@ export function thumbPathFor(path: string): string {
 
 async function uploadToDirectory(directory: string, uris: string[]): Promise<string[]> {
   const apps = getApps();
-  if (apps.length === 0 || uris.length === 0) return [];
+  if (uris.length === 0) return [];
+  if (apps.length === 0) throw new Error("photo-upload-unavailable");
   const storage = getStorage(apps[0]);
   const limited = uris.slice(0, TICKET_PHOTO_MAX);
   const stamp = Date.now();

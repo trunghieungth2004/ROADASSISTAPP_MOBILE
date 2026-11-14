@@ -4,14 +4,14 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme, onColor, type AppTheme} from "../../theme";
+import {themeForMode, onColor, type AppTheme} from "../../theme";
 import {DECLINE_REASONS, DISPATCH_STATUS, isTerminal, isUnfixableStatus, type DeclineReason, type FeedTicket} from "../../api/dispatch";
 import type {Bill} from "../../api/bills";
 import type {UserRating} from "../../api/ratings";
 import Overlay, {type OverlayAction, type OverlayActionTone} from "../../components/overlay/Overlay";
 import {distBetween} from "../navigation/navUtils";
 import {timeAgoLabel} from "../hazards/hazardFilter";
-import {canAccept, canApproveQuote, canCancel, canCancelSosShop, canConfirmTowReceived, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canReportDelay, canResolve, canSendEstimate, canSendQuote, canTowArrive, canTowDeliver, estimateStateOf, returnTowPending, viewerRoleOf, type ViewerRole, type ViewerRoleContext} from "./recordActions";
+import {canAccept, canApproveQuote, canCancelSosShop, canRiderCancel, canConfirmTowReceived, canDeclineDestination, canDispute, canDisputeResolved, canEditDestination, canEditWork, canMarkReady, canMarkUnfixable, canRate, canRateRider, canReportDelay, canResolve, canSendEstimate, canSendQuote, canTowArrive, canTowDeliver, estimateStateOf, returnTowPending, viewerRoleOf, type ViewerRole, type ViewerRoleContext} from "./recordActions";
 import {delayReasonLabel} from "./delayReasons";
 import {declineReasonLabel, statusPillColor, ticketStatusLabel, ticketTitle, ticketTypeLabel, unfixableReasonLabel} from "./ticketLabels";
 import {quoteDeclineReasonLabel, shopDeclineReasonLabel, towerCancelReasonLabel} from "./cancelReasons";
@@ -131,7 +131,7 @@ function Section({theme, icon, children}: {theme: AppTheme; icon: string; childr
 
 export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, hasRated, onClose, onConfirmCancel, onRate, onAccept, onDecline, onOpenWork, onOpenMobileFix, onOpenChat, onDelay, onClearDelay, delayBusy = false, isAdmin = false, onShare, onQuickFix, onRelease, onOfferMobileTow, canOfferMobileTow = false, mobileTowShopOff = false, onContinueSos, onReleaseSos, onRespondMobileTow, onRespondReturnTow, onOpenQuote, onOpenEstimate, onApproveQuote, onOpenShop, onOpenDestination, onNavigateJob, acceptHidden, acceptOffDuty, towPreview, onPreviewTowRoute, linked, onOpenLinked, onAdvance, onReply, onRateRider, ownShopIds, ownTowId, ownMobileShopId, showRequestPhotos, onDeclineDestination, onEditDestination, allowTowerCancel, onApproveEstimate, onDeclineEstimate, onApproveFinal, onApproveInvoice, onApproveMobileFix, onDeclineMobileFix, onDeclineQuote, onMarkTowLoaded, onConfirmTowReceived, onConfirmCash, onOpenBill, onOpenDispute, onOpenReport, onTowerCancel, onOpenArchivedChat, payment, waiting, onMarkUnfixable, bill, quoteFunded, quotePayMethod, roleContext, readOnly = false}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const inbound = directionOf(ticket) === "in";
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [disputeDetailOpen, setDisputeDetailOpen] = useState(false);
@@ -319,7 +319,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   if (showDisputeAction && onOpenDispute) {
     actions.push({label: t.assist.disputeTicket, tone: "danger", outline: true, iconOnly: true, icon: iconOf("gavel", "danger"), onPress: () => onOpenDispute(ticket)});
   }
-  const showCancel = (!inbound && canCancel(ticket.status)) || allowTowerCancel || canCancelSosShop(ticket.ticketType, ticket.status, mobileShopAssigned);
+  const showCancel = (!inbound && canRiderCancel(ticket.ticketType, ticket.status)) || allowTowerCancel || canCancelSosShop(ticket.ticketType, ticket.status, mobileShopAssigned);
   const towerCancelAction = allowTowerCancel && onTowerCancel !== undefined && onTowerCancel !== null ? onTowerCancel : null;
   if (showCancel && !confirmCancel) {
     actions.push({label: t.assist.cancel, tone: "danger", outline: true, iconOnly: true, icon: iconOf("close", "danger"), onPress: () => towerCancelAction !== null ? towerCancelAction(ticket) : setConfirmCancel(true)});
@@ -347,7 +347,11 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
   }
   const unfixableReady = onMarkUnfixable !== undefined && onMarkUnfixable !== null && !disputeHold && ticket.direction === "in" && hasShop && !showUnfixable && canMarkUnfixable(ticket.ticketType, ticket.status);
   if (mobileShopAssigned && onOpenMobileFix && ticket.status === "3" && !disputeHold) {
-    actions.push({label: t.assist.fixComplete, tone: "primary", busy, onPress: () => onOpenMobileFix(ticket)});
+    actions.push({label: t.assist.fixQuote, tone: "primary", busy, onPress: () => onOpenMobileFix(ticket)});
+  }
+  if (mobileShopAssigned && ticket.status === "6" && !disputeHold &&
+    typeof ticket.finalAmount === "number") {
+    actions.push({label: t.assist.markReady, tone: "primary", busy, onPress: () => onAdvance(ticket, "7")});
   }
   if (mobileShopAssigned && canOfferMobileTow && ticket.status === "15" &&
     !ticket.continuationTicketId &&

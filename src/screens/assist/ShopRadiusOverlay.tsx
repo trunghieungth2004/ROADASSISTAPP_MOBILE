@@ -9,7 +9,7 @@ import {safeCameraCall} from "../../components/map/safeCamera";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {nearProviders, providerRatings, type Provider, type ProviderRating, type ServiceCategory} from "../../api/providers";
 import {toMessage} from "../../api/client";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {requireMapStyle} from "../../map/style";
 import StyledLayer from "../../components/map/StyledLayer";
 import MapStyleVeil from "../../components/map/MapStyleVeil";
@@ -61,9 +61,9 @@ function pillFor(shop: Provider, t: Strings): string | null {
 
 export default function ShopRadiusOverlay({t, token, gps, vehicleClass, radii, radius, onRadius, mode, sortBy, serviceCategory, card, onUseShop, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const [shops, setShops] = useState<Provider[]>([]);

@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {AppText as Text} from "../ui/AppText";
 import type {Flag} from "../../api/flags";
 import {flagActions, formatUntil, joinMeta} from "../../screens/hazards/flagActions";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import type {Strings} from "../../i18n/en";
 import {resolvePhotoUrl} from "../../services/photos";
 import {usePhotoViewer} from "../ui/PhotoViewer";
@@ -19,7 +19,7 @@ type Props = {
 
 export default function FlagDetailSheet({t, flag, isOwn, onChat}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const photoViewer = usePhotoViewer(t.common.cancel);
   if (!flag) return null;
   const photoPaths = (flag.photoUrls ?? []).filter((path) => typeof path === "string" && path !== "");

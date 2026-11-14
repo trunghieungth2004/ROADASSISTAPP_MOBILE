@@ -3,7 +3,7 @@ import {ActivityIndicator, Alert, Pressable, StyleSheet, View} from "react-nativ
 import {AppText as Text} from "../../components/ui/AppText";
 import {useAppMode} from "../../context/ThemeContext";
 import {useStrings} from "../../context/LanguageContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {toMessage} from "../../api/client";
 import {collectBookingDeposit, completeBooking, requestBookingDeposit, respondBooking, shopBookings, type Booking} from "../../api/bookings";
 
@@ -16,7 +16,7 @@ type Props = {
 export default function ShopBookingsPanel({token, providerId, onNotice}: Props) {
   const {t, lang} = useStrings();
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const locale = lang === "vi" ? "vi-VN" : "en-US";
   const [rows, setRows] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);

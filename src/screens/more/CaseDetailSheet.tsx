@@ -5,7 +5,7 @@ import type {Strings} from "../../i18n/en";
 import type {AppealItem} from "../../api/appeals";
 import type {ReceivedRating} from "../../api/ratings";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {AppText as Text} from "../../components/ui/AppText";
 import RatingRow from "../assist/RatingRow";
@@ -48,7 +48,7 @@ export default function CaseDetailSheet({
   onAppeal: (item: AppealItem) => void;
 }) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const snapshot = item.snapshot;
   const rating = item.subjectKind === "RATING" ?
     snapshot as unknown as ReceivedRating :

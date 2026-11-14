@@ -3,7 +3,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import type {SavedPlace} from "../../api/places";
 import Overlay from "../overlay/Overlay";
 import StatusRow from "../ui/StatusRow";
@@ -21,7 +21,7 @@ type Props = {
 
 export default function SavedPlacesSheet({t, places, loading, busy, error, onAdd, onDelete, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   return (
     <Overlay
       visible

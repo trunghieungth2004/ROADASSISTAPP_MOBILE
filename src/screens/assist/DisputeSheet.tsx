@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {PROVIDER_DISPUTE_REASONS, RIDER_DISPUTE_REASONS} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
@@ -42,7 +42,7 @@ export function disputeReasonLabel(reason: string, t: Strings): string {
 
 export default function DisputeSheet({t, ticketLabel, ticketType, status, viewer, busy, error, onSubmit, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);

@@ -3,7 +3,7 @@ import type {Strings} from "../../i18n/en";
 import type {AppealItem, EligibleAppeals} from "../../api/appeals";
 import type {ReceivedRating, ReceivedRatings} from "../../api/ratings";
 import {useAppMode} from "../../context/ThemeContext";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {AppText as Text} from "../../components/ui/AppText";
 import RatingRow from "../assist/RatingRow";
@@ -36,7 +36,7 @@ export default function AppealsSheet({
   onOpen: (item: AppealItem) => void;
 }) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const sections = [
     {
       key: "ratings",
@@ -54,6 +54,28 @@ export default function AppealsSheet({
       items: eligible.disputes,
     },
   ];
+  const riderCount = received?.rider.count ?? 0;
+  const riderAvg = received?.rider.avg ?? 0;
+  const providerRows = received?.providers.filter((provider) =>
+    provider.count > 0) ?? [];
+  const providerCount = providerRows.reduce(
+    (sum, provider) => sum + provider.count,
+    0,
+  );
+  const providerAvg = providerCount > 0 ?
+    providerRows.reduce(
+      (sum, provider) => sum + provider.avg * provider.count,
+      0,
+    ) / providerCount :
+    0;
+  const ratingParts = [
+    riderCount > 0 ?
+      `${t.more.ratingAsRider} ${riderAvg.toFixed(1)} (${riderCount})` :
+      null,
+    providerCount > 0 ?
+      `${t.more.dashboardProvider} ${providerAvg.toFixed(1)} (${providerCount})` :
+      null,
+  ].filter((part): part is string => part !== null);
   return (
     <Overlay
       visible
@@ -64,22 +86,13 @@ export default function AppealsSheet({
       scrollable
     >
       <View style={styles.body}>
-        {received !== null &&
-        (received.rider.count > 0 ||
-          received.providers.some((provider) => provider.count > 0)) ? (
+        {ratingParts.length > 0 ? (
           <View style={[styles.summary, {borderColor: theme.border}]}>
             <Text style={[styles.summaryTitle, {color: theme.text}]}>
               {t.more.yourRatings}
             </Text>
             <Text style={[styles.summaryText, {color: theme.muted}]}>
-              {[
-                received.rider.count > 0 ?
-                  `${t.more.ratingAsRider} ${received.rider.avg.toFixed(1)} (${received.rider.count})` :
-                  null,
-                ...received.providers
-                  .filter((provider) => provider.count > 0)
-                  .map((provider) => `${provider.name} ${provider.avg.toFixed(1)} (${provider.count})`),
-              ].filter((part): part is string => part !== null).join(" · ")}
+              {ratingParts.join(" · ")}
             </Text>
           </View>
         ) : null}

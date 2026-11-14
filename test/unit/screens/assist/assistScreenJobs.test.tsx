@@ -767,3 +767,50 @@ test("shop-held ticket keeps the shop workbench", async () => {
     teardown(renderer);
   }
 });
+
+test("an in-progress SOS keeps the active job card", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{id: "sos6", userId: "u1", ticketType: "SOS", lat: 10.71, lng: 106.61, status: "6", assignedShopId: "mobile1", finalAmount: 120000, direction: "out", otherParty: {id: "mobile1", name: "Mobile One", kind: "SHOP"}, createdAt: "2026-01-01T00:00:00.000Z"}];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush();
+    });
+    expect(hasText(renderer.root, `${en.assist.activeJob} · ${en.assist.typeSos}`)).toBe(true);
+  } finally {
+    teardown(renderer);
+  }
+});
+
+test("rider tow route starts at the pickup when the tower fix is missing", async () => {
+  const renderer = await mount();
+  try {
+    mockFeed = [{
+      id: "tow3",
+      userId: "u1",
+      ticketType: "TOW",
+      lat: 10.71,
+      lng: 106.61,
+      status: "3",
+      assignedShopId: "tow7",
+      direction: "out",
+      towerFix: null,
+      destinationSnapshot: {id: "shop1", name: "Fix Shop", lat: 10.75, lng: 106.65, kind: "SHOP"},
+      otherParty: {id: "tow7", name: "Tow Seven", kind: "TOW"},
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }];
+    const refresh = texts(renderer.root, en.assist.refresh).find((n) => typeof n.props?.onPress === "function");
+    await act(async () => {
+      await refresh?.props.onPress();
+      await flush(16);
+    });
+    const routes = seen
+      .filter((call) => call.path === "/routes")
+      .map((call) => JSON.parse(call.body) as {originLat?: number; originLng?: number; destLat?: number; destLng?: number});
+    const jobRoute = routes.find((route) => route.destLat === 10.75 && route.destLng === 106.65);
+    expect(jobRoute).toMatchObject({originLat: 10.71, originLng: 106.61});
+  } finally {
+    teardown(renderer);
+  }
+});

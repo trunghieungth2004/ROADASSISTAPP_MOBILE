@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import TicketStatusPill from "./TicketStatusPill";
 import {isPhotoPermissionError, pickPhotos, takePhoto, type PhotoSource} from "../../services/photos";
@@ -45,7 +45,7 @@ export default function ReportSheet({
   onClose,
 }: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
@@ -151,9 +151,9 @@ export default function ReportSheet({
               <MaterialIcons name="photo-camera" size={16} color={theme.primary} />
               <Text style={{color: theme.primary}}>{photoBusy ? t.common.loading : t.photos.take}</Text>
             </Pressable>
-            <Pressable style={[styles.chipBtn, {borderColor: theme.primary}]} disabled={photoBusy} onPress={() => void onAddPhoto("library")} accessibilityRole="button" accessibilityLabel={t.report.notePlaceholder}>
+            <Pressable style={[styles.chipBtn, {borderColor: theme.primary}]} disabled={photoBusy} onPress={() => void onAddPhoto("library")} accessibilityRole="button" accessibilityLabel={t.photos.choose}>
               <MaterialIcons name="photo-library" size={16} color={theme.primary} />
-              <Text style={{color: theme.primary}}>{`${t.assist.photos} ${photos.length}/5`}</Text>
+              <Text style={{color: theme.primary}}>{t.photos.choose}</Text>
             </Pressable>
           </View>
         ) : null}

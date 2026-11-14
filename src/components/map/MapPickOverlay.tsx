@@ -10,7 +10,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {formatPoint, reverseLabel} from "../../api/places";
 import {toMessage} from "../../api/client";
 import {getFix} from "../../services/geo";
-import {darkTheme, lightTheme} from "../../theme";
+import {themeForMode, darkTheme, lightTheme} from "../../theme";
 import {requireMapStyle} from "../../map/style";
 import MapStyleVeil from "./MapStyleVeil";
 import {useStyleVeil} from "./useStyleVeil";
@@ -36,9 +36,9 @@ function readCenter(e: unknown): [number, number] | null {
 
 export default function MapPickOverlay({t, lang, title, initial, onPick, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
-  const mapStyle = useMemo(() => requireMapStyle(scheme === "dark" ? "dark" : "light"), [scheme]);
+  const mapStyle = useMemo(() => requireMapStyle(scheme), [scheme]);
   const {veiled, onStyleLoaded} = useStyleVeil(scheme);
   const cameraRef = useRef<CameraRef | null>(null);
   const [center, setCenter] = useState<[number, number]>(initial ? [initial.lng, initial.lat] : HCMC_CENTER);

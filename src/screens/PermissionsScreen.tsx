@@ -6,7 +6,7 @@ import {useFocusEffect} from "@react-navigation/native";
 import {useAuth} from "../context/AuthContext";
 import {useStrings} from "../context/LanguageContext";
 import {useThemeMode} from "../context/ThemeContext";
-import {darkTheme, lightTheme} from "../theme";
+import {themeForMode, darkTheme, lightTheme} from "../theme";
 import ScreenContainer from "../components/ui/ScreenContainer";
 import PermissionRow from "../components/permissions/PermissionRow";
 import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestCameraPermission, requestMediaLibraryPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
@@ -25,7 +25,7 @@ export default function PermissionsScreen() {
   const {t} = useStrings();
   const {token, uid} = useAuth();
   const {mode} = useThemeMode();
-  const theme = mode === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(mode);
   const [perms, setPerms] = useState<AppPermissionStates>(OFF);
   const [permsBusy, setPermsBusy] = useState(false);
   useFocusEffect(useCallback(() => {

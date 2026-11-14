@@ -4,7 +4,7 @@ import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
-import {darkTheme, lightTheme, type AppTheme} from "../../theme";
+import {themeForMode, type AppTheme} from "../../theme";
 import type {Provider, ProviderService} from "../../api/providers";
 import Overlay from "../../components/overlay/Overlay";
 import ShopClassIcons, {classIconLabel} from "./ShopClassIcons";
@@ -115,7 +115,7 @@ type Props = {
 
 export default function ShopDetailSheet({t, shop, openLabel, openColor, serviceChannel = "ASSIST", showOffDuty = true, walkBusy = false, navBusy = false, imHereBusy = false, jobs = null, reviews = null, onReport, onWalkHere, onRouteFromHere, onImHere, onBook, onChoose, onManage, onClose}: Props) {
   const scheme = useAppMode();
-  const theme = scheme === "dark" ? darkTheme : lightTheme;
+  const theme = themeForMode(scheme);
   const count = typeof shop.ratingCount === "number" ? shop.ratingCount : 0;
   const avg = typeof shop.ratingAvg === "number" ? shop.ratingAvg : 0;
   const filled = Math.max(0, Math.min(5, Math.round(avg)));
