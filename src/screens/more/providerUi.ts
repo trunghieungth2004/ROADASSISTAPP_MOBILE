@@ -88,10 +88,6 @@ export function providerRowSubtitle(provider: Provider, t: Strings): string {
   if (provider.kind === "TOW" && typeof provider.plate === "string") {
     return provider.plate;
   }
-  if ((provider.kind === "SHOP" || provider.kind === "MOBILE_SHOP") && Array.isArray(provider.vehicleClasses) && provider.vehicleClasses.length > 0 && provider.vehicleClasses.length < 2) {
-    const only = provider.vehicleClasses[0];
-    return `${providerStatusLabel(provider, t)} · ${only === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike}`;
-  }
   return providerStatusLabel(provider, t);
 }
 

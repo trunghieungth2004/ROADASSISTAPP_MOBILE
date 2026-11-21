@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../utils/date";
 import {useCallback, useState} from "react";
 import {Keyboard, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
@@ -22,7 +23,7 @@ import Overlay from "../components/overlay/Overlay";
 import DutySection from "./DutySection";
 import {useThemeMode} from "../context/ThemeContext";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {uploadPhotoPaths} from "../services/photos";
+import {isPhotoUploadError, uploadPhotoPaths} from "../services/photos";
 import AppealsSheet from "./more/AppealsSheet";
 import AppealSheet from "./more/AppealSheet";
 import CaseDetailSheet from "./more/CaseDetailSheet";
@@ -129,11 +130,14 @@ export default function MoreScreen() {
     setAppealError(null);
     try {
       const photoUrls = uris.length > 0 ?
-        (await uploadPhotoPaths(
+        await uploadPhotoPaths(
           `appeals/${appealFor.subjectKind}-${appealFor.subjectId}`,
           uris,
-        )).filter((item): item is string => typeof item === "string") :
+        ) :
         [];
+      if (photoUrls.length !== uris.length) {
+        throw new Error(t.photos.uploadFailed);
+      }
       await fileAppeal({
         subjectKind: appealFor.subjectKind,
         subjectId: appealFor.subjectId,
@@ -151,7 +155,7 @@ export default function MoreScreen() {
       setEligible(freshEligible);
       setAppealsOpen(true);
     } catch (err) {
-      setAppealError(toMessage(err));
+      setAppealError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setAppealBusy(false);
     }
@@ -209,7 +213,7 @@ export default function MoreScreen() {
                 <Text style={[styles.restrictionHint, {color: theme.muted}]}>
                   {[
                     typeof user?.restrictedUntil === "string" ?
-                      `${t.more.restrictedUntil}: ${new Date(user.restrictedUntil).toLocaleDateString()}` :
+                      `${t.more.restrictedUntil}: ${formatDateDMY(user.restrictedUntil)}` :
                       null,
                     user?.restrictionReason ?? null,
                   ].filter((part): part is string => part !== null && part !== "").join(" · ")}

@@ -54,6 +54,27 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
       sum + (typeof entry.callOutFee === "number" ? entry.callOutFee : 0) +
       (typeof entry.travelFee === "number" ? entry.travelFee : 0), 0) :
     0;
+  const visitAssigned = ticket.ticketType === "SOS" &&
+    ((ticket.assignedShopId !== null && ticket.assignedShopId !== undefined) ||
+      typeof ticket.mobileCallOutFee === "number" ||
+      typeof ticket.mobileTravelFee === "number");
+  const visitCallOut = typeof ticket.mobileCallOutFee === "number" ?
+    ticket.mobileCallOutFee :
+    0;
+  const visitTravel = typeof ticket.mobileTravelFee === "number" ?
+    ticket.mobileTravelFee :
+    0;
+  const visitWaived = ticket.mobileCallOutWaived === true;
+  const visitKm = typeof ticket.mobileTravelKm === "number" ?
+    ticket.mobileTravelKm :
+    null;
+  const visitRate = typeof ticket.mobileTravelRate === "number" ?
+    ticket.mobileTravelRate :
+    null;
+  const visitTotal = (visitWaived ? 0 : visitCallOut) + visitTravel;
+  const showVisit = visitAssigned &&
+    !isUnfixableStatus(ticket.status) &&
+    (visitWaived || visitCallOut > 0 || visitTravel > 0);
   const towHistory = ticket.ticketType === "TOW" && Array.isArray(ticket.towFeeHistory) ?
     ticket.towFeeHistory.reduce((sum, entry) =>
       sum + (typeof entry.amount === "number" ? entry.amount : 0), 0) :
@@ -74,15 +95,15 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
   const isTow = ticket.ticketType === "TOW";
   let total: {label: string; amount: number} | null = null;
   if (bill !== null) total = {label: t.bills.total, amount: bill.total};
-  else if (callOut !== null && callOut > 0) total = {label: t.bills.total, amount: callOut};
+  else if (callOut !== null && callOut > 0) total = {label: t.bills.total, amount: callOut + mobileHistory};
   else if (towFinal !== null) total = {label: t.bills.total, amount: towFinal + waitingExtra + towHistory};
   else if (shopQuote !== null) total = {label: t.bills.total, amount: shopQuote + (isTow ? waitingExtra : 0)};
-  else if (finalAmount !== null) total = {label: t.bills.total, amount: finalAmount + (isTow ? waitingExtra : 0) + (ticket.ticketType === "SOS" ? mobileHistory : 0)};
-  else if (mobileHistory > 0) total = {label: t.bills.total, amount: mobileHistory};
+  else if (finalAmount !== null) total = {label: t.bills.total, amount: finalAmount + (isTow ? waitingExtra : 0) + (ticket.ticketType === "SOS" ? mobileHistory + visitTotal : 0)};
+  else if (visitTotal > 0 || mobileHistory > 0) total = {label: t.assist.visitEstimate, amount: visitTotal + mobileHistory};
   else if (towHistory > 0) total = {label: t.bills.total, amount: towHistory + waitingExtra};
   else if (estimateAmount !== null) total = {label: t.assist.estimatedTotal, amount: estimateAmount + (isTow ? waitingExtra : 0)};
   else if (towCeiling !== null) total = {label: t.assist.fareUpTo, amount: towCeiling};
-  const hasBillable = towHasFare || shopQuote !== null || finalAmount !== null || callOut !== null || mobileHistory > 0 || towHistory > 0 || bill !== null;
+  const hasBillable = towHasFare || shopQuote !== null || finalAmount !== null || callOut !== null || mobileHistory > 0 || showVisit || towHistory > 0 || bill !== null;
   const billLink = onOpenBill !== null &&
     (bill !== null || towHasFare || shopQuote !== null || finalAmount !== null);
   const showFinalActions = ticket.direction === "out" && payable &&
@@ -145,6 +166,36 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
         </Text>
       ) : null}
       {callOutWaived ? <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.mobileCallOutWaived}</Text> : null}
+      {showVisit ? (
+        <View style={styles.block}>
+          <Text style={[styles.sectionTitle, {color: theme.text}]}>{t.assist.visitFees}</Text>
+          <FeeRow
+            theme={theme}
+            label={t.assist.mobileCallOut}
+            value={visitWaived ? t.assist.waived : vnd(visitCallOut)}
+            valueColor={visitWaived ? theme.muted : undefined}
+          />
+          {visitTravel > 0 ? (
+            <>
+              <FeeRow theme={theme} label={t.bills.travel} value={vnd(visitTravel)} />
+              {visitKm !== null && visitKm > 0 ? (
+                <Text style={[detailStyles.muted, {color: theme.muted}]}>
+                  {visitRate !== null && visitRate > 0 ?
+                    t.assist.visitTravelDetail
+                      .replace("{km}", visitKm.toFixed(1))
+                      .replace("{rate}", visitRate.toLocaleString()) :
+                    `${visitKm.toFixed(1)} km`}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.noTravelFee}</Text>
+          )}
+          <FeeRow theme={theme} label={t.assist.visitEstimate} value={visitTotal > 0 ? vnd(visitTotal) : t.assist.waived} strong />
+          <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.visitRepairQuoted}</Text>
+          <Text style={[detailStyles.muted, {color: theme.muted}]}>{t.assist.visitUnfixable}</Text>
+        </View>
+      ) : null}
       {estimateAmount !== null ? (
         <View style={styles.block}>
           <View style={detailStyles.rowBetween}>
@@ -228,6 +279,7 @@ export default function FeesCard({t, theme, ticket, bill, busy, payable, waiting
 
 const styles = StyleSheet.create({
   block: {gap: 6},
+  sectionTitle: {fontSize: 13, fontWeight: "800"},
   total: {borderTopWidth: 1, paddingTop: 8},
   primaryBtn: {borderRadius: 8, paddingVertical: 9, paddingHorizontal: 14, alignItems: "center"},
   primaryText: {color: "#fff", fontWeight: "700"},

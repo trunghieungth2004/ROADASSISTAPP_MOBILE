@@ -11,9 +11,13 @@ jest.mock("../../../../src/api/chat", () => ({
   sendChatMessage: jest.fn(),
 }));
 jest.mock("../../../../src/services/photos", () => ({
+  CHAT_PHOTO_MAX: 3,
   takePhoto: jest.fn(async () => []),
+  pickPhotos: jest.fn(async () => []),
   uploadPhotoPaths: jest.fn(async () => []),
   resolvePhotoUrl: jest.fn(async () => ""),
+  isPhotoPermissionError: jest.fn(() => false),
+  isPhotoUploadError: jest.fn(() => false),
 }));
 jest.mock("../../../../src/components/ui/PhotoThumb", () => ({
   __esModule: true,

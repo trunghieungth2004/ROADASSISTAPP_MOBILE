@@ -1,13 +1,17 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {ScrollView, View} from "react-native";
+import {View} from "react-native";
 import TicketSheet from "../../../src/screens/assist/TicketSheet";
 import {en} from "../../../src/i18n/en";
 import {lightTheme} from "../../../src/theme";
 
 jest.mock("../../../src/services/photos", () => ({
   TICKET_PHOTO_MAX: 5,
+  isPhotoUploadError: jest.fn(() => false),
+  isPhotoPermissionError: jest.fn(() => false),
+  pickPhotos: jest.fn(async () => []),
+  takePhoto: jest.fn(async () => []),
 }));
 
 const metrics: Metrics = {
@@ -54,19 +58,20 @@ async function render(overrides?: Partial<Props>) {
   return {renderer, onAddPhotos, onRemovePhoto};
 }
 
-test("the add strip opens the camera directly and previews full-width strips", async () => {
+test("offers camera and library, previews thumbnails and removes by index", async () => {
   const {renderer, onAddPhotos, onRemovePhoto} = await render({photos: ["file://a.jpg"]});
   try {
-    expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === "Add photos")).toHaveLength(0);
-    const add = renderer.root.find((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function");
-    expect(flatStyle(add.props.style)).toMatchObject({width: "100%", height: 56});
+    const camera = renderer.root.find((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function");
+    const library = renderer.root.find((n) => n.props?.accessibilityLabel === en.photos.choose && typeof n.props?.onPress === "function");
     await act(async () => {
-      add.props.onPress();
+      camera.props.onPress();
+      library.props.onPress();
     });
-    expect(onAddPhotos).toHaveBeenCalledWith();
-    const strips = renderer.root.findAll((n) => n.props?.source?.uri === "file://a.jpg");
-    expect(strips.length).toBeGreaterThan(0);
-    expect(flatStyle(strips[0].props.style)).toMatchObject({width: "100%", height: 56});
+    expect(onAddPhotos).toHaveBeenNthCalledWith(1, "camera");
+    expect(onAddPhotos).toHaveBeenNthCalledWith(2, "library");
+    const thumbs = renderer.root.findAll((n) => n.props?.source?.uri === "file://a.jpg");
+    expect(thumbs.length).toBeGreaterThan(0);
+    expect(flatStyle(thumbs[0].props.style)).toMatchObject({width: 72, height: 72});
     const remove = renderer.root.find((n) => n.props?.accessibilityLabel === en.common.delete && typeof n.props?.onPress === "function");
     await act(async () => {
       remove.props.onPress();
@@ -95,14 +100,14 @@ test("the photo block sits below the drop-off search", async () => {
   }
 });
 
-test("the photo list is bounded and the add strip hides at the cap", async () => {
+test("source buttons hide at the cap and all thumbnails stay visible", async () => {
   const five = ["a", "b", "c", "d", "e"].map((k) => `file://${k}.jpg`);
   const {renderer} = await render({photos: five});
   try {
     expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === en.photos.take && typeof n.props?.onPress === "function")).toHaveLength(0);
-    const scroller = renderer.root.findByType(ScrollView);
-    expect(flatStyle(scroller.props.style).maxHeight).toBe(188);
+    expect(renderer.root.findAll((n) => n.props?.accessibilityLabel === en.photos.choose && typeof n.props?.onPress === "function")).toHaveLength(0);
     expect(renderer.root.findAll((n) => typeof n.props?.source?.uri === "string").length).toBeGreaterThanOrEqual(5);
+    expect(renderer.root.findAll((n) => n.props?.children === `${en.assist.photos} (5/5)`).length).toBeGreaterThan(0);
   } finally {
     await act(async () => {
       renderer.unmount();

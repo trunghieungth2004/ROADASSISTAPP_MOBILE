@@ -13,13 +13,16 @@ import ScreenContainer from "../components/ui/ScreenContainer";
 import Snack from "../components/ui/Snack";
 import {snackBottom} from "../components/ui/snackOffset";
 import {missingKinds, providerPill, providerRowSubtitle, switchEnabled} from "./more/providerUi";
-import {myProviders, revokeProvider, updateProvider, type Provider} from "../api/providers";
-import ProviderFormDialog from "../components/providers/ProviderFormDialog";
+import ShopClassIcons, {classIconLabel} from "./assist/ShopClassIcons";
+import {createProvider, myProviders, revokeProvider, updateProvider, type Provider} from "../api/providers";
+import ProviderEditorScreen from "../components/providers/ProviderEditorScreen";
 import ProviderDetailsSheet from "./more/ProviderDetailsSheet";
 import Overlay from "../components/overlay/Overlay";
+import OnboardingScreen, {type MobileShopDraft, type ShopDraft, type TowDraft} from "./OnboardingScreen";
+import {normalizeTowPlate, parseTowWidth, parseVehicleHeight, validateTowDraft} from "../services/towPlates";
 
 export default function ProvidersScreen() {
-  const {t} = useStrings();
+  const {t, lang} = useStrings();
   const {token} = useAuth();
   const {mode} = useThemeMode();
   const theme = themeForMode(mode);
@@ -30,6 +33,8 @@ export default function ProvidersScreen() {
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerCreate, setProviderCreate] = useState<"SHOP" | "TOW" | "MOBILE_SHOP" | null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [providerDetail, setProviderDetail] = useState<Provider | null>(null);
   const [providerEdit, setProviderEdit] = useState<Provider | null>(null);
   const [revokeFor, setRevokeFor] = useState<Provider | null>(null);
@@ -54,6 +59,74 @@ export default function ProvidersScreen() {
   useFocusEffect(useCallback(() => {
     void loadProviders();
   }, [loadProviders]));
+  async function onSetupFinish(_services: string[], shop: ShopDraft | null, tow: TowDraft | null, mobileShop: MobileShopDraft | null): Promise<void> {
+    if (!token || !providerCreate || setupBusy) return;
+    setSetupBusy(true);
+    setSetupError(null);
+    try {
+      if (providerCreate === "SHOP") {
+        if (!shop) throw new Error(t.provider.invalidName);
+        await createProvider({
+          kind: "SHOP",
+          name: shop.name.trim(),
+          lat: shop.lat,
+          lng: shop.lng,
+          ...(shop.label ? {label: shop.label} : {}),
+          ...(shop.openHours ? {openHours: shop.openHours} : {}),
+          ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {}),
+          ...(shop.services ? {services: shop.services} : {}),
+        }, token);
+      } else if (providerCreate === "MOBILE_SHOP") {
+        if (!mobileShop) throw new Error(t.provider.invalidName);
+        await createProvider({
+          kind: "MOBILE_SHOP",
+          name: mobileShop.name.trim(),
+          lat: mobileShop.lat,
+          lng: mobileShop.lng,
+          ...(mobileShop.label ? {label: mobileShop.label} : {}),
+          plate: normalizeTowPlate(mobileShop.plate),
+          vehicleType: mobileShop.vehicleType,
+          ...(mobileShop.vehicleLabel ? {vehicleLabel: mobileShop.vehicleLabel} : {}),
+          vehicleWidth: parseTowWidth(mobileShop.vehicleWidth) ?? undefined,
+          vehicleHeight: parseVehicleHeight(mobileShop.vehicleHeight) ?? undefined,
+          licenseNumber: mobileShop.licenseNumber.trim(),
+          ...(mobileShop.services ? {services: mobileShop.services} : {}),
+        }, token);
+      } else {
+        if (!tow) throw new Error(t.provider.invalidName);
+        const bad = validateTowDraft({plate: tow.plate, vehicleType: tow.vehicleType, width: tow.width});
+        if (bad) throw new Error(t.tow.invalid);
+        await createProvider({
+          kind: "TOW",
+          name: tow.name.trim(),
+          lat: tow.lat,
+          lng: tow.lng,
+          plate: normalizeTowPlate(tow.plate),
+          vehicleType: tow.vehicleType,
+          ...(tow.vehicleLabel ? {vehicleLabel: tow.vehicleLabel} : {}),
+          vehicleWidth: parseTowWidth(tow.width) ?? undefined,
+          vehicleHeight: parseVehicleHeight(tow.height) ?? undefined,
+        }, token);
+      }
+      setProviderCreate(null);
+      setNotice(t.provider.saved);
+      await loadProviders();
+    } catch (err) {
+      setSetupError(toMessage(err));
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+  async function refreshDetail(providerId: string): Promise<void> {
+    if (!token) return;
+    try {
+      const list = await myProviders(token);
+      setProviders(list);
+      setProviderDetail((current) => current?.id === providerId ? list.find((item) => item.id === providerId) ?? null : current);
+    } catch {
+      await loadProviders();
+    }
+  }
   async function onProviderToggle(provider: Provider, next: boolean): Promise<void> {
     if (!token || providerBusy) return;
     setProviderBusy(true);
@@ -154,7 +227,13 @@ export default function ProvidersScreen() {
                   <MaterialIcons name={provider.kind === "TOW" ? "local-shipping" : provider.kind === "MOBILE_SHOP" ? "build" : "storefront"} size={20} color={theme.primary} />
                   <Pressable style={styles.permText} onPress={() => setProviderDetail(provider)} accessibilityRole="button" accessibilityLabel={`${provider.name}, ${pill.label}`}>
                     <Text style={[styles.listText, {color: theme.text}]}>{provider.name}</Text>
-                    <Text style={[styles.permHint, {color: theme.muted}]}>{providerRowSubtitle(provider, t)}</Text>
+                    <View style={styles.providerMetaRow}>
+                      <Text style={[styles.permHint, {color: theme.muted}]}>{providerRowSubtitle(provider, t)}</Text>
+                      {(provider.kind === "SHOP" || provider.kind === "MOBILE_SHOP") &&
+                        Array.isArray(provider.vehicleClasses) && provider.vehicleClasses.length > 0 ? (
+                          <ShopClassIcons theme={theme} shop={provider} label={classIconLabel(provider, t)} size={14} />
+                        ) : null}
+                    </View>
                     {note ? <Text style={[styles.permHint, {color: theme.muted}]}>{note}</Text> : null}
                   </Pressable>
                   <View style={[styles.permPill, {backgroundColor: pillBg}]}>
@@ -195,7 +274,21 @@ export default function ProvidersScreen() {
           </Overlay>
         ) : null}
         {providerCreate ? (
-          <ProviderFormDialog t={t} token={token} kind={providerCreate} provider={null} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); }} onSaved={() => { setProviderCreate(null); setNotice(t.provider.saved); void loadProviders(); }} />
+          <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setProviderCreate(null); setSetupError(null); }}>
+            <OnboardingScreen
+              t={t}
+              lang={lang}
+              token={token}
+              busy={setupBusy}
+              error={setupError}
+              selectedServices={[providerCreate]}
+              registered={{shop: !missing.shop, tow: !missing.tow, mobileShop: !missing.mobileShop}}
+              setupOnly={providerCreate}
+              onClose={() => { Keyboard.dismiss(); setProviderCreate(null); setSetupError(null); }}
+              onFinish={(services, shop, tow, mobileShop) => void onSetupFinish(services, shop, tow, mobileShop)}
+              onSkip={() => { setProviderCreate(null); setSetupError(null); }}
+            />
+          </Overlay>
         ) : null}
         {providerDetail ? (
           <ProviderDetailsSheet
@@ -204,10 +297,7 @@ export default function ProvidersScreen() {
             token={token}
             provider={providerDetail}
             onClose={() => setProviderDetail(null)}
-            onEdit={() => {
-              setProviderEdit(providerDetail);
-              setProviderDetail(null);
-            }}
+            onEdit={() => setProviderEdit(providerDetail)}
             onRemove={() => {
               setRevokeFor(providerDetail);
               setRevokeError(null);
@@ -217,7 +307,19 @@ export default function ProvidersScreen() {
           />
         ) : null}
         {providerEdit ? (
-          <ProviderFormDialog t={t} token={token} kind={providerEdit.kind} provider={providerEdit} onClose={() => { Keyboard.dismiss(); setProviderEdit(null); }} onSaved={() => { setProviderEdit(null); setNotice(t.provider.saved); void loadProviders(); }} />
+          <ProviderEditorScreen
+            t={t}
+            token={token}
+            kind={providerEdit.kind}
+            provider={providerEdit}
+            onClose={() => setProviderEdit(null)}
+            onSaved={() => {
+              const id = providerEdit.id;
+              setProviderEdit(null);
+              setNotice(t.provider.saved);
+              void refreshDetail(id);
+            }}
+          />
         ) : null}
       </ScrollView>
       {providerError ? (
@@ -241,6 +343,7 @@ const styles = StyleSheet.create({
   listText: {flex: 1, fontSize: 15, fontWeight: "500"},
   permText: {flex: 1, minWidth: 0, gap: 2},
   permHint: {fontSize: 12},
+  providerMetaRow: {flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap"},
   permPill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10},
   permPillText: {color: "#fff", fontSize: 12, fontWeight: "700"},
   permBtn: {borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10},

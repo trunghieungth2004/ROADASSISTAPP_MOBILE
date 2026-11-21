@@ -1,13 +1,11 @@
 import {useEffect, useState} from "react";
-import {ActivityIndicator, Image, Pressable, StyleSheet, View} from "react-native";
-import {MaterialIcons} from "@expo/vector-icons";
+import {StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import Overlay from "../../components/overlay/Overlay";
-import {toMessage} from "../../api/client";
 import {fileWarrantyClaim} from "../../api/warranty";
 import {useAuth} from "../../context/AuthContext";
-import {usePhotoViewer} from "../../components/ui/PhotoViewer";
-import {isPhotoPermissionError, pickPhotos, takePhoto, uploadPhotoPaths} from "../../services/photos";
+import {WARRANTY_PHOTO_MAX, uploadPhotoPaths} from "../../services/photos";
+import PhotoAttachments, {photoUploadMessage, usePhotoDraft} from "../../components/ui/PhotoAttachments";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 
@@ -24,41 +22,18 @@ type Props = {
 
 export default function WarrantyClaimDialog({visible, ticketId, line, token, theme, t, onClose, onFiled}: Props) {
   const {uid} = useAuth();
-  const photoViewer = usePhotoViewer(t.common.cancel);
+  const photoDraft = usePhotoDraft({t, max: WARRANTY_PHOTO_MAX});
   const [reason, setReason] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [photoBusy, setPhotoBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     setReason("");
-    setPhotos([]);
-    setPhotoBusy(false);
+    photoDraft.clear();
     setBusy(false);
     setError(null);
   }, [visible, line?.lineId]);
-
-  async function addPhoto(source: "camera" | "library"): Promise<void> {
-    if (photoBusy || photos.length >= 5) return;
-    setPhotoBusy(true);
-    setError(null);
-    try {
-      const picked = source === "camera" ?
-        await takePhoto() :
-        await pickPhotos(5, photos.length);
-      if (picked.length > 0) {
-        setPhotos((prev) => [...prev, ...picked].slice(0, 5));
-      }
-    } catch (err) {
-      setError(isPhotoPermissionError(err) ?
-        (source === "camera" ? t.photos.cameraDenied : t.photos.denied) :
-        toMessage(err));
-    } finally {
-      setPhotoBusy(false);
-    }
-  }
 
   async function submit(): Promise<void> {
     if (!token || !line || busy) return;
@@ -66,10 +41,10 @@ export default function WarrantyClaimDialog({visible, ticketId, line, token, the
     setError(null);
     try {
       let photoUrls: string[] | undefined;
-      if (photos.length > 0) {
+      if (photoDraft.photos.length > 0) {
         if (!uid) throw new Error(t.photos.uploadFailed);
-        const uploaded = await uploadPhotoPaths(`warranty/${uid}/${ticketId}`, photos);
-        if (uploaded.length !== photos.length) {
+        const uploaded = await uploadPhotoPaths(`warranty/${uid}/${ticketId}`, photoDraft.photos);
+        if (uploaded.length !== photoDraft.photos.length) {
           throw new Error(t.photos.uploadFailed);
         }
         photoUrls = uploaded;
@@ -82,7 +57,7 @@ export default function WarrantyClaimDialog({visible, ticketId, line, token, the
       }, token);
       await onFiled();
     } catch (err) {
-      setError(toMessage(err));
+      setError(photoUploadMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -104,71 +79,34 @@ export default function WarrantyClaimDialog({visible, ticketId, line, token, the
         onPress: () => void submit(),
       }]}
     >
-      <Text style={[styles.muted, {color: theme.muted}]}>{t.bills.warrantyClaimHint}</Text>
-      {error ? <Text style={[styles.muted, {color: theme.danger}]}>{error}</Text> : null}
-      <View style={styles.photoRow}>
-        {photos.map((path, index) => (
-          <View key={`${path}-${index}`} style={styles.photoWrap}>
-            <Pressable onPress={() => photoViewer.open(path)} accessibilityRole="button" accessibilityLabel={`${t.assist.photos} ${index + 1}`}>
-              <Image source={{uri: path}} style={styles.photo} />
-            </Pressable>
-            <Pressable
-              style={[styles.removePhoto, {backgroundColor: theme.danger}]}
-              onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))}
-              accessibilityRole="button"
-              accessibilityLabel={t.common.delete}
-            >
-              <MaterialIcons name="close" size={12} color="#fff" />
-            </Pressable>
-          </View>
-        ))}
-        {photos.length < 5 ? (
-          <>
-            <Pressable
-              style={[styles.photoBtn, {borderColor: theme.border}]}
-              disabled={photoBusy}
-              onPress={() => void addPhoto("camera")}
-              accessibilityRole="button"
-              accessibilityLabel={t.photos.take}
-            >
-              {photoBusy ? (
-                <ActivityIndicator color={theme.primary} />
-              ) : (
-                <MaterialIcons name="photo-camera" size={22} color={theme.primary} />
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.photoBtn, {borderColor: theme.border}]}
-              disabled={photoBusy}
-              onPress={() => void addPhoto("library")}
-              accessibilityRole="button"
-              accessibilityLabel={t.photos.choose}
-            >
-              <MaterialIcons name="photo-library" size={22} color={theme.primary} />
-            </Pressable>
-          </>
-        ) : null}
+      <View style={styles.body}>
+        <Text style={[styles.muted, {color: theme.muted}]}>{t.bills.warrantyClaimHint}</Text>
+        {error ? <Text style={[styles.muted, {color: theme.danger}]}>{error}</Text> : null}
+        <PhotoAttachments
+          t={t}
+          photos={photoDraft.photos}
+          max={WARRANTY_PHOTO_MAX}
+          busy={photoDraft.busy}
+          error={photoDraft.error}
+          label={t.assist.photos}
+          onAdd={(source) => void photoDraft.add(source)}
+          onRemove={photoDraft.remove}
+        />
+        <TextInput
+          style={[styles.input, {borderColor: theme.border, color: theme.text}]}
+          value={reason}
+          onChangeText={setReason}
+          placeholder={t.bills.refundReason}
+          placeholderTextColor={theme.muted}
+          multiline
+        />
       </View>
-      <Text style={[styles.muted, {color: theme.muted}]}>{`${photos.length}/5`}</Text>
-      <TextInput
-        style={[styles.input, {borderColor: theme.border, color: theme.text}]}
-        value={reason}
-        onChangeText={setReason}
-        placeholder={t.bills.refundReason}
-        placeholderTextColor={theme.muted}
-        multiline
-      />
-      {photoViewer.node}
     </Overlay>
   );
 }
 
 const styles = StyleSheet.create({
+  body: {gap: 10},
   muted: {fontSize: 12},
   input: {borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 72, textAlignVertical: "top"},
-  photoRow: {flexDirection: "row", flexWrap: "wrap", gap: 8},
-  photoWrap: {position: "relative"},
-  photo: {width: 64, height: 64, borderRadius: 8},
-  removePhoto: {position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center"},
-  photoBtn: {width: 56, height: 56, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center"},
 });

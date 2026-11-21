@@ -14,6 +14,12 @@ export function parseTowWidth(raw: string): number | null {
   return Math.round(value * 100) / 100;
 }
 
+export function parseVehicleHeight(raw: string): number | null {
+  const value = Number(raw.trim().replace(",", "."));
+  if (!Number.isFinite(value) || value < 0.5 || value > 3) return null;
+  return Math.round(value * 100) / 100;
+}
+
 export type TowDraftError = "plate" | "type" | "width" | null;
 
 export const TOW_TYPES = ["CAR"] as const;

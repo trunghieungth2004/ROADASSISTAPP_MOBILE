@@ -55,13 +55,13 @@ async function press(node: ReactTestInstance | undefined): Promise<void> {
   });
 }
 
-async function mount(props?: {selectedServices?: string[]; registered?: {shop: boolean; tow: boolean; mobileShop?: boolean}}) {
+async function mount(props?: {selectedServices?: string[]; registered?: {shop: boolean; tow: boolean; mobileShop?: boolean}; setupOnly?: "SHOP" | "TOW" | "MOBILE_SHOP"; onClose?: () => void}) {
   const onFinish = jest.fn();
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
     renderer = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <OnboardingScreen t={en} lang="en" token="tok" selectedServices={props?.selectedServices ?? ["RIDER"]} registered={props?.registered} onFinish={onFinish} onSkip={() => undefined} />
+        <OnboardingScreen t={en} lang="en" token="tok" selectedServices={props?.selectedServices ?? ["RIDER"]} registered={props?.registered} setupOnly={props?.setupOnly} onClose={props?.onClose} onFinish={onFinish} onSkip={() => undefined} />
       </SafeAreaProvider>,
     );
   });
@@ -143,6 +143,21 @@ test("registered providers show as locked and are not re-routed", async () => {
     expect(text).toContain(en.provider.registered);
     await press(pressableWith(renderer, en.roles.done));
     expect(onFinish).toHaveBeenCalledWith(["RIDER"], null, null, null);
+  } finally {
+    renderer.unmount();
+  }
+});
+
+test("setupOnly starts on the selected provider step and back closes the wizard", async () => {
+  const onClose = jest.fn();
+  const {renderer} = await mount({selectedServices: ["SHOP"], setupOnly: "SHOP", onClose});
+  try {
+    const text = shown(renderer);
+    expect(text).toContain(en.provider.addShop);
+    expect(text).not.toContain(en.roles.subtitle);
+    const back = renderer.root.findAll((n) => n.props?.accessibilityLabel === en.common.back && typeof n.props?.onPress === "function")[0];
+    await press(back);
+    expect(onClose).toHaveBeenCalled();
   } finally {
     renderer.unmount();
   }

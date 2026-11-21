@@ -78,10 +78,11 @@ capped at `MAX_STOPS`). Sub-8px releases disarm without committing.
 search actions (Find/pick/swap), never on drag reroutes.
 
 Route-context hints — flag placement, marker drag, and paused alerts — render
-as inline snacks (`modal={false}`). They must not use the modal snack path: a
-transparent full-screen modal blocks the map underneath, so the placement tap
-never arrives and the screen looks frozen. Transient errors and confirmations
-keep the modal path so they can appear above open sheets.
+through the shared inline `Snack`. Every snack is now non-blocking: the
+full-screen shell uses `pointerEvents="box-none"`, the pill is not pressable,
+and only an explicit action button receives touches. A transparent modal must
+not wrap the snack because it would block the map underneath and make
+placement taps look frozen.
 
 Same-place trips never reach the network: when origin and destination are
 within 15 m and no stops are set, `requestRoute` shows `route.samePlace` and
@@ -118,8 +119,9 @@ Fullscreen opaque child screen (tabs + stack header hidden via
 
 Taps and Use-my-location reverse-geocode via MapTiler with a coordinate
 fallback. Picking a result with no routes yet flies the camera to it
-(`setCamera`, z15). Window resize handles the keyboard; no manual
-keyboard-height compensation anywhere.
+(`setCamera`, z15). The search field stays at the top, so place search needs
+no local keyboard-height compensation; sheet and dialog forms use the shared
+`Overlay` avoider.
 
 ## Navigation (`src/screens/NavigationScreen.tsx`, `src/services/`)
 
@@ -468,11 +470,10 @@ removed flags are pruned locally. Vote history is scoped per uid
 (`roadassist.votedFlags.<uid>` / `roadassist.deniedFlags.<uid>`), and the
 screen reloads it on account change.
 
-Photo zone first, centred: up to three 48 px preview tiles (✕ badge to
-remove) beside a dashed add tile; tapping the tile swaps in the "Take
-photo" / "Add photo" chips in place, so the camera/library choice never
-stacks a second modal. The old pin-preview + coordinate header is gone —
-the report point stays pinned on the map behind the dialog. Type and Radius
+Photo zone first, centred: the shared `PhotoAttachments` thumbnail grid with
+a count label, camera and library source buttons, and a red remove badge. The
+old pin-preview + coordinate header is gone — the report point stays pinned on
+the map behind the dialog. Type and Radius
 split the control row 50/50 — "Type" and "Radius (m)" label lines over the
 three icon-only 44 px buttons (names kept as accessibility labels) and the
 five chips, each group centred in its half, chips capped at 40 px so they
@@ -491,13 +492,59 @@ A `DENIED` record of either kind reads as missing, so re-applying stays
 possible from the Services screen.
 
 `OnboardingScreen` is a step wizard, not an inline form dump: the roles step
-picks the rider license (locked) and any provider roles; a registered SHOP/TOW
-reads "Registered" and locked, then Continue walks only the newly picked SHOP
-and TOW setup steps in sequence — each with a back button, progress dots, and its
-own inline validation — before the single `onFinish(services, shop, tow)`
-contract fires. Skip stays on the roles step. Both call sites (Tabs' sign-up
-gate, Settings' services sheet) get the same wizard, and services already
-held without a provider record route straight into their setup step.
+picks the rider license (locked) and any provider roles; a registered
+SHOP/TOW/MOBILE_SHOP reads "Registered" and locked, then Continue walks only
+the newly picked setup steps in sequence — each with a back button, progress
+dots, and its own inline validation — before the single
+`onFinish(services, shop, tow, mobileShop)` contract fires. The roles step
+uses safe-area top spacing so the title is not pinned under the status bar.
+Skip stays on the roles step. Both call sites (Tabs' sign-up gate, Settings'
+services sheet) get the same wizard, and services already held without a
+provider record route straight into their setup step. The Provider screen's
+Add shop / Add mobile shop / Register tow buttons reuse the wizard with
+`setupOnly`, starting on that provider step and closing from the back arrow.
+SHOP and MOBILE_SHOP steps embed the shared `ProviderServiceList`, so the
+first catalog can be entered at signup; rows are optional and validated
+through `buildServiceCatalog`. The vehicle chips are explicitly labelled:
+customer vehicles a shop repairs, the vehicle a mobile shop travels with, and
+the tow truck that performs tows. Name, address, plate and licence use the
+same visible labels and hints in setup and edit.
+
+## Dashboard
+
+`DashboardScreen` reads `POST /analytics/me` for both scopes in one call. The
+scope row is a single date pill (7/30/90/365 presets and a custom
+`RangePickerSheet` with `DD/MM/YYYY` fields) plus a refresh control and
+last-updated time. Ranges default to 30 days and cap at 365. The view follows
+a glance → trend → breakdown hierarchy: one hero KPI with previous-period
+delta and sparkline (rider spend, provider net earnings), a secondary KPI grid
+including provider taken/completed jobs, seven activity columns with
+non-wrapping `DD/MM` labels, top-five service bars with a top-service badge,
+and a service-type stacked bar with legend. Service types use fixed semantic
+tones (SOS rose, TOW blue, WALK_IN/MECHANIC green, BOOKING purple); the same
+tones drive the Assist request buttons. Activity columns are tappable and open
+`DayDetailSheet` (tabs for tickets/bookings/payments); tapping a ticket opens a
+bottom `DashboardTicketSheet` detail without leaving the day sheet. All
+user-facing dates use `DD/MM/YYYY`; ISO remains the API/internal format.
+
+## Icon system
+
+Vehicle and mechanical concepts use MaterialCommunityIcons; actions, status
+and money use MaterialIcons. `components/vehicles/VehicleIcons.tsx` exposes
+`VehicleGlyph`, `VehicleClassGlyph` and `VehicleClassIcons`, and
+`components/providers/ServiceCategoryIcon.tsx` maps the service catalog to
+`tire`, `oil`, `link-variant`, `flash`, `lightning-bolt`, `engine`,
+`car-brake-alert` and `dots-horizontal`. `screens/assist/ShopClassIcons.tsx`
+keeps the shop's served classes on one glyph pair.
+
+Bike/car controls are icon-only wherever they are compact chips: onboarding
+mobile-shop and tow choices, provider editing, service-editor vehicle scope,
+Assist filters and shop cards. Each control keeps a 44×44 px target and the
+localized class name as its `accessibilityLabel`; visible text remains on wide
+selector cards where the label adds clarity. Provider rows and service rows
+show the relevant glyphs beside their metadata, and `TicketStatusPill` pairs
+each status with a matching icon while keeping the status text. Dashboard KPI
+entries carry an optional `icon` key from `dashboardData.ts`.
 
 ## Permissions & photo sources
 
@@ -510,12 +557,18 @@ A row whose `canAskAgain` is false offers app settings instead of a dead
 request. Existing accounts never see the gate again (`roadassist.permGate` in
 AsyncStorage); the More screen carries the same rows for later.
 
-Every photo attach point uses the same pair — `takePhoto()` (camera) and
-`pickPhotos()` (library) — ticket dialog, dispute and unfixable evidence show
-the two chips directly, while the hazard report reveals them from its add
-tile. Both request their permission in context and throw the shared
-`photo-permission` error on denial, which each sheet maps to "enable it in
-More › Permissions". `app.json` carries the `expo-image-picker` plugin copy
+Every photo attach point uses the shared `PhotoAttachments` component and
+`usePhotoDraft` hook: a labelled thumbnail grid with one remove badge style,
+camera and library source buttons, a `n/max` count, and one upload-error
+message. Ticket filing, hazard reports, disputes, behaviour reports, appeals,
+warranty claims, handover photos, unfixable evidence and chat all use the same
+control; chat keeps the compact icon-only source row. Limits live in
+`src/services/photos.ts` (5 for ticket/evidence/dispute/report/warranty/
+handover, 3 for chat/appeal/hazard). Both sources request their permission in
+context and throw the shared `photo-permission` error on denial, which the
+shared component maps to "enable it in More › Permissions". Upload failures
+map to `t.photos.uploadFailed` instead of leaking storage error codes.
+`app.json` carries the `expo-image-picker` plugin copy
 (camera/photo usage strings, microphone permission off so no `RECORD_AUDIO`
 is merged in; Android `CAMERA` arrives from the library manifest).
 
@@ -573,8 +626,11 @@ Permissions, Providers, Bills, BillDetail).
 `SettingsScreen` is a hub of rows: services onboarding, appearance,
 language, then pushed `Permissions` (notifications / camera / photo library /
 background location / battery, moved wholesale) and `Providers` (Vehicle-pattern header with
-per-missing-kind register buttons on top, per-row switches + edit below,
-create/edit dialogs moved with it).
+per-missing-kind register buttons on top, per-row switches + edit below).
+The register buttons launch the onboarding wizard in `setupOnly` mode; edit
+launches the full-screen `ProviderEditorScreen` from the provider details
+sheet, so closing the editor returns to the details sheet instead of the bare
+list.
 `AboutScreen` holds everything that *identifies the app*: name, version +
 build number, backend URL, check-for-updates + auto toggle (Android),
 diagnostics link, GitHub source link.
@@ -594,10 +650,30 @@ on duty can accept after-hours walk-ins and tow drop-offs.
 The tow subtitle reports effective visibility from beat freshness ("waiting
 for location" on a cold start), because the switch alone can't promise what
 the radius can't see. Per-provider switches stay as the source of truth for
-multi-provider edge cases. Registration and edit forms
-carry the provider's own pricing fields (TOW base/per-km, mobile-shop
-call-out/travel per-km) within platform bounds; the duty switch stays in these
-rows. The platform config remains the fallback card.
+multi-provider edge cases. Registration and edit forms carry the provider's
+own pricing fields (TOW base/per-km, mobile-shop call-out/travel per-km)
+within platform bounds; the duty switch stays in these rows. The platform
+config remains the fallback card.
+
+`ProviderEditorScreen` uses the onboarding visual shell and field order:
+Profile, Location/Vehicle, Services, then the advanced Hours, Bookings,
+Pricing and Billing sections. The provider kind is a locked badge; name,
+address, plate and licence are explicitly labelled; hours use the same
+summary row + `ShopHoursEditor` sheet as setup; and
+`ProviderServiceList` is shared by setup and edit so the service summary,
+icons, prices and add/edit affordances cannot drift. The editor keeps a
+pinned Cancel/Save footer and its own `KeyboardAvoidingView`.
+
+TOW/MOBILE_SHOP vehicle steps collect the same fields as adding a personal
+vehicle: plate, vehicle type, name, width and height. `existingVehicles.ts`
+builds plate-keyed choices from the caller's provider records and vehicle
+profiles, excludes the provider being edited and active/pending duplicates of
+the same kind, and keeps denied same-kind rows for re-application.
+`ExistingVehicleChoices` shows the labels and fills plate, type, width and
+height on tap; entering a plate filters the choices to exact normalized
+matches. Provider applications no longer create a fleet vehicle while
+pending: the backend creates or links the linked `vehicle_profiles` row on
+approval, so denied applications stay out of My Vehicles.
 
 ## Saved places live in place search
 
@@ -616,9 +692,18 @@ listings can't be picked as destinations.
 
 Both saved lists size to their content — no `minHeight` floor. `Overlay`
 already handles the two cases correctly: the body is `flexShrink: 1` inside
-a container capped at `maxHeight` (85% dialog / 70% sheet), so a short list
+a container capped at `maxHeight` (85% dialog / 76% sheet), so a short list
 produces a short dialog and a long one scrolls. A floor would buy a taller
 empty state at the cost of dead space on every non-empty one.
+
+`Overlay` wraps sheets and dialogs in `KeyboardAvoidingView` with
+`behavior="padding"` on both platforms. Android is edge-to-edge, so the
+window no longer resizes for the keyboard; leaving `behavior` undefined, or
+using a sheet without an avoider, puts the footer and focused fields under
+the keyboard. Open sheets drop their bottom safe-area inset, grow to the
+space above the keyboard, and let the body scroll with
+`keyboardDismissMode`; full-screen editors and onboarding own their avoider
+because chat manages its own composer.
 
 ## Payout accounts & withdrawals
 
@@ -628,8 +713,12 @@ the saved bank account (masked to the last four digits), an account editor
 (bank chips from `POST /payouts/banks`, account number, holder name) and a
 withdraw action for the available balance. Requests list with status chips;
 one pending request at a time. The provider form edits the SHOP/MOBILE_SHOP
-service catalog (name, price, inspection flag, category) and sends it on
-create/update.
+service catalog (name, price, inspection flag, category). Service rows are
+full-width tap targets that open the shared `ServiceEditSheet` with all fields
+and sticky Save/Delete actions; the old tiny expand/delete controls are gone.
+Provider editing also carries inline explanations for business name, customer
+vehicle classes, mobile vehicle, tow truck, pricing fields, booking hours,
+deposits and tax code.
 
 ## Live tracking share
 
@@ -646,8 +735,13 @@ ETA, pin) for six hours. Closed tickets cannot be shared.
 Work done can carry a warranty (`warrantyDays`, 0–90); resolving stamps
 `warrantyUntil`, which the bill shows. Bill detail renders the refund request state (`refundRequest`) and a request-refund action for received payments and each item's `breakdown` (base/distance/waiting/night,
 SOS call-out/travel/repair, prior partials) with `distanceKm` in the line
-detail, beside the itemized quote lines. The record sheet money block renders
-the approved itemized quote
+detail, beside the itemized quote lines. For an SOS with an assigned mobile
+shop the money block first shows the current visit fees — call-out (or
+`Waived`), travel with `km × rate`, and the visit estimate — notes that repair
+is quoted separately and that travel is not charged when the vehicle is marked
+unfixable, and folds those visit fees into the pre-bill total. After an
+unfixable close the visit breakdown is replaced by the call-out-only total.
+The record sheet also renders the approved itemized quote
 (`shopQuotedAmount` + `quoteItems` / `invoiceItems`), legacy `finalAmount`
 with fault photos, prior mobile/tower partials (`mobileFeeHistory` /
 `towFeeHistory`), and the tow fare rows (board-preview estimate, live "up to"

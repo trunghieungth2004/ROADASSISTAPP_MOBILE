@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../utils/date";
 import type {ComponentProps} from "react";
 import {StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
@@ -89,7 +90,7 @@ export default function CaseDetailSheet({
           <Text style={[styles.heroKind, {color: theme.muted}]}>{kind}</Text>
           <Text style={[styles.heroTitle, {color: theme.text}]}>{title}</Text>
           <Text style={[styles.heroMeta, {color: theme.muted}]}>
-            {`${t.more.appealDate}: ${new Date(item.createdAt).toLocaleDateString()}`}
+            {`${t.more.appealDate}: ${formatDateDMY(item.createdAt)}`}
           </Text>
         </View>
         {impact && icon ? (
@@ -146,13 +147,13 @@ export default function CaseDetailSheet({
             <Row
               label={t.more.appealDate}
               value={item.appealCreatedAt ?
-                new Date(item.appealCreatedAt).toLocaleDateString() :
+                formatDateDMY(item.appealCreatedAt) :
                 ""}
             />
             <Row
               label={t.more.appealDecided}
               value={item.appealDecidedAt ?
-                new Date(item.appealDecidedAt).toLocaleDateString() :
+                formatDateDMY(item.appealDecidedAt) :
                 ""}
             />
           </>

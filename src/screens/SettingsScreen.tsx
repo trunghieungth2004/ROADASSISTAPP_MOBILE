@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../utils/date";
 import {useCallback, useState} from "react";
 import {Linking, Pressable, ScrollView, StyleSheet, Switch, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../components/ui/AppText";
@@ -15,7 +16,7 @@ import {snackBottom} from "../components/ui/snackOffset";
 import {createProvider, myProviders, type Provider} from "../api/providers";
 import {disputeWarrantyClaim, myWarrantyClaims, respondWarrantyClaim, shopWarrantyClaims, type WarrantyClaim, type WarrantyDeclineReason} from "../api/warranty";
 import {getNotificationPrefs, updateNotificationPrefs, type NotificationPrefs} from "../api/notifications";
-import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
+import {normalizeTowPlate, parseTowWidth, parseVehicleHeight, validateTowDraft} from "../services/towPlates";
 import type {MobileShopDraft, ShopDraft, TowDraft} from "./OnboardingScreen";
 import OnboardingScreen from "./OnboardingScreen";
 import WarrantyDeclineDialog from "./warranty/WarrantyDeclineDialog";
@@ -194,21 +195,21 @@ export default function SettingsScreen() {
       if (token) {
         if (mobileShop) {
           try {
-            await createProvider({kind: "MOBILE_SHOP", name: mobileShop.name.trim(), lat: mobileShop.lat, lng: mobileShop.lng, ...(mobileShop.label ? {label: mobileShop.label} : {}), plate: normalizeTowPlate(mobileShop.plate), vehicleType: mobileShop.vehicleType, licenseNumber: mobileShop.licenseNumber.trim()}, token);
+            await createProvider({kind: "MOBILE_SHOP", name: mobileShop.name.trim(), lat: mobileShop.lat, lng: mobileShop.lng, ...(mobileShop.label ? {label: mobileShop.label} : {}), plate: normalizeTowPlate(mobileShop.plate), vehicleType: mobileShop.vehicleType, ...(mobileShop.vehicleLabel ? {vehicleLabel: mobileShop.vehicleLabel} : {}), vehicleWidth: parseTowWidth(mobileShop.vehicleWidth) ?? undefined, vehicleHeight: parseVehicleHeight(mobileShop.vehicleHeight) ?? undefined, licenseNumber: mobileShop.licenseNumber.trim(), ...(mobileShop.services ? {services: mobileShop.services} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createMobileShopFailed} ${toMessage(err)}`);
           }
         }
         if (shop) {
           try {
-            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {}), ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {})}, token);
+            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {}), ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {}), ...(shop.services ? {services: shop.services} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createShopFailed} ${toMessage(err)}`);
           }
         }
         if (tow) {
           try {
-            await createProvider({kind: "TOW", name: tow.name.trim(), lat: tow.lat, lng: tow.lng, plate: normalizeTowPlate(tow.plate), vehicleType: tow.vehicleType, vehicleWidth: parseTowWidth(tow.width) ?? undefined}, token);
+            await createProvider({kind: "TOW", name: tow.name.trim(), lat: tow.lat, lng: tow.lng, plate: normalizeTowPlate(tow.plate), vehicleType: tow.vehicleType, ...(tow.vehicleLabel ? {vehicleLabel: tow.vehicleLabel} : {}), vehicleWidth: parseTowWidth(tow.width) ?? undefined, vehicleHeight: parseVehicleHeight(tow.height) ?? undefined}, token);
           } catch (err) {
             throw new Error(`${t.provider.createTowFailed} ${toMessage(err)}`);
           }
@@ -393,7 +394,7 @@ export default function SettingsScreen() {
           <View key={claim.id} style={{gap: 6, paddingVertical: 8}}>
             <Text style={[styles.listText, {color: theme.text}]}>{claim.serviceName}</Text>
             <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${claim.status} · ${claim.reason}`}</Text>
-            <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${t.bills.warranty}: ${new Date(claim.warrantyUntil).toLocaleDateString()}`}</Text>
+            <Text style={[styles.listSecondary, {color: theme.muted}]}>{`${t.bills.warranty}: ${formatDateDMY(claim.warrantyUntil)}`}</Text>
             {claim.status === "DECLINED" ? (
               <Pressable style={[styles.primary, {backgroundColor: theme.primary}]} onPress={() => openDispute(claim)}>
                 <Text style={styles.primaryText}>{t.provider.dispute}</Text>

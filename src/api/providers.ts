@@ -51,7 +51,9 @@ export type Provider = {
   plate?: string | null;
   plateRaw?: string | null;
   vehicleType?: string | null;
+  vehicleLabel?: string | null;
   vehicleWidth?: number | null;
+  vehicleHeight?: number | null;
   vehicleProfileId?: string | null;
   serviceFee?: number | null;
   services?: ProviderService[] | null;
@@ -209,7 +211,9 @@ export type CreateTowProviderPayload = {
   label?: string;
   plate: string;
   vehicleType: string;
+  vehicleLabel?: string;
   vehicleWidth?: number;
+  vehicleHeight?: number;
   towBaseFee?: number;
   towPerKmFee?: number;
   waitingRatePer15Min?: number;
@@ -223,6 +227,9 @@ export type CreateMobileShopProviderPayload = {
   label?: string;
   plate: string;
   vehicleType: string;
+  vehicleLabel?: string;
+  vehicleWidth?: number;
+  vehicleHeight?: number;
   licenseNumber: string;
   licensePhotoUrl?: string;
   callOutFee?: number;
@@ -253,7 +260,9 @@ export type UpdateProviderPayload = {
   licensePhotoUrl?: string | null;
   plate?: string;
   vehicleType?: string;
+  vehicleLabel?: string | null;
   vehicleWidth?: number;
+  vehicleHeight?: number;
   towBaseFee?: number;
   towPerKmFee?: number;
   waitingRatePer15Min?: number;

@@ -8,6 +8,14 @@ import {Image} from "react-native";
 import {requestCameraPermission, requestMediaLibraryPermission} from "./permissions";
 
 export const TICKET_PHOTO_MAX = 5;
+export const EVIDENCE_PHOTO_MAX = 5;
+export const HANDOVER_PHOTO_MAX = 5;
+export const DISPUTE_PHOTO_MAX = 5;
+export const REPORT_PHOTO_MAX = 5;
+export const WARRANTY_PHOTO_MAX = 5;
+export const CHAT_PHOTO_MAX = 3;
+export const FLAG_PHOTO_MAX = 3;
+export const APPEAL_PHOTO_MAX = 3;
 
 export const PHOTO_PERMISSION_ERROR = "photo-permission";
 

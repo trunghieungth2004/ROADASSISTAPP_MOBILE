@@ -1,3 +1,4 @@
+import { formatDateTimeDMY } from "../utils/date";
 import {useCallback, useState} from "react";
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {useFocusEffect, useRoute} from "@react-navigation/native";
@@ -70,7 +71,7 @@ export default function JobSummaryScreen() {
         <Text style={[styles.title, {color: theme.text}]}>{t.bookings.jobSummary}</Text>
         {booking ? (
           <Text style={[styles.hint, {color: theme.muted}]}>
-            {`${booking.providerName} · ${new Date(booking.scheduledAt).toLocaleString(locale, {weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"})}`}
+            {`${booking.providerName} · ${new Date(booking.scheduledAt).toLocaleDateString(locale, {weekday: "short"})} ${formatDateTimeDMY(booking.scheduledAt)}`}
           </Text>
         ) : null}
         {loading ? <ActivityIndicator color={theme.primary} /> : null}

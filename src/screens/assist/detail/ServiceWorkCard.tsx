@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../../utils/date";
 import {StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../../components/ui/AppText";
 import type {Strings} from "../../../i18n/en";
@@ -37,7 +38,7 @@ export default function ServiceWorkCard({t, theme, workType, items, warrantyRewo
           </View>
           <Text style={[styles.small, {color: theme.muted}]}>
             {`${item.qty} × ${item.unitPrice.toLocaleString()} VND`}
-            {item.warrantyUntil ? ` · ${t.bills.warranty}: ${new Date(item.warrantyUntil).toLocaleDateString()}` :
+            {item.warrantyUntil ? ` · ${t.bills.warranty}: ${formatDateDMY(item.warrantyUntil)}` :
               item.warrantyDays && item.warrantyDays > 0 ? ` · ${t.bills.warranty}: ${item.warrantyDays}d` : ""}
           </Text>
         </View>

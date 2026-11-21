@@ -1,4 +1,4 @@
-import type {ReactNode} from "react";
+import {useEffect, useState, type ReactNode} from "react";
 import {ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
 import {MaterialIcons} from "@expo/vector-icons";
@@ -40,6 +40,25 @@ type Props = {
 function dismissAnd(run: () => void): void {
   Keyboard.dismiss();
   run();
+}
+
+function useKeyboardVisible(): boolean {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setVisible(true),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return visible;
 }
 
 function DismissButton({closeLabel, onClose}: {closeLabel: string; onClose: () => void}) {
@@ -137,6 +156,7 @@ export default function Overlay({visible, variant, title, leading, right, closeL
   const scheme = useAppMode();
   const theme = themeForMode(scheme);
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardVisible();
   if (variant === "fullScreen") {
     return (
       <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -147,7 +167,11 @@ export default function Overlay({visible, variant, title, leading, right, closeL
   const footed = actions && actions.length > 0;
   const scrolls = scrollable ?? true;
   const body = scrolls ? (
-    <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.body}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+    >
       {children}
     </ScrollView>
   ) : (
@@ -163,19 +187,21 @@ export default function Overlay({visible, variant, title, leading, right, closeL
             accessibilityRole="button"
             accessibilityLabel={closeLabel}
           />
-          <View style={[styles.sheet, {backgroundColor: theme.paper, borderColor: theme.border, paddingBottom: insets.bottom + 12}]}>
-            <View style={styles.handle} />
-            <Header title={title} leading={leading} right={right} trailing={<DismissButton closeLabel={closeLabel} onClose={onClose} />} />
-            {body}
-            {footed ? <ActionFooter actions={actions} layout={actionLayout} /> : null}
-          </View>
+          <KeyboardAvoidingView behavior="padding" style={styles.sheetKav}>
+            <View style={[styles.sheet, keyboardVisible && styles.sheetKeyboard, {backgroundColor: theme.paper, borderColor: theme.border, paddingBottom: keyboardVisible ? 12 : insets.bottom + 12}]}>
+              <View style={styles.handle} />
+              <Header title={title} leading={leading} right={right} trailing={<DismissButton closeLabel={closeLabel} onClose={onClose} />} />
+              {body}
+              {footed ? <ActionFooter actions={actions} layout={actionLayout} /> : null}
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     );
   }
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.dialogRoot, {backgroundColor: theme.overlay}]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.dialogRoot, {backgroundColor: theme.overlay}]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={() => dismissAnd(onClose)}
@@ -211,7 +237,9 @@ const styles = StyleSheet.create({
   dialog: {borderRadius: 22, borderWidth: 1, padding: 18, gap: 14, maxHeight: "85%", width: "100%"},
   dialogFree: {maxHeight: undefined},
   sheetRoot: {flex: 1, justifyContent: "flex-end"},
+  sheetKav: {flex: 1, justifyContent: "flex-end"},
   sheet: {borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 16, gap: 10, maxHeight: "76%", width: "100%"},
+  sheetKeyboard: {maxHeight: "100%"},
   handle: {width: 40, height: 4, borderRadius: 2, backgroundColor: "#a3a3a3", alignSelf: "center"},
   headRow: {flexDirection: "row", alignItems: "center", gap: 8},
   title: {flex: 1, fontSize: 16, fontWeight: "700"},

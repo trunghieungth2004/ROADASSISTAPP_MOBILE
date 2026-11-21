@@ -6,6 +6,7 @@ import type {AppTheme} from "../../theme";
 import type {TicketType} from "../../api/dispatch";
 import {vehicleIcon} from "../route/routeGeo";
 import {vehicleButtonState} from "../../components/vehicles/vehicleButtonState";
+import { serviceColor } from "./serviceColors";
 
 type Props = {
   t: Strings;
@@ -25,8 +26,7 @@ const KINDS: {id: TicketType; icon: "sos" | "tow" | "mechanic"}[] = [
   {id: "MECHANIC", icon: "mechanic"},
 ];
 
-function KindIcon({kind, selected, theme}: {kind: "sos" | "tow" | "mechanic"; selected: boolean; theme: AppTheme}): ReactNode {
-  const color = selected ? "#fff" : theme.primary;
+function KindIcon({kind, color}: {kind: "sos" | "tow" | "mechanic"; color: string}): ReactNode {
   if (kind === "mechanic") return <MaterialIcons name="car-repair" size={22} color={color} />;
   if (kind === "tow") return <MaterialCommunityIcons name="tow-truck" size={22} color={color} />;
   return <MaterialIcons name="sos" size={22} color={color} />;
@@ -40,6 +40,7 @@ export default function RequestSection({t, theme, ticketType, onTicketType, show
       <View style={styles.typeGroup}>
         {kinds.map((kind) => {
           const selected = ticketType === kind.id;
+          const tone = serviceColor(kind.id === "MECHANIC" ? "WALK_IN" : kind.id);
           const open = () => {
             onTicketType(kind.id);
             if (kind.id !== "MECHANIC") onOpenTicket(kind.id);
@@ -48,12 +49,16 @@ export default function RequestSection({t, theme, ticketType, onTicketType, show
             <Pressable
               key={kind.id}
               onPress={open}
-              style={[styles.typeBtn, {borderColor: theme.primary, borderWidth: selected ? 2 : 1}, selected && {backgroundColor: theme.primary}]}
+              style={[styles.typeBtn, {
+                borderColor: tone,
+                borderWidth: selected ? 2 : 1,
+                backgroundColor: selected ? tone : `${tone}12`,
+              }]}
               accessibilityRole="button"
               accessibilityState={{checked: selected}}
               accessibilityLabel={kind.id === "SOS" ? t.assist.sos : kind.id === "TOW" ? t.assist.tow : t.assist.mechanic}
             >
-              <KindIcon kind={kind.icon} selected={selected} theme={theme} />
+              <KindIcon kind={kind.icon} color={selected ? "#fff" : tone} />
             </Pressable>
           );
         })}

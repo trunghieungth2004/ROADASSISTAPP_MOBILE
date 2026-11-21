@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from "react";
-import {ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View} from "react-native";
+import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {MaterialIcons} from "@expo/vector-icons";
 import {useAppMode} from "../../context/ThemeContext";
@@ -10,11 +10,13 @@ import {themeForMode, onColor, type AppTheme} from "../../theme";
 import Overlay from "../../components/overlay/Overlay";
 import {chatMessages, openChat, sendChatMessage, type ChatMessage, type ChatScope} from "../../api/chat";
 import {toMessage} from "../../api/client";
-import {isPhotoPermissionError, isPhotoUploadError, pickPhotos, takePhoto, uploadPhotoPaths, resolvePhotoUrl} from "../../services/photos";
+import {CHAT_PHOTO_MAX, uploadPhotoPaths, resolvePhotoUrl} from "../../services/photos";
 import PhotoThumb from "../../components/ui/PhotoThumb";
+import {PhotoGrid, PhotoSourceButtons, photoUploadMessage, usePhotoDraft} from "../../components/ui/PhotoAttachments";
 import {usePhotoViewer} from "../../components/ui/PhotoViewer";
 import {statusPillColor, ticketStatusLabel, ticketTypeLabel, unfixableReasonLabel} from "./ticketLabels";
 import {subscribeChatPush} from "../../services/push";
+import { formatDateDMY } from "../../utils/date";
 
 type Props = {
   t: Strings;
@@ -57,7 +59,7 @@ function dayLabel(iso: string, t: Strings): string {
   yesterday.setDate(today.getDate() - 1);
   if (dayKey(iso) === dayKey(today.toISOString())) return t.chat.today;
   if (dayKey(iso) === dayKey(yesterday.toISOString())) return t.chat.yesterday;
-  return at.toLocaleDateString(undefined, {month: "short", day: "numeric"});
+  return formatDateDMY(iso);
 }
 
 function initials(name: string): string {
@@ -164,8 +166,7 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoDraft = usePhotoDraft({t, max: CHAT_PHOTO_MAX});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [archivedNow, setArchivedNow] = useState(false);
@@ -173,7 +174,7 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
   const effectiveReadOnly = readOnly || archived || archivedNow;
   const headerName = otherName !== null && otherName !== undefined && otherName.trim() !== "" ? otherName : title;
   const subtitle = archived || archivedNow ? t.chat.archived : scope === "HAZARD" ? t.chat.hazard : ticketType !== undefined ? ticketTypeLabel(ticketType, t) : t.chat.title;
-  const canSend = draft.trim() !== "" || photos.length > 0;
+  const canSend = draft.trim() !== "" || photoDraft.photos.length > 0;
   const openPhoto = (path: string): void => {
     void resolvePhotoUrl(path).then((uri) => {
       if (uri !== "") photoViewer.open(uri);
@@ -225,34 +226,26 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
       clearInterval(timer);
     };
   }, [loadMessages, refId, scope, token]);
-  async function addPhoto(source: "camera" | "library"): Promise<void> {
-    if (photoBusy || photos.length >= 3) return;
-    setPhotoBusy(true);
-    setError(null);
-    try {
-      const picked = source === "camera" ? await takePhoto() : await pickPhotos(3, photos.length);
-      if (picked.length > 0) setPhotos((prev) => [...prev, ...picked].slice(0, 3));
-    } catch (err) {
-      setError(isPhotoPermissionError(err) ? (source === "camera" ? t.photos.cameraDenied : t.photos.denied) : toMessage(err));
-    } finally {
-      setPhotoBusy(false);
-    }
-  }
   async function send(): Promise<void> {
     if (!token || busy || effectiveReadOnly || !canSend) return;
     setBusy(true);
     setError(null);
     try {
-      const paths = photos.length > 0 ? await uploadPhotoPaths(`chat/${refId}`, photos) : [];
+      const paths = photoDraft.photos.length > 0 ?
+        await uploadPhotoPaths(`chat/${refId}`, photoDraft.photos) :
+        [];
+      if (paths.length !== photoDraft.photos.length) {
+        throw new Error(t.photos.uploadFailed);
+      }
       const sent = await sendChatMessage(scope, refId, {
         ...(draft.trim() !== "" ? {text: draft.trim()} : {}),
         ...(paths.length > 0 ? {photoUrls: paths} : {}),
       }, token, version);
       setMessages((prev) => [...prev, sent]);
       setDraft("");
-      setPhotos([]);
+      photoDraft.clear();
     } catch (err) {
-      setError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
+      setError(photoUploadMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -361,27 +354,22 @@ export default function ChatSheet({t, token, uid, scope, refId, title, ticketTyp
           </View>
         ) : (
           <View style={[styles.composerWrap, {borderTopColor: theme.divider}]}>
-            {photos.length > 0 ? (
-              <View style={styles.pendingPhotos}>
-                {photos.map((path, index) => (
-                  <View key={`${path}-${index}`} style={styles.pendingPhotoWrap}>
-                    <Pressable onPress={() => photoViewer.open(path)} accessibilityRole="button" accessibilityLabel={`${t.chat.photo} ${index + 1}`}>
-                      <Image source={{uri: path}} style={styles.pendingPhoto} />
-                    </Pressable>
-                    <Pressable style={[styles.removePhoto, {backgroundColor: theme.danger}]} onPress={() => setPhotos((prev) => prev.filter((_, i) => i !== index))} accessibilityRole="button" accessibilityLabel={t.common.delete}>
-                      <MaterialIcons name="close" size={12} color="#fff" />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            ) : null}
+            <PhotoGrid
+              t={t}
+              photos={photoDraft.photos}
+              onRemove={photoDraft.remove}
+              size={56}
+              compact
+            />
+            {photoDraft.error ? <Text style={[styles.errorText, {color: theme.danger}]}>{photoDraft.error}</Text> : null}
             <View style={styles.composer}>
-              <Pressable onPress={() => void addPhoto("camera")} disabled={photoBusy || photos.length >= 3} style={[styles.iconBtn, {borderColor: theme.border, backgroundColor: theme.paper}, photoBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.photos.take}>
-                {photoBusy ? <ActivityIndicator color={theme.primary} /> : <MaterialIcons name="photo-camera" size={20} color={theme.primary} />}
-              </Pressable>
-              <Pressable onPress={() => void addPhoto("library")} disabled={photoBusy || photos.length >= 3} style={[styles.iconBtn, {borderColor: theme.border, backgroundColor: theme.paper}, photoBusy && styles.disabled]} accessibilityRole="button" accessibilityLabel={t.photos.choose}>
-                {photoBusy ? <ActivityIndicator color={theme.primary} /> : <MaterialIcons name="photo-library" size={20} color={theme.primary} />}
-              </Pressable>
+              <PhotoSourceButtons
+                t={t}
+                busy={photoDraft.busy}
+                disabled={photoDraft.photos.length >= CHAT_PHOTO_MAX}
+                onAdd={(source) => void photoDraft.add(source)}
+                iconOnly
+              />
               <TextInput
                 style={[styles.input, {borderColor: theme.border, color: theme.text, backgroundColor: theme.paper}]}
                 value={draft}
@@ -445,13 +433,7 @@ const styles = StyleSheet.create({
   photo: {width: 64, height: 64, borderRadius: 8},
   composerWrap: {borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 8, gap: 8},
   composer: {flexDirection: "row", alignItems: "center", gap: 8},
-  iconBtn: {width: 42, height: 42, borderWidth: 1, borderRadius: 21, alignItems: "center", justifyContent: "center"},
-  disabled: {opacity: 0.6},
   input: {flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100},
   sendBtn: {width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center"},
   sendBtnDisabled: {opacity: 0.45},
-  pendingPhotos: {flexDirection: "row", gap: 8, flexWrap: "wrap"},
-  pendingPhotoWrap: {position: "relative"},
-  pendingPhoto: {width: 56, height: 56, borderRadius: 10},
-  removePhoto: {position: "absolute", top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center"},
 });

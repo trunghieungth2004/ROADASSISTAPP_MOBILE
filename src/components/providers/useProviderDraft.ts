@@ -6,8 +6,9 @@ import type {Place} from "../place-search/PlaceSearch.types";
 import type {Strings} from "../../i18n/en";
 import type {MeVehicle} from "../../api/users";
 import {DOW, buildOpenHours, parseOpenHours, validateWeek, type WeekHours} from "../../screens/more/shopHours";
-import {isValidTowPlate, normalizeTowPlate, parseTowWidth} from "../../services/towPlates";
-import {normalizeVehicleType} from "../../api/vehicles";
+import {isValidTowPlate, normalizeTowPlate, parseTowWidth, parseVehicleHeight} from "../../services/towPlates";
+import {normalizeVehicleType, VEHICLE_DEFAULT_WIDTH} from "../../api/vehicles";
+import {existingVehicleChoices, type ExistingVehicleChoice} from "./existingVehicles";
 
 export type ServiceDraft = {
   code: string;
@@ -20,6 +21,31 @@ export type ServiceDraft = {
   channels: ServiceChannel[];
   vehicleClasses: string[];
 };
+
+export function emptyServiceDraft(
+  kind: "SHOP" | "TOW" | "MOBILE_SHOP",
+  bookingEnabled: boolean,
+  vehicleClasses: string[],
+  towType: string,
+): ServiceDraft {
+  return {
+    code: "",
+    name: "",
+    price: "",
+    quoteRequired: false,
+    category: "OTHER",
+    warrantyDays: "",
+    warrantyParts: "LABOR_ONLY",
+    channels: kind === "MOBILE_SHOP" ?
+      ["ASSIST"] :
+      kind === "SHOP" && !bookingEnabled ?
+        ["ASSIST"] :
+        ["BOOKING", "ASSIST"],
+    vehicleClasses: kind === "MOBILE_SHOP" ?
+      [towType === "CAR" ? "CAR" : "SOLO_BIKE"] :
+      vehicleClasses,
+  };
+}
 
 function bookingPatch(input: {
   enabled: boolean;
@@ -74,6 +100,28 @@ function parseFee(raw: string): number | undefined | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function vehiclePatch(
+  kind: "SHOP" | "TOW" | "MOBILE_SHOP",
+  plate: string,
+  vehicleType: string,
+  label: string,
+  width: string,
+  height: string,
+  licenseNumber: string,
+): Record<string, unknown> {
+  if (kind !== "TOW" && kind !== "MOBILE_SHOP") return {};
+  const parsedWidth = parseTowWidth(width);
+  const parsedHeight = parseVehicleHeight(height);
+  return {
+    plate: normalizeTowPlate(plate),
+    vehicleType,
+    ...(label.trim() !== "" ? {vehicleLabel: label.trim()} : {}),
+    ...(parsedWidth !== null ? {vehicleWidth: parsedWidth} : {}),
+    ...(parsedHeight !== null ? {vehicleHeight: parsedHeight} : {}),
+    ...(kind === "MOBILE_SHOP" ? {licenseNumber: licenseNumber.trim()} : {}),
+  };
+}
+
 function feePatch(
   kind: "SHOP" | "TOW" | "MOBILE_SHOP",
   fees: {
@@ -97,7 +145,47 @@ function feePatch(
   return out;
 }
 
-export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider: Provider | null, t: Strings, vehicles: MeVehicle[] = []) {
+export function buildServiceCatalog(rows: ServiceDraft[]): ProviderService[] | null {
+  const out: ProviderService[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const name = row.name.trim();
+    const priceText = row.price.replace(/[^0-9]/g, "");
+    if (name === "" && priceText === "") continue;
+    if (name === "" || priceText === "") return null;
+    const price = Number.parseInt(priceText, 10);
+    if (!Number.isFinite(price) || price < 0) return null;
+    let code = row.code.trim() === "" ? serviceCodeFor(name, i) : row.code.trim().toUpperCase();
+    if (seen.has(code)) code = `${code}_${i + 1}`;
+    seen.add(code);
+    const warranty = row.warrantyDays.replace(/[^0-9]/g, "");
+    const warrantyDays = warranty === "" ? undefined : Number.parseInt(warranty, 10);
+    if (warrantyDays !== undefined &&
+      (!Number.isInteger(warrantyDays) || warrantyDays < 0 ||
+        warrantyDays > 90)) return null;
+    out.push({
+      code,
+      name,
+      displayPrice: price,
+      quoteRequired: row.quoteRequired,
+      category: row.category,
+      ...(warrantyDays !== undefined ? {warrantyDays} : {}),
+      warrantyParts: row.warrantyParts,
+      channels: row.channels,
+      vehicleClasses: row.vehicleClasses,
+    });
+  }
+  return out;
+}
+
+export function useProviderDraft(
+  kind: "SHOP" | "TOW" | "MOBILE_SHOP",
+  provider: Provider | null,
+  t: Strings,
+  options: {providers?: Provider[]; vehicles?: MeVehicle[]} = {},
+) {
+  const {providers = [], vehicles = []} = options;
   const [name, setName] = useState(provider?.name ?? "");
   const [point, setPoint] = useState<{lat: number; lng: number; label?: string} | null>(
     provider ? {lat: provider.lat, lng: provider.lng, label: typeof provider.label === "string" ? provider.label : undefined} : null,
@@ -108,7 +196,17 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
   const [locTouched, setLocTouched] = useState(false);
   const [plate, setPlate] = useState(typeof provider?.plate === "string" ? provider.plate : "");
   const [towType, setTowType] = useState<string>(normalizeVehicleType(provider?.vehicleType) ?? "CAR");
-  const [towWidth, setTowWidth] = useState(typeof provider?.vehicleWidth === "number" ? String(provider.vehicleWidth) : "");
+  const [vehicleLabel, setVehicleLabel] = useState(typeof provider?.vehicleLabel === "string" ? provider.vehicleLabel : "");
+  const [towWidth, setTowWidth] = useState(
+    typeof provider?.vehicleWidth === "number" ?
+      String(provider.vehicleWidth) :
+      String(VEHICLE_DEFAULT_WIDTH[normalizeVehicleType(provider?.vehicleType) ?? "CAR"] ?? 1.9),
+  );
+  const [vehicleHeight, setVehicleHeight] = useState(
+    typeof provider?.vehicleHeight === "number" ?
+      String(provider.vehicleHeight) :
+      (normalizeVehicleType(provider?.vehicleType) ?? "CAR") === "CAR" ? "1.6" : "1.1",
+  );
   const [week, setWeek] = useState<WeekHours>(() => parseOpenHours(typeof provider?.openHours === "string" ? provider.openHours : null));
   const [vehicleClasses, setVehicleClasses] = useState<string[]>(() =>
     Array.isArray(provider?.vehicleClasses) && provider.vehicleClasses.length > 0 ? [...provider.vehicleClasses] : ["SOLO_BIKE", "CAR"],
@@ -152,25 +250,18 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
       ),
     })),
   );
-  const existingVehicles = vehicles.flatMap((vehicle) =>
-    (vehicle.providerLinks ?? [])
-      .filter((link) => {
-        if (kind === "SHOP" || !link.plate) return false;
-        if (link.kind === kind && link.status !== "DENIED") return false;
-        if (kind === "TOW") return link.vehicleType === "CAR";
-        return link.vehicleType === "BIKE" || link.vehicleType === "CAR";
-      })
-      .map((link) => ({
-        plate: link.plate as string,
-        vehicleType: link.vehicleType as string,
-        vehicleWidth: link.vehicleWidth,
-        label: link.name,
-      })),
-  );
-  function useExistingVehicle(vehicle: {plate: string; vehicleType: string; vehicleWidth: number | null}): void {
+  const existingVehicles = existingVehicleChoices(kind, provider?.id ?? null, providers, vehicles);
+  function setVehicleType(next: string): void {
+    setTowType(next);
+    setTowWidth(String(VEHICLE_DEFAULT_WIDTH[next] ?? 1.9));
+    setVehicleHeight(next === "CAR" ? "1.6" : "1.1");
+  }
+  function useExistingVehicle(vehicle: ExistingVehicleChoice): void {
     setPlate(vehicle.plate);
     setTowType(vehicle.vehicleType);
     setTowWidth(vehicle.vehicleWidth !== null ? String(vehicle.vehicleWidth) : "");
+    setVehicleHeight(vehicle.vehicleHeight !== null ? String(vehicle.vehicleHeight) : "");
+    if (vehicle.label !== null) setVehicleLabel(vehicle.label);
   }
   const [shopSearch, setShopSearch] = useState(false);
   const [towSearch, setTowSearch] = useState(false);
@@ -182,23 +273,10 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
   const hoursOk = validateWeek(week);
   const plateOk = plate.trim() === "" || isValidTowPlate(plate);
   function addService(): void {
-    setServiceDrafts((prev) => [...prev, {
-      code: "",
-      name: "",
-      price: "",
-      quoteRequired: false,
-      category: "OTHER",
-      warrantyDays: "",
-      warrantyParts: "LABOR_ONLY",
-      channels: kind === "MOBILE_SHOP" ?
-        ["ASSIST"] :
-        kind === "SHOP" && !bookingEnabled ?
-          ["ASSIST"] :
-          ["BOOKING", "ASSIST"],
-      vehicleClasses: kind === "MOBILE_SHOP" ?
-        [towType === "CAR" ? "CAR" : "SOLO_BIKE"] :
-        vehicleClasses,
-    }]);
+    addServiceRow(emptyServiceDraft(kind, bookingEnabled, vehicleClasses, towType));
+  }
+  function addServiceRow(row: ServiceDraft): void {
+    setServiceDrafts((prev) => [...prev, row]);
   }
   function updateService(index: number, patch: Partial<ServiceDraft>): void {
     setServiceDrafts((prev) => prev.map((row, i) => i === index ? {...row, ...patch} : row));
@@ -207,39 +285,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     setServiceDrafts((prev) => prev.filter((_, i) => i !== index));
   }
   function buildServices(): ProviderService[] | null {
-    const out: ProviderService[] = [];
-    const seen = new Set<string>();
-    for (let i = 0; i < serviceDrafts.length; i += 1) {
-      const row = serviceDrafts[i];
-      const name = row.name.trim();
-      const priceText = row.price.replace(/[^0-9]/g, "");
-      if (name === "" && priceText === "") continue;
-      if (name === "" || priceText === "") return null;
-      const price = Number.parseInt(priceText, 10);
-      if (!Number.isFinite(price) || price < 0) return null;
-      let code = row.code.trim() === "" ? serviceCodeFor(name, i) : row.code.trim().toUpperCase();
-      if (seen.has(code)) code = `${code}_${i + 1}`;
-      seen.add(code);
-      const warranty = row.warrantyDays.replace(/[^0-9]/g, "");
-      const warrantyDays = warranty === "" ?
-        undefined :
-        Number.parseInt(warranty, 10);
-      if (warrantyDays !== undefined &&
-        (!Number.isInteger(warrantyDays) || warrantyDays < 0 ||
-          warrantyDays > 90)) return null;
-      out.push({
-        code,
-        name,
-        displayPrice: price,
-        quoteRequired: row.quoteRequired,
-        category: row.category,
-        ...(warrantyDays !== undefined ? {warrantyDays} : {}),
-        warrantyParts: row.warrantyParts,
-        channels: row.channels,
-        vehicleClasses: row.vehicleClasses,
-      });
-    }
-    return out;
+    return buildServiceCatalog(serviceDrafts);
   }
   function toggleVehicleClass(cls: string): void {
     setVehicleClasses((prev) => {
@@ -312,6 +358,10 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
         setError(t.provider.invalidPlate);
         return false;
       }
+      if (parseTowWidth(towWidth) === null || parseVehicleHeight(vehicleHeight) === null) {
+        setError(t.vehicle.invalidDims);
+        return false;
+      }
     } else {
       if (!isValidTowPlate(plate)) {
         setError(t.provider.invalidPlate);
@@ -319,6 +369,10 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
       }
       if (parseTowWidth(towWidth) === null) {
         setError(t.provider.invalidWidth);
+        return false;
+      }
+      if (parseVehicleHeight(vehicleHeight) === null) {
+        setError(t.vehicle.invalidDims);
         return false;
       }
       if (!provider && !towPoint) {
@@ -371,8 +425,8 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           ...(kind === "SHOP" ? {openHours: buildOpenHours(week), vehicleClasses} : {}),
           ...(kind === "SHOP" && provider ? bookingPatch({enabled: bookingEnabled, slotMinutes: bookingSlotMinutes, capacity: bookingCapacity, leadMinutes: bookingLeadMinutes, horizonDays: bookingHorizonDays, hours: bookingHours, alwaysOpen: bookingAlwaysOpen, depositPolicy, depositAmount, depositPercent}) : {}),
           ...(services !== undefined ? {services} : {}),
-          ...(kind === "MOBILE_SHOP" ? {plate: normalizeTowPlate(plate), vehicleType: towType, licenseNumber: licenseNumber.trim()} : {}),
-          ...(kind === "TOW" ? {plate: normalizeTowPlate(plate), vehicleType: towType, vehicleWidth: parseTowWidth(towWidth) ?? undefined} : {}),
+          ...vehiclePatch(kind, plate, towType, vehicleLabel, towWidth, vehicleHeight, licenseNumber),
+          ...(kind !== "SHOP" && vehicleLabel.trim() === "" ? {vehicleLabel: null} : {}),
           ...feePatch(kind, {towBase: towBase ?? undefined, towPerKm: towPerKm ?? undefined, waiting: waiting ?? undefined, callOut: callOut ?? undefined, travelPerKm: travelPerKm ?? undefined}),
         }, token);
       } else if (kind === "MOBILE_SHOP" && point) {
@@ -385,6 +439,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           plate: normalizeTowPlate(plate),
           vehicleType: towType,
           licenseNumber: licenseNumber.trim(),
+          ...vehiclePatch(kind, plate, towType, vehicleLabel, towWidth, vehicleHeight, licenseNumber),
           ...(services !== undefined ? {services} : {}),
           ...feePatch(kind, {callOut: callOut ?? undefined, travelPerKm: travelPerKm ?? undefined}),
         }, token);
@@ -396,7 +451,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
           lng: towPoint.lng,
           plate: normalizeTowPlate(plate),
           vehicleType: towType,
-          vehicleWidth: parseTowWidth(towWidth) ?? undefined,
+          ...vehiclePatch(kind, plate, towType, vehicleLabel, towWidth, vehicleHeight, licenseNumber),
           ...feePatch(kind, {towBase: towBase ?? undefined, towPerKm: towPerKm ?? undefined, waiting: waiting ?? undefined}),
         }, token);
       } else if (kind === "SHOP" && point) {
@@ -433,8 +488,13 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     setPlate,
     towType,
     setTowType,
+    setVehicleType,
+    vehicleLabel,
+    setVehicleLabel,
     towWidth,
     setTowWidth,
+    vehicleHeight,
+    setVehicleHeight,
     week,
     vehicleClasses,
     toggleVehicleClass,
@@ -474,6 +534,7 @@ export function useProviderDraft(kind: "SHOP" | "TOW" | "MOBILE_SHOP", provider:
     setTravelPerKmFee,
     serviceDrafts,
     addService,
+    addServiceRow,
     updateService,
     removeService,
     existingVehicles,

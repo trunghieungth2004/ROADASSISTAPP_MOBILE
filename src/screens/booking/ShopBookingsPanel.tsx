@@ -1,3 +1,4 @@
+import { formatDateTimeDMY } from "../../utils/date";
 import {useCallback, useEffect, useState} from "react";
 import {ActivityIndicator, Alert, Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/ui/AppText";
@@ -100,13 +101,7 @@ export default function ShopBookingsPanel({token, providerId, onNotice}: Props) 
   }
 
   function card(booking: Booking) {
-    const when = new Date(booking.scheduledAt).toLocaleString(locale, {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const when = `${new Date(booking.scheduledAt).toLocaleDateString(locale, {weekday: "short"})} ${formatDateTimeDMY(booking.scheduledAt)}`;
     const pending = booking.status === "REQUESTED";
     const active = booking.status === "CONFIRMED" || booking.status === "ARRIVED";
     return (

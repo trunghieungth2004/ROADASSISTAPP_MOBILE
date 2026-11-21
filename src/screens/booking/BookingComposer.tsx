@@ -14,6 +14,7 @@ import {
 } from "../../api/bookings";
 import type {ProviderService} from "../../api/providers";
 import {capturePosition} from "../../services/locationBeats";
+import { formatDayMonth } from "../../utils/date";
 
 const DAYS_AHEAD = 7;
 const TIME_PATTERN = /^\d{2}:\d{2}$/;
@@ -184,7 +185,7 @@ export default function BookingComposer({token, providerId, providerName, servic
           return (
             <Pressable key={day} onPress={() => setDate(day)} style={[styles.dateChip, {borderColor: active ? theme.primary : theme.border, backgroundColor: active ? `${theme.primary}22` : "transparent"}]} accessibilityRole="button">
               <Text style={[styles.dateText, {color: active ? theme.primary : theme.text}]}>{dayLabel(day, index, locale)}</Text>
-              <Text style={[styles.dateSub, {color: theme.muted}]}>{day.slice(5)}</Text>
+              <Text style={[styles.dateSub, {color: theme.muted}]}>{formatDayMonth(day)}</Text>
             </Pressable>
           );
         })}

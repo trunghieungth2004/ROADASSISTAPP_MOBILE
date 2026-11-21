@@ -4,9 +4,11 @@ import FlagSheet, {useFlagDraft, type FlagDraftState} from "../../../src/compone
 import {en} from "../../../src/i18n/en";
 
 jest.mock("../../../src/services/photos", () => ({
+  FLAG_PHOTO_MAX: 3,
   takePhoto: jest.fn(async () => ["file://shot.jpg"]),
   pickPhotos: jest.fn(async () => ["file://pick.jpg"]),
   isPhotoPermissionError: jest.fn(() => false),
+  isPhotoUploadError: jest.fn(() => false),
 }));
 
 function Probe({onDraft}: {onDraft: (d: FlagDraftState) => void}) {
@@ -137,7 +139,7 @@ test("reselected type stays checked on reopen", async () => {
   }
 });
 
-test("camera tile takes a shot directly and previews the strip", async () => {
+test("camera source takes a shot directly and previews a thumbnail", async () => {
   let draft: FlagDraftState | undefined;
   let probe: ReturnType<typeof create> | undefined;
   await act(async () => {
@@ -160,7 +162,7 @@ test("camera tile takes a shot directly and previews the strip", async () => {
     });
     const strips = sheet.root.findAll((n) => n.props?.source?.uri === "file://shot.jpg");
     expect(strips.length).toBeGreaterThan(0);
-    expect(flatStyle(strips[0].props.style)).toMatchObject({width: "100%", height: 48});
+    expect(flatStyle(strips[0].props.style)).toMatchObject({width: 72, height: 72});
     const remove = sheet.root.find((n) => n.props?.accessibilityLabel === en.common.delete && typeof n.props?.onPress === "function");
     await act(async () => {
       remove.props.onPress();

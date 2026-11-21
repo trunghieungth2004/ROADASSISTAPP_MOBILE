@@ -148,6 +148,6 @@ const styles = StyleSheet.create({
   filterRow: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap"},
   filterGroup: {flexDirection: "row", alignItems: "center", gap: 8},
   filterGroupRight: {marginLeft: "auto"},
-  iconChip: {borderWidth: 1, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 10, alignItems: "center", justifyContent: "center"},
+  iconChip: {width: 44, height: 44, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center"},
   hint: {fontSize: 12},
 });

@@ -1,6 +1,5 @@
 import {expect, jest, test} from "@jest/globals";
 import {act, create} from "react-test-renderer";
-import {Modal} from "react-native";
 import Snack from "../../../src/components/ui/Snack";
 
 test("action runs and hides the snack", async () => {
@@ -27,7 +26,7 @@ test("action runs and hides the snack", async () => {
   }
 });
 
-test("plain snacks render through a modal above overlays", async () => {
+test("plain snacks render inline without blocking the screen", async () => {
   const onHide = jest.fn();
   let renderer: ReturnType<typeof create> | undefined;
   await act(async () => {
@@ -35,36 +34,15 @@ test("plain snacks render through a modal above overlays", async () => {
   });
   if (!renderer) throw new Error("render failed");
   try {
-    expect(renderer.root.findAllByType(Modal)).toHaveLength(1);
-    expect(renderer.root.findByType(Modal).props.transparent).toBe(true);
     expect(
       renderer.root.findAll((n) => n.props?.pointerEvents === "box-none").length,
     ).toBeGreaterThan(0);
     expect(
-      renderer.root.findAll((n) => n.props?.pointerEvents === "none").length,
-    ).toBeGreaterThan(0);
-  } finally {
-    renderer.unmount();
-  }
-});
-
-test("inline snacks skip the modal so map hints stay tappable", async () => {
-  const onHide = jest.fn();
-  let renderer: ReturnType<typeof create> | undefined;
-  await act(async () => {
-    renderer = create(
-      <Snack message="Tap the map" onHide={onHide} modal={false} sticky />,
-    );
-  });
-  if (!renderer) throw new Error("render failed");
-  try {
-    expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
-    expect(
-      renderer.root.findAll((n) => n.props?.pointerEvents === "box-none").length,
+      renderer.root.findAll((n) => n.props?.children === "Hi").length,
     ).toBeGreaterThan(0);
     expect(
-      renderer.root.findAll((n) => n.props?.children === "Tap the map").length,
-    ).toBeGreaterThan(0);
+      renderer.root.findAll((n) => n.props?.accessibilityLabel === "Hi").length,
+    ).toBe(0);
   } finally {
     renderer.unmount();
   }

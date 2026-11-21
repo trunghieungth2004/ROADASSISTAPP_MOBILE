@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {Switch, StyleSheet, View} from "react-native";
 import {MaterialIcons} from "@expo/vector-icons";
 import Overlay, {type OverlayAction} from "../../components/overlay/Overlay";
@@ -9,6 +9,9 @@ import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 import {onColor} from "../../theme";
 import {providerPill} from "./providerUi";
+import ShopClassIcons, {classIconLabel} from "../assist/ShopClassIcons";
+import {VehicleClassIcons} from "../../components/vehicles/VehicleIcons";
+import ServiceCategoryIcon from "../../components/providers/ServiceCategoryIcon";
 
 type Props = {
   t: Strings;
@@ -31,18 +34,19 @@ function kindLabel(kind: string, t: Strings): string {
   return t.provider.kindShop;
 }
 
-function serviceMeta(service: ProviderService, provider: Provider, t: Strings): string {
-  const classes = Array.isArray(service.vehicleClasses) && service.vehicleClasses.length > 0 ?
+function serviceClasses(service: ProviderService, provider: Provider): string[] {
+  return Array.isArray(service.vehicleClasses) && service.vehicleClasses.length > 0 ?
     service.vehicleClasses :
     provider.vehicleClasses ?? [];
+}
+
+function serviceMeta(service: ProviderService, t: Strings): string {
   const parts = [
     service.quoteRequired ? t.provider.serviceQuote : t.provider.serviceFixedPrice,
     ...(typeof service.warrantyDays === "number" && service.warrantyDays > 0 ?
       [`${service.warrantyDays}d`] : []),
     ...(service.channels ?? []).map((channel) =>
       channel === "BOOKING" ? t.provider.channelBooking : t.provider.channelAssist),
-    ...classes.map((cls) =>
-      cls === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike),
   ];
   return parts.join(" · ");
 }
@@ -51,6 +55,9 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
   const [current, setCurrent] = useState(provider);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setCurrent(provider);
+  }, [provider]);
   const pill = providerPill(current, t);
   const isTow = current.kind === "TOW";
   const isMobile = current.kind === "MOBILE_SHOP";
@@ -100,7 +107,7 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
             <View style={styles.headText}>
               <Text style={[styles.title, {color: theme.text}]}>{current.name}</Text>
               <Text style={[styles.small, {color: theme.muted}]}>
-                {[kindLabel(current.kind, t), current.plate, current.vehicleType].filter((value) => typeof value === "string" && value !== "").join(" · ")}
+                {[kindLabel(current.kind, t), current.vehicleLabel, current.plate, current.vehicleType].filter((value) => typeof value === "string" && value !== "").join(" · ")}
               </Text>
             </View>
             <View style={[styles.pill, {backgroundColor: pill.tone === "on" ? theme.primary : pill.tone === "alert" ? theme.danger : theme.divider}]}>
@@ -137,7 +144,7 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
           {current.kind === "SHOP" && Array.isArray(current.vehicleClasses) && current.vehicleClasses.length > 0 ? (
             <View style={styles.row}>
               <Text style={[styles.small, {color: theme.muted}]}>{t.provider.serves}</Text>
-              <Text style={[styles.value, {color: theme.text}]}>{current.vehicleClasses.map((cls) => cls === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike).join(" · ")}</Text>
+              <ShopClassIcons theme={theme} shop={current} label={classIconLabel(current, t)} size={16} />
             </View>
           ) : null}
           {isMobile && current.licenseNumber ? (
@@ -154,10 +161,19 @@ export default function ProviderDetailsSheet({t, theme, token, provider, onClose
             {services.length === 0 ? <Text style={[styles.small, {color: theme.muted}]}>{t.provider.noServices}</Text> : services.map((service) => (
               <View key={service.code} style={[styles.service, {borderColor: theme.divider}]}>
                 <View style={styles.row}>
+                  <ServiceCategoryIcon category={service.category ?? "OTHER"} size={18} color={theme.primary} />
                   <Text style={[styles.serviceName, {color: theme.text}]} numberOfLines={2}>{service.name}</Text>
                   <Text style={[styles.value, {color: theme.text}]}>{money(service.displayPrice, t)}</Text>
                 </View>
-                <Text style={[styles.small, {color: theme.muted}]}>{serviceMeta(service, current, t)}</Text>
+                <View style={styles.serviceMetaRow}>
+                  <Text style={[styles.small, {color: theme.muted}]}>{serviceMeta(service, t)}</Text>
+                  <VehicleClassIcons
+                    classes={serviceClasses(service, current)}
+                    size={12}
+                    color={theme.muted}
+                    label={serviceClasses(service, current).map((cls) => cls === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike).join(" · ")}
+                  />
+                </View>
               </View>
             ))}
           </View>
@@ -197,6 +213,7 @@ const styles = StyleSheet.create({
   small: {fontSize: 11, lineHeight: 16},
   value: {fontSize: 12, fontWeight: "700"},
   service: {borderTopWidth: 1, paddingTop: 7, gap: 3},
+  serviceMetaRow: {flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap"},
   serviceName: {flex: 1, fontSize: 13, fontWeight: "700"},
   pill: {borderRadius: 999, paddingVertical: 3, paddingHorizontal: 9},
   pillText: {fontSize: 10, fontWeight: "800"},

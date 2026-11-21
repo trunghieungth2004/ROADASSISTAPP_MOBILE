@@ -35,7 +35,7 @@ import BillStrip from "./assist/BillStrip";
 import TicketSheet from "./assist/TicketSheet";
 import QuickFixSheet from "./assist/QuickFixSheet";
 import DelaySheet from "./assist/DelaySheet";
-import ReturnTowSheet from "./assist/ReturnTowSheet";
+import TowDestinationSheet from "./assist/TowDestinationSheet";
 import {hasChannel, matchesVehicleClass} from "../services/serviceChannels";
 import {normalizeVehicleType} from "../api/vehicles";
 import DisputeSheet from "./assist/DisputeSheet";
@@ -72,9 +72,27 @@ import useAssistController from "./assist/useAssistController";
 
 export default function AssistScreen() {
   const {activateVehicle, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, sosCancelFor, setSosCancelFor, onChangeMobileShop, onCancelWhole, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor,
-  behaviorReportBusy, behaviorReportError, behaviorReportFor, onFileBehaviorReport, setBehaviorReportFor, setBehaviorReportError, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, focusJobRoute, fittedJobRef, fundedForApproval, gps, hasJobCard, hasProviderRole, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, symptom, setSymptom, quickFixFor, delayFor, setDelayFor, delayBusy, delayError, onSaveDelay, onClearDelay, handoverFor, handoverError, doTowHandover, closeHandover, returnTowFor, setReturnTowDestination, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentDetailFor, setPaymentDetailFor, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, providerLiveJob, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef} = useAssistController();
+  behaviorReportBusy, behaviorReportError, behaviorReportFor, onFileBehaviorReport, setBehaviorReportFor, setBehaviorReportError, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitWalk, focusJobRoute, fittedJobRef, fundedForApproval, gps, hasJobCard, hasProviderRole, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileTowDest, mobileTowError, onConfirmMobileTow, closeMobileTowConfirm, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, symptom, setSymptom, quickFixFor, delayFor, setDelayFor, delayBusy, delayError, onSaveDelay, onClearDelay, handoverFor, handoverError, doTowHandover, closeHandover, returnTowFor, setReturnTowDestination, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentDetailFor, setPaymentDetailFor, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, providerLiveJob, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef} = useAssistController();
   const [returnTowSearchOpen, setReturnTowSearchOpen] = useState(false);
   const [manageProvider, setManageProvider] = useState<Provider | null>(null);
+  const mobileTowSnapshot = towOfferAcceptFor?.mobileTowOffer?.destinationSnapshot ?? null;
+  const mobileTowPoint = mobileTowDest?.destinationPoint ??
+    (mobileTowSnapshot && typeof mobileTowSnapshot.lat === "number" && typeof mobileTowSnapshot.lng === "number" ?
+      {
+        lat: mobileTowSnapshot.lat,
+        lng: mobileTowSnapshot.lng,
+        label: mobileTowSnapshot.name ?? mobileTowSnapshot.label ?? null,
+      } :
+      null);
+  const mobileTowLabel = mobileTowDest?.label ??
+    (typeof mobileTowSnapshot?.name === "string" && mobileTowSnapshot.name !== "" ?
+      mobileTowSnapshot.name :
+      typeof mobileTowSnapshot?.label === "string" && mobileTowSnapshot.label !== "" ?
+        mobileTowSnapshot.label :
+        null);
+  const returnTowPickup = returnTowFor?.ticket.returnTowOffer?.originSnapshot?.name ??
+    returnTowFor?.ticket.destinationSnapshot?.name ??
+    t.assist.returnTowPickupShop;
   return (
     <View style={styles.root}>
       <AssistMapView
@@ -427,7 +445,7 @@ export default function AssistScreen() {
           onDescription={setDescription}
           photos={photos}
           photosBusy={photosBusy}
-          onAddPhotos={() => void onAddTicketPhotos()}
+          onAddPhotos={(source) => void onAddTicketPhotos(source)}
           onRemovePhoto={(index) => { setPhotos((prev) => prev.filter((_, i) => i !== index)); setPhotoError(null); }}
           destError={towDestError}
           photoError={photoError}
@@ -473,7 +491,7 @@ export default function AssistScreen() {
         </Overlay>
       ) : null}
       {shopSearchMode ? (
-        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); setEditDestFor(null); setTowOfferAcceptFor(null); }}>
+        <Overlay visible variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); setEditDestFor(null); }}>
           <PlaceSearchScreen
             t={t}
             token={token ?? undefined}
@@ -500,7 +518,7 @@ export default function AssistScreen() {
               setRadiusSearchFrom(shopSearchMode);
               setShopSearchMode(null);
             }}
-            onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); setEditDestFor(null); setTowOfferAcceptFor(null); }}
+            onClose={() => { Keyboard.dismiss(); setShopSearchMode(null); setEditDestFor(null); }}
           />
         </Overlay>
       ) : null}
@@ -515,7 +533,7 @@ export default function AssistScreen() {
             setMapSearchFrom(null);
             if (mode) onPickSearchPlace({label, lat, lng, source: "map"}, mode);
           }}
-          onClose={() => { setMapSearchFrom(null); setEditDestFor(null); setTowOfferAcceptFor(null); }}
+          onClose={() => { setMapSearchFrom(null); setEditDestFor(null); }}
         />
       </Overlay>
       <Overlay visible={radiusSearchFrom !== null} variant="fullScreen" closeLabel={t.common.cancel} onClose={() => { setRadiusSearchFrom(null); setEditDestFor(null); }}>
@@ -841,16 +859,35 @@ export default function AssistScreen() {
           />
         </Overlay>
       ) : null}
-      {returnTowFor ? (
-        <ReturnTowSheet
+      {towOfferAcceptFor ? (
+        <TowDestinationSheet
           t={t}
+          mode="MOBILE"
+          pickupLabel={t.assist.returnTowCurrent}
+          destination={mobileTowPoint}
+          destinationLabel={mobileTowLabel}
+          onOpenSearch={() => setShopSearchMode("tow")}
+          busy={recBusy}
+          error={mobileTowError}
+          onConfirm={() => void onConfirmMobileTow()}
+          onClose={closeMobileTowConfirm}
+        />
+      ) : null}
+      {returnTowFor ? (
+        <TowDestinationSheet
+          t={t}
+          mode="RETURN"
+          pickupLabel={returnTowPickup}
           current={gps}
           origin={returnTowFor.origin}
           destination={returnTowFor.destination}
+          destinationLabel={returnTowFor.destination?.label ?? null}
           onOpenSearch={() => setReturnTowSearchOpen(true)}
           busy={returnTowBusy}
           error={returnTowError}
-          onConfirm={(point) => void onConfirmReturnTow(point)}
+          onConfirm={(point) => {
+            if (point) void onConfirmReturnTow(point);
+          }}
           onClose={() => { setReturnTowFor(null); setReturnTowSearchOpen(false); }}
         />
       ) : null}

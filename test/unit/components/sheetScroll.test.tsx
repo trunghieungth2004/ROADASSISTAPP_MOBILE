@@ -9,6 +9,7 @@ import VehiclePickerSheet from "../../../src/components/vehicles/VehiclePickerSh
 import FlagDetailSheet from "../../../src/components/flags/FlagDetailSheet";
 import FlagReportDialog from "../../../src/components/flags/FlagReportDialog";
 import VehicleCreateDialog from "../../../src/components/vehicles/VehicleCreateDialog";
+import VehicleEditDialog from "../../../src/components/vehicles/VehicleEditDialog";
 import SaveRouteDialog from "../../../src/components/routes/SaveRouteDialog";
 import SavedRoutesSheet from "../../../src/components/routes/SavedRoutesSheet";
 import {en} from "../../../src/i18n/en";
@@ -191,6 +192,23 @@ test("flag report dialog shows fully with no scroller", () => {
 test("vehicle create dialog pins its save without a scroller", () => {
   const rendered = mount(
     <VehicleCreateDialog t={en} theme={darkTheme} token={null} onClose={() => undefined} onCreated={() => undefined} />,
+  );
+  const actions = rendered.root.findAll((n) => n.props?.accessibilityLabel === en.common.save);
+  expect(actions.length).toBeGreaterThan(0);
+  expect(scrollViews(rendered).length).toBe(0);
+  rendered.unmount();
+});
+
+test("vehicle edit dialog pins its save without a scroller", () => {
+  const rendered = mount(
+    <VehicleEditDialog
+      t={en}
+      theme={darkTheme}
+      token={null}
+      profile={{id: "v1", type: "CAR", baseWidth: 1.9, baseHeight: 1.6}}
+      onClose={() => undefined}
+      onSaved={() => undefined}
+    />,
   );
   const actions = rendered.root.findAll((n) => n.props?.accessibilityLabel === en.common.save);
   expect(actions.length).toBeGreaterThan(0);

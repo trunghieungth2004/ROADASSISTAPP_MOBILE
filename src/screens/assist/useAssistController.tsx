@@ -44,13 +44,13 @@ import RecordDetailSheet from "./RecordDetailSheet";
 import QuickFixSheet from "./QuickFixSheet";
 import DelaySheet from "./DelaySheet";
 import type {DelayReason} from "./delayReasons";
-import ReturnTowSheet, {type ReturnTowPoint} from "./ReturnTowSheet";
+import type {TowPoint} from "./TowDestinationSheet";
 import CancelReasonSheet from "./CancelReasonSheet";
 import {SHOP_DECLINE_REASONS, TOWER_CANCEL_REASONS, shopDeclineReasonLabel, towerCancelReasonLabel} from "./cancelReasons";
 
 import {type WorkFormMode, type WorkFormValue} from "./WorkSheet";
 
-import {isPhotoPermissionError, takePhoto, uploadPhotoPaths} from "../../services/photos";
+import {isPhotoPermissionError, isPhotoUploadError, pickPhotos, takePhoto, TICKET_PHOTO_MAX, uploadPhotoPaths, type PhotoSource} from "../../services/photos";
 
 import {boundsOf} from "../route/routeGeo";
 import {HCMC_CENTER} from "../route/types";
@@ -120,7 +120,7 @@ export default function useAssistController() {
   const [handoverError, setHandoverError] = useState<string | null>(null);
   const [delayBusy, setDelayBusy] = useState(false);
   const [delayError, setDelayError] = useState<string | null>(null);
-  const [returnTowFor, setReturnTowFor] = useState<{ticket: FeedTicket; origin: ReturnTowPoint | null; destination: ReturnTowPoint | null} | null>(null);
+  const [returnTowFor, setReturnTowFor] = useState<{ticket: FeedTicket; origin: TowPoint | null; destination: TowPoint | null} | null>(null);
   const [returnTowBusy, setReturnTowBusy] = useState(false);
   const [returnTowError, setReturnTowError] = useState<string | null>(null);
   const [quickFixBusy, setQuickFixBusy] = useState(false);
@@ -153,6 +153,8 @@ export default function useAssistController() {
   const [chatFor, setChatFor] = useState<FeedTicket | null>(null);
   const [chatArchiveFor, setChatArchiveFor] = useState<{ticket: FeedTicket; version: number} | null>(null);
   const [towOfferAcceptFor, setTowOfferAcceptFor] = useState<FeedTicket | null>(null);
+  const [mobileTowDest, setMobileTowDest] = useState<{destinationShopId?: string; destinationPoint?: {lat: number; lng: number; label?: string}; label: string} | null>(null);
+  const [mobileTowError, setMobileTowError] = useState<string | null>(null);
   const [continuationFor, setContinuationFor] = useState<{ticket: FeedTicket; nextAttempt: number; callOutTotal: number} | null>(null);
   const [continuationBusy, setContinuationBusy] = useState(false);
   const [continuationError, setContinuationError] = useState<string | null>(null);
@@ -979,7 +981,10 @@ export default function useAssistController() {
         return;
       }
       if (towOfferAcceptFor) {
-        void completeMobileTowAccept(towOfferAcceptFor, {destinationShopId: shop.id});
+        setMobileTowDest({destinationShopId: shop.id, label: shop.name});
+        setShopSearchMode(null);
+        setRadiusSearchFrom(null);
+        setShopSheet(null);
         return;
       }
       setDestShopId(shop.id);
@@ -1422,7 +1427,8 @@ export default function useAssistController() {
   function onPickTowShop(place: Place): void {
     if (typeof place.id !== "string") return;
     if (towOfferAcceptFor) {
-      void completeMobileTowAccept(towOfferAcceptFor, {destinationShopId: place.id});
+      setMobileTowDest({destinationShopId: place.id, label: place.label});
+      setShopSearchMode(null);
       return;
     }
     setDestShopId(place.id);
@@ -1432,7 +1438,11 @@ export default function useAssistController() {
   }
   function onPickTowPlace(place: Place): void {
     if (towOfferAcceptFor) {
-      void completeMobileTowAccept(towOfferAcceptFor, {destinationPoint: {lat: place.lat, lng: place.lng, label: place.label}});
+      setMobileTowDest({
+        destinationPoint: {lat: place.lat, lng: place.lng, label: place.label},
+        label: place.label,
+      });
+      setShopSearchMode(null);
       return;
     }
     setDestShopId(null);
@@ -1598,16 +1608,22 @@ export default function useAssistController() {
   function onSendWithoutPhotos(): void {
     void onRequest(true);
   }
-  async function onAddTicketPhotos(): Promise<void> {
+  async function onAddTicketPhotos(source: PhotoSource): Promise<void> {
     if (photosBusy) return;
     setPhotosBusy(true);
     setError(null);
     setPhotoError(null);
     try {
-      const picked = await takePhoto();
-      if (picked.length > 0) setPhotos((prev) => [...prev, ...picked].slice(0, 5));
+      const picked = source === "camera" ?
+        await takePhoto() :
+        await pickPhotos(TICKET_PHOTO_MAX, photos.length);
+      if (picked.length > 0) {
+        setPhotos((prev) => [...prev, ...picked].slice(0, TICKET_PHOTO_MAX));
+      }
     } catch (err) {
-      setError(isPhotoPermissionError(err) ? t.photos.cameraDenied : toMessage(err));
+      setError(isPhotoPermissionError(err) ?
+        (source === "camera" ? t.photos.cameraDenied : t.photos.denied) :
+        t.photos.uploadFailed);
     } finally {
       setPhotosBusy(false);
     }
@@ -1879,8 +1895,14 @@ export default function useAssistController() {
     setDisputeError(null);
     try {
       const photoUrls = photoUris.length > 0
-        ? (await uploadPhotoPaths(`dispatch/dispute-${disputeFor.id}`, photoUris.slice(0, 5))).filter((item): item is string => typeof item === "string")
+        ? await uploadPhotoPaths(
+          `dispatch/dispute-${disputeFor.id}`,
+          photoUris.slice(0, 5),
+        )
         : [];
+      if (photoUrls.length !== photoUris.slice(0, 5).length) {
+        throw new Error(t.photos.uploadFailed);
+      }
       const viewer = disputeFor.direction === "out" ? "RIDER" : "PROVIDER";
       const moneyReasons = viewer === "RIDER" ?
         new Set(["OVERCHARGE", "FIX_NOT_DONE", "POOR_QUALITY", "UNFIXABLE_DISAGREE"]) :
@@ -1925,7 +1947,7 @@ export default function useAssistController() {
       setNotice(t.dispute.sent);
       await reloadAll();
     } catch (err) {
-      setDisputeError(toMessage(err));
+      setDisputeError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setDisputeBusy(false);
     }
@@ -1940,11 +1962,14 @@ export default function useAssistController() {
     setBehaviorReportError(null);
     try {
       const photoUrls = photoUris.length > 0
-        ? (await uploadPhotoPaths(
+        ? await uploadPhotoPaths(
           `dispatch/report-${behaviorReportFor.id}`,
           photoUris.slice(0, 5),
-        )).filter((item): item is string => typeof item === "string")
+        )
         : [];
+      if (photoUrls.length !== photoUris.slice(0, 5).length) {
+        throw new Error(t.photos.uploadFailed);
+      }
       const viewer = behaviorReportFor.direction === "out" ?
         "RIDER" :
         "PROVIDER";
@@ -1966,7 +1991,7 @@ export default function useAssistController() {
       setNotice(t.report.filed);
       await reloadAll();
     } catch (err) {
-      setBehaviorReportError(toMessage(err));
+      setBehaviorReportError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setBehaviorReportBusy(false);
     }
@@ -1982,9 +2007,8 @@ export default function useAssistController() {
     setUnfixableError(null);
     try {
       const uploaded = await uploadPhotoPaths(`dispatch/${unfixableFor.id}`, photos);
-      if (uploaded.length === 0) {
-        setUnfixableError(t.assist.unfixableNeedPhoto);
-        return;
+      if (uploaded.length !== photos.length) {
+        throw new Error(t.photos.uploadFailed);
       }
       const ticketId = unfixableFor.id;
       const result = await reportUnfixable(ticketId, reason, uploaded, token);
@@ -2016,7 +2040,7 @@ export default function useAssistController() {
         setNotice(t.assist.continueSosNoCandidates);
       }
     } catch (err) {
-      setUnfixableError(toMessage(err));
+      setUnfixableError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setUnfixableBusy(false);
     }
@@ -2290,7 +2314,7 @@ export default function useAssistController() {
       setHandoverFor(null);
       await reloadAll();
     } catch (err) {
-      setHandoverError(toMessage(err));
+      setHandoverError(isPhotoUploadError(err) ? t.photos.uploadFailed : toMessage(err));
     } finally {
       setRecBusy(false);
     }
@@ -2337,9 +2361,11 @@ export default function useAssistController() {
     if (!token || recBusy) return;
     setRecBusy(true);
     setError(null);
+    setMobileTowError(null);
     try {
       const res = await respondMobileShopTow(ticket.id, true, token, destination);
       setTowOfferAcceptFor(null);
+      setMobileTowDest(null);
       setShopSearchMode(null);
       setDetailFor(null);
       if (res.ticketId) {
@@ -2348,7 +2374,7 @@ export default function useAssistController() {
       await reloadAll();
       void refreshBills();
     } catch (err) {
-      setError(toMessage(err));
+      setMobileTowError(toMessage(err));
     } finally {
       setRecBusy(false);
     }
@@ -2356,14 +2382,20 @@ export default function useAssistController() {
   async function onRespondMobileTow(ticket: FeedTicket, accept: boolean): Promise<void> {
     if (!token || recBusy) return;
     if (accept) {
-      if (!ticket.mobileTowOffer?.destinationShopId) {
-        setTowOfferAcceptFor(ticket);
-        setShopSearchMode("tow");
-        return;
-      }
-      await completeMobileTowAccept(ticket, {
-        destinationShopId: ticket.mobileTowOffer.destinationShopId,
-      });
+      const offer = ticket.mobileTowOffer;
+      const snapshot = offer?.destinationSnapshot;
+      const name = snapshot && typeof snapshot.name === "string" &&
+        snapshot.name !== "" ?
+        snapshot.name :
+        snapshot && typeof snapshot.label === "string" &&
+          snapshot.label !== "" ?
+          snapshot.label :
+          t.assist.mobileTowSelectedDropOff;
+      setMobileTowDest(offer?.destinationShopId ?
+        {destinationShopId: offer.destinationShopId, label: name} :
+        null);
+      setMobileTowError(null);
+      setTowOfferAcceptFor(ticket);
       return;
     }
     setRecBusy(true);
@@ -2391,6 +2423,27 @@ export default function useAssistController() {
     } finally {
       setRecBusy(false);
     }
+  }
+  async function onConfirmMobileTow(): Promise<void> {
+    if (!token || !towOfferAcceptFor || recBusy) return;
+    if (!mobileTowDest) {
+      setMobileTowError(t.assist.mobileTowNoDestination);
+      return;
+    }
+    await completeMobileTowAccept(towOfferAcceptFor, {
+      ...(mobileTowDest.destinationShopId ?
+        {destinationShopId: mobileTowDest.destinationShopId} :
+        {}),
+      ...(mobileTowDest.destinationPoint ?
+        {destinationPoint: mobileTowDest.destinationPoint} :
+        {}),
+    });
+  }
+  function closeMobileTowConfirm(): void {
+    setTowOfferAcceptFor(null);
+    setMobileTowDest(null);
+    setMobileTowError(null);
+    setShopSearchMode(null);
   }
   async function onReleaseSos(ticket: FeedTicket): Promise<void> {
     if (!token || recBusy) return;
@@ -2448,7 +2501,7 @@ export default function useAssistController() {
     setError(null);
     try {
       if (accept) {
-        let origin: ReturnTowPoint | null = null;
+        let origin: TowPoint | null = null;
         if (ticket.bookingId) {
           const bookings = await myBookings(token).catch(() => null);
           const booking = bookings?.bookings.find((row) =>
@@ -2474,7 +2527,7 @@ export default function useAssistController() {
       setRecBusy(false);
     }
   }
-  async function onConfirmReturnTow(point: ReturnTowPoint): Promise<void> {
+  async function onConfirmReturnTow(point: TowPoint): Promise<void> {
     if (!token || !returnTowFor || returnTowBusy) return;
     setReturnTowBusy(true);
     setReturnTowError(null);
@@ -2705,5 +2758,5 @@ export default function useAssistController() {
   }
   return {activateVehicle, behaviorReportBusy, behaviorReportError, behaviorReportFor, onFileBehaviorReport, setBehaviorReportFor, setBehaviorReportError, active, activeFeed, activeId, activeIsOut, activeJobPills, activeName, activeVehicle, applyCenter, applyDestinationEdit, assistFocused, billForTicket, bills, boardDetail, boardToFeed, browsing, bundle, cameraRef, cardCollapsed, cardH, centerOnLocal, centeredRef, cancelReasonBusy, cancelReasonError, cancelReasonFor, sosCancelFor, setSosCancelFor, onChangeMobileShop, onCancelWhole: () => sosCancelFor ? void performCancel(sosCancelFor.id) : undefined, chatArchiveFor, chatFor, checkedIn, closeBoardDetail, closeShopSheet, closingSoon, closingWarn, completeMobileTowAccept, continuationBusy, continuationError, continuationFor, currentPoint, description, dest, destShopId, detailContext, detailFor, disputeBusy, disputeError, disputeFor, dueCount, dueTotal, duplicateFor, editDestFor, error, estimateBusy, estimateError, estimateFor, feed, fetchAssistShops, fetchTowRoute, fitJobRoute, fitWalk, focusJobRoute, fittedJobRef, fundedForApproval, gps, hasJobCard, hasShopRole, hasVehicle, imHereBusy, insets, isOwnTowJob, isRider, isTowRequest, jobLayers, jobRoute, jobRouteKey, jobRouteRetry, lang, liveTicketConflict, liveTow, liveTowNoDest, liveTowNoDestOut, liveTowTone, loadActive, loadTowPreview, loading, locateBusy, mapFocusedRef, mapReadyRef, mapSearchFrom, mapSel, mine, mobileFixBusy, mobileFixError, mobileFixFor, mobileShopFixPoint, mobileShopOnDuty, navBusy, navEnded, navigateJobFor, navigateToPoint, navigation, nearbyOnly, nearbySos, nearbyTow, needsDropOff, note, notice, symptom, setSymptom, onAcceptTicket, onAddTicketPhotos, onAdvanceStatus, onApproveEstimate, onApproveFinal, onApproveQuote, onPaymentChoice, onSepayCancel, onSepayFailure, onSepaySuccess, onSwitchToCash, closePaymentChoice, closeSepayCheckout, onCancel, onConfirmCash, onConfirmClosingWarn, onConfirmContinuation, onDeclineDestinationTicket, onDeclineEstimate, onDeclineTicket, onFileDispute, onImHere, onLoadRatings, onLocate, onMarkUnfixable, onNavigateMap, onNavigateToShop, onOfferMobileTow, onOpenBoardTicket, onOpenDestinationCard, onOpenShopCard, onOpenTowRequest, onPickRadiusShop, onPickSearch, onPickSearchPlace, onPickTowPlace, onPickTowShop, onPreviewTowRoute, onRate, onRateRider, onRegisterShop, onReleaseSos, onReplyRating, onReport, onRequest, onRetryPhotos, onRespondMobileTow, onRespondReturnTow, onSaveMobileFix, onSendEstimate, onSendWithoutPhotos, onSubmitCancelReason, onSubmitRating, onSubmitWork, onVehiclePress, onWalkPreview, openBadge, openBill, openShopSheet, ownLiveSos, ownLiveTow, ownMobileShopId, ownProviders, ownShopIds, ownShopProviderId, ownTowId, payeeBillList, paymentDetailFor, setPaymentDetailFor, paymentChoiceBusy, paymentChoiceError, paymentChoiceFor, payments, sepayBusy, sepayCheckoutFor, sepayError, pendingCenterRef, pendingDropName, pendingOwnSos, pendingOwnTow, pendingTicket, photoError, photos, photosBusy, pillForShop, prevTicketType, hasProviderRole, provider, providerLiveJob, providerRecords, query, radius, radiusSearchFrom, rateTarget, ratedScores, ratingBusy, ratingFor, ratingRider, recBusy, refreshBills, reloadAll, reportBusy, reportError, reportFor, reportNote, reportReason, reqBusy, riderRecords, scheme, section, setActive, setBoardDetail, setCardCollapsed, setCardH, setCancelReasonFor, setChatArchiveFor, setChatFor, setCheckedIn, setClosingWarn, setContinuationBusy, setContinuationError, setContinuationFor, setDescription, setDest, setDestShopId, setDetailContext, setDetailFor, setDisputeBusy, setDisputeError, setDisputeFor, setDuplicateFor, setEditDestFor, setError, setEstimateBusy, setEstimateError, setEstimateFor, setFeed, setGps, setImHereBusy, setJobRoute, setJobRouteRetry, setLoading, setLocateBusy, setMapSearchFrom, setMapSel, setMine, setMobileFixBusy, setMobileFixError, setMobileFixFor, setNavBusy, setNavEnded, setNearbySos, setNearbyTow, setNote, setNotice, setOwnProviders, setPayeeBillList, setPayments, setPendingTicket, setPhotoError, setPhotos, setPhotosBusy, setQuery, setRadius, setRadiusSearchFrom, setRatedScores, setRatingBusy, setRatingFor, setRatingRider, setRecBusy, setReportBusy, setReportError, setReportFor, setReportNote, setReportReason, setReqBusy, setSection, setShopJobs, setShopReviews, setShopSearchMode, setShopSel, setShopSheet, setTicketRatings, setTicketType, setTowDestError, setTowLocationMissing, setTowOfferAcceptFor, setTowPreview, setTowPreviewMap, setTowRadius, setUnfixableBusy, setUnfixableError, setUnfixableFor, setVehicleOpen, setWaiting, setWalkBusy, setWalkRoute, setWorkBusy, setWorkError, setWorkFor, setWorkspace, sheetFor, shopJobs, shopReviews, shopSearchMode, shopSel, shopSheet, showShops, sosProviderPoint, startNavSession, startSosNavigation, startTowNavigation, storedFeed, t, theme, ticketRatings, ticketType, token, towDestError, towJobs, towLegsFor, towLocationMissing, towOfferAcceptFor, towOnDuty, towPreview, towPreviewMap, towRadius, towRequests, towSummary, uid, unfixableBusy, unfixableError, unfixableFor, vehicleClass, vehicleOpen, waiting, walkBusy, walkRoute, workBusy, workError, workFor, workspace, workspaceTouchedRef, quickFixFor, delayFor, setDelayFor, delayBusy, delayError, onSaveDelay, onClearDelay,
   handoverFor, handoverError, doTowHandover, closeHandover: () => setHandoverFor(null),
-  setReturnTowDestination: (point: ReturnTowPoint) => setReturnTowFor((prev) => prev ? {...prev, destination: point} : prev), returnTowFor, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor};
+  setReturnTowDestination: (point: TowPoint) => setReturnTowFor((prev) => prev ? {...prev, destination: point} : prev), returnTowFor, setReturnTowFor, returnTowBusy, returnTowError, onConfirmReturnTow, mobileTowDest, mobileTowError, onConfirmMobileTow, closeMobileTowConfirm, quickFixBusy, quickFixError, onSubmitQuickFix, setQuickFixFor};
 }

@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../utils/date";
 import {useEffect, useState} from "react";
 import {Image, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
@@ -135,13 +136,13 @@ export default function DisputeDetailSheet({
           <Cell
             theme={theme}
             label={t.dispute.filed}
-            value={new Date(dispute.at).toLocaleDateString()}
+            value={formatDateDMY(dispute.at)}
           />
           {dispute.resolvedAt ? (
             <Cell
               theme={theme}
               label={t.dispute.resolvedAt}
-              value={new Date(dispute.resolvedAt).toLocaleDateString()}
+              value={formatDateDMY(dispute.resolvedAt)}
             />
           ) : null}
           {dispute.hold ? (

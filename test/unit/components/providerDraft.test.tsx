@@ -72,12 +72,21 @@ test("tow submit rejects a bad plate, bad width, and missing position in order",
   expect(latest()?.error).toBe(en.provider.invalidPlate);
   await act(async () => {
     latest()?.setPlate("51H-12345");
+    latest()?.setTowWidth("");
   });
   await act(async () => {
     ok = await (latest()?.submit("tok") ?? true);
   });
   expect(ok).toBe(false);
   expect(latest()?.error).toBe(en.provider.invalidWidth);
+  await act(async () => {
+    latest()?.setTowWidth("2.0");
+  });
+  await act(async () => {
+    ok = await (latest()?.submit("tok") ?? true);
+  });
+  expect(ok).toBe(false);
+  expect(latest()?.error).toBe(en.provider.invalidLocation);
   renderer.unmount();
 });
 

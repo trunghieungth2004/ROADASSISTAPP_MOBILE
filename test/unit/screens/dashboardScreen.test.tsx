@@ -4,28 +4,10 @@ import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
 import {Text} from "react-native";
 import DashboardScreen from "../../../src/screens/more/DashboardScreen";
 import {en} from "../../../src/i18n/en";
-import type {Bill} from "../../../src/api/bills";
-
 let mockServices = ["RIDER", "SHOP"];
 let mockProviderRows: Array<{id: string; kind: string; status: string; name: string}> = [
   {id: "shop1", kind: "SHOP", status: "ACTIVE", name: "Fix Shop"},
 ];
-
-const mockBills: Bill[] = [{
-  billId: "bill1",
-  ticketId: "t1",
-  ticketType: "TOW",
-  ticketStatus: "4",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  currency: "VND",
-  total: 100000,
-  paid: 100000,
-  due: 0,
-  status: "PAID",
-  viewer: "RIDER",
-  canPay: true,
-  items: [],
-}];
 
 jest.mock("../../../src/context/AuthContext", () => ({
   useAuth: () => ({token: "tok", uid: "u1", loaded: true, signIn: async () => undefined, signOut: async () => undefined, refreshToken: async () => null}),
@@ -52,7 +34,7 @@ jest.mock("../../../src/context/ThemeContext", () => ({
 }));
 
 jest.mock("../../../src/context/BillsContext", () => ({
-  useBills: () => ({bills: mockBills, refresh: jest.fn()}),
+  useBills: () => ({refresh: jest.fn()}),
 }));
 
 jest.mock("@react-navigation/native", () => {
@@ -68,6 +50,61 @@ jest.mock("../../../src/api/providers", () => ({
   providerStats: async () => ({
     providers: [{id: "shop1", name: "Fix Shop", kind: "SHOP", completedJobs: 12, ratingAvg: 4.5, ratingCount: 10}],
     payouts: {gross: 500000, net: 450000, commissionOwed: 50000},
+  }),
+}));
+
+jest.mock("../../../src/api/analytics", () => ({
+  myAnalytics: async () => ({
+    windowDays: 30,
+    days: 30,
+    startDate: "2026-10-18",
+    endDate: "2026-11-16",
+    generatedAt: "2026-11-16T05:00:00.000Z",
+    comparison: {
+      startDate: "2026-09-18",
+      endDate: "2026-10-17",
+      current: {
+        rider: {spend: 100000, tickets: 3, completed: 2, bookings: 1},
+        provider: {gross: 500000, net: 450000, taken: 5, completed: 4, bookings: 1},
+      },
+      previous: {
+        rider: {spend: 80000, tickets: 2, completed: 1, bookings: 0},
+        provider: {gross: 400000, net: 360000, taken: 4, completed: 3, bookings: 0},
+      },
+      change: {
+        rider: {spend: 25, tickets: 50, completed: 100, bookings: 100},
+        provider: {gross: 25, net: 25, taken: 25, completed: 33.3, bookings: 100},
+      },
+    },
+    rider: {
+      tickets: {total: 3, active: 1, completed: 2, byType: {TOW: 1}, byStatus: {}},
+      payments: {count: 1, received: 1, gross: 100000, commission: 10000, refunded: 0, net: 90000},
+      bookings: {total: 1, active: 1, completed: 0, cancelled: 0, declined: 0, noShow: 0, byStatus: {}, byService: []},
+      services: {
+        total: 3,
+        byType: {TOW: 2, SOS: 1},
+        byCategory: {},
+        services: [{key: "TOW", name: "Tow", category: null, count: 2, revenue: 0}],
+        topService: {key: "TOW", name: "Tow", count: 2, kind: "TYPE"},
+      },
+      series: [{date: "2026-11-01", tickets: 1, completed: 1, spend: 100000, bookings: 0}],
+    },
+    provider: {
+      providers: [],
+      tickets: {total: 5, taken: 5, active: 0, completed: 4, byType: {SHOP: 4}, byStatus: {}},
+      earnings: {count: 1, received: 1, gross: 500000, commission: 50000, refunded: 0, net: 450000, commissionOwed: 50000},
+      payouts: {count: 1, net: 450000},
+      bookings: {total: 1, active: 1, completed: 0, cancelled: 0, declined: 0, noShow: 0, byStatus: {}, byService: []},
+      rating: {avg: 4.5, count: 10},
+      services: {
+        total: 4,
+        byType: {SHOP: 4},
+        byCategory: {},
+        services: [{key: "SHOP", name: "Shop", category: null, count: 4, revenue: 0}],
+        topService: {key: "SHOP", name: "Shop", count: 4, kind: "TYPE"},
+      },
+      series: [{date: "2026-11-01", jobs: 1, completed: 1, earnings: 500000, bookings: 0}],
+    },
   }),
 }));
 
@@ -143,7 +180,7 @@ test("shows rider activity first and switches to provider activity", async () =>
     expect(riderView).toContain(en.more.dashboardTrips);
     expect(riderView).toContain(en.more.dashboardSpend);
     expect(riderView).toContain("100,000 VND");
-    expect(riderView).toContain(en.more.dashboardMonthly);
+    expect(riderView).toContain(en.more.dashboardActivity);
 
     await act(async () => {
       labelled(renderer, en.more.dashboardProvider)?.props.onPress();
@@ -151,8 +188,9 @@ test("shows rider activity first and switches to provider activity", async () =>
     });
 
     const providerView = texts(renderer);
-    expect(providerView).toContain(en.more.dashboardEarned);
-    expect(providerView).toContain("500,000 VND");
+    expect(providerView).toContain(en.more.dashboardNet);
+    expect(providerView).toContain(en.more.dashboardTaken);
+    expect(providerView).toContain("450,000 VND");
     expect(providerView).toContain(en.more.dashboardPending);
   } finally {
     renderer.unmount();
@@ -165,7 +203,8 @@ test("provider-only users land on the provider view without a switch", async () 
   const renderer = await mount();
   try {
     expect(labelled(renderer, en.more.dashboardRider)).toBeUndefined();
-    expect(texts(renderer)).toContain(en.more.dashboardEarned);
+    expect(texts(renderer)).toContain(en.more.dashboardNet);
+    expect(texts(renderer)).toContain(en.more.dashboardTaken);
   } finally {
     renderer.unmount();
   }

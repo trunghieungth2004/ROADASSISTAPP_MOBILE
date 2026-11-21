@@ -25,6 +25,8 @@ export type MeVehicle = {
   type: string;
   baseWidth: number;
   baseHeight: number;
+  plate?: string | null;
+  label?: string | null;
   providerLinks?: Array<{id: string; kind: string; name: string; status: string; plate: string | null; vehicleType: string | null; vehicleWidth: number | null}>;
 };
 

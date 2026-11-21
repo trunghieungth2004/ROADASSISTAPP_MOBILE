@@ -1,3 +1,4 @@
+import { formatDateTimeDMY } from "../../utils/date";
 import {useEffect, useState} from "react";
 import {ActivityIndicator, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
@@ -722,7 +723,7 @@ export default function RecordDetailSheet({t, lang, ticket, ratings, busy, uid, 
                     {`${t.chat.previousChat}${entry.shopName ? ` · ${entry.shopName}` : ""}`}
                   </Text>
                   <Text style={[styles.chatArchiveMeta, {color: theme.muted}]}>
-                    {new Date(entry.at).toLocaleString()}
+                    {formatDateTimeDMY(entry.at)}
                   </Text>
                 </View>
                 <View style={[styles.chatArchivePill, {backgroundColor: theme.muted}]}>

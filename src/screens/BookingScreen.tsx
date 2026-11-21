@@ -1,3 +1,4 @@
+import { formatDateTimeDMY } from "../utils/date";
 import {useCallback, useEffect, useState} from "react";
 import {ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, View} from "react-native";
 import {useFocusEffect, useNavigation, useRoute} from "@react-navigation/native";
@@ -168,13 +169,7 @@ export default function BookingScreen() {
 
   function renderCard(booking: Booking) {
     const tone = statusTone(booking.status);
-    const when = new Date(booking.scheduledAt).toLocaleString(locale, {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const when = `${new Date(booking.scheduledAt).toLocaleDateString(locale, {weekday: "short"})} ${formatDateTimeDMY(booking.scheduledAt)}`;
     const at = Date.parse(booking.scheduledAt);
     const canArrive = booking.status === "CONFIRMED" &&
       Date.now() >= at - 2 * 60 * 60 * 1000 &&

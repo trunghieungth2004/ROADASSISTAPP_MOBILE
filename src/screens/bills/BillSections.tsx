@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../utils/date";
 import {StyleSheet, View} from "react-native";
 import {AppText as Text} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
@@ -153,7 +154,7 @@ function CatalogLines({item, t, theme}: {item: BillItem; t: Strings; theme: AppT
         <AmountRow
           key={line.lineId ?? `service-${index}`}
           label={line.name}
-          detail={`${line.qty} × ${line.unitPrice.toLocaleString()} VND${line.priceMode === "QUOTED" ? ` · ${t.bills.quoted}` : ` · ${t.bills.catalog}`}${line.warrantyUntil ? ` · ${t.bills.warranty}: ${new Date(line.warrantyUntil).toLocaleDateString()}` : ""}`}
+          detail={`${line.qty} × ${line.unitPrice.toLocaleString()} VND${line.priceMode === "QUOTED" ? ` · ${t.bills.quoted}` : ` · ${t.bills.catalog}`}${line.warrantyUntil ? ` · ${t.bills.warranty}: ${formatDateDMY(line.warrantyUntil)}` : ""}`}
           value={money(line.amount)}
           theme={theme}
         />

@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../utils/date";
 import {Pressable, StyleSheet, View} from "react-native";
 import type {Strings} from "../../i18n/en";
 import type {AppealItem, EligibleAppeals} from "../../api/appeals";
@@ -140,7 +141,7 @@ export default function AppealsSheet({
                   )}
                   <View style={styles.foot}>
                     <Text style={[styles.date, {color: theme.muted}]}>
-                      {new Date(item.createdAt).toLocaleDateString()}
+                      {formatDateDMY(item.createdAt)}
                     </Text>
                     {impact ? (
                       <View style={[styles.outcome, {backgroundColor: `${impact.color}1a`}]}>

@@ -1,3 +1,4 @@
+import { formatDateDMY } from "../../utils/date";
 import {useEffect, useState} from "react";
 import {ActivityIndicator, Keyboard, Pressable, StyleSheet, View} from "react-native";
 import {useAppMode} from "../../context/ThemeContext";
@@ -109,7 +110,7 @@ export default function SavedRoutesSheet({t, token, onOpen}: Props) {
                     {r.distanceMeters != null ? `${(r.distanceMeters / 1000).toFixed(r.distanceMeters < 10000 ? 1 : 0)} ${t.route.km} · ` : ""}
                     {r.durationSeconds != null ? `${Math.round(r.durationSeconds / 60)} ${t.route.min} · ` : ""}
                     {(r.stops?.length ?? 0) > 0 ? `${r.stops?.length} · ` : ""}
-                    {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}
+                    {r.createdAt ? formatDateDMY(r.createdAt) : ""}
                   </Text>
                 </View>
                 {busy ? <ActivityIndicator size="small" color={theme.primary} /> : null}

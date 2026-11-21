@@ -58,6 +58,7 @@ export default function VehicleEditDialog({t, theme, token, profile, onClose, on
       title={t.vehicle.editTitle}
       closeLabel={t.common.cancel}
       onClose={onClose}
+      scrollable={false}
       actions={[{label: t.common.save, tone: "primary", busy, onPress: () => void onSave()}]}
     >
       <VehicleCreateSheet

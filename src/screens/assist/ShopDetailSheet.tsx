@@ -8,6 +8,8 @@ import {themeForMode, type AppTheme} from "../../theme";
 import type {Provider, ProviderService} from "../../api/providers";
 import Overlay from "../../components/overlay/Overlay";
 import ShopClassIcons, {classIconLabel} from "./ShopClassIcons";
+import {VehicleClassIcons} from "../../components/vehicles/VehicleIcons";
+import ServiceCategoryIcon from "../../components/providers/ServiceCategoryIcon";
 import RatingRow from "./RatingRow";
 import {hasChannel} from "../../services/serviceChannels";
 
@@ -44,16 +46,17 @@ function ShopIconActions({t, theme, walkBusy, navBusy, onReport, onWalkHere, onR
   );
 }
 
-function serviceMeta(service: ProviderService, shop: Provider, t: Strings): string {
-  const classes = Array.isArray(service.vehicleClasses) && service.vehicleClasses.length > 0 ?
+function serviceClasses(service: ProviderService, shop: Provider): string[] {
+  return Array.isArray(service.vehicleClasses) && service.vehicleClasses.length > 0 ?
     service.vehicleClasses :
     shop.vehicleClasses ?? [];
+}
+
+function serviceMeta(service: ProviderService, t: Strings): string {
   const parts = [
     service.quoteRequired ? t.provider.serviceQuote : t.provider.serviceFixedPrice,
     ...(typeof service.warrantyDays === "number" && service.warrantyDays > 0 ?
       [`${service.warrantyDays}d`] : []),
-    ...classes.map((cls) =>
-      cls === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike),
     ...(service.channels ?? []).map((channel) =>
       channel === "BOOKING" ? t.provider.channelBooking : t.provider.channelAssist),
   ];
@@ -77,6 +80,7 @@ function ShopServices({t, theme, shop, services}: ShopServicesProps) {
       {services.map((service) => (
         <View key={service.code} style={styles.serviceBlock}>
           <View style={styles.serviceRow}>
+            <ServiceCategoryIcon category={service.category ?? "OTHER"} size={18} color={theme.primary} />
             <Text style={[styles.serviceName, {color: theme.text}]} numberOfLines={1}>
               {`${service.name}${(shop.serviceUsage?.[service.code] ?? 0) > 0 ? ` · ${t.provider.popular}` : ""}`}
             </Text>
@@ -84,7 +88,15 @@ function ShopServices({t, theme, shop, services}: ShopServicesProps) {
               {service.quoteRequired ? t.provider.serviceQuote : `${service.displayPrice.toLocaleString()} ₫`}
             </Text>
           </View>
-          <Text style={[styles.coords, {color: theme.muted}]}>{serviceMeta(service, shop, t)}</Text>
+          <View style={styles.serviceMetaRow}>
+            <Text style={[styles.coords, {color: theme.muted}]}>{serviceMeta(service, t)}</Text>
+            <VehicleClassIcons
+              classes={serviceClasses(service, shop)}
+              size={12}
+              color={theme.muted}
+              label={serviceClasses(service, shop).map((cls) => cls === "CAR" ? t.shop.vehicleCar : t.shop.vehicleBike).join(" · ")}
+            />
+          </View>
         </View>
       ))}
     </View>
@@ -238,5 +250,6 @@ const styles = StyleSheet.create({
   serviceRow: {flexDirection: "row", alignItems: "center", gap: 8},
   serviceName: {flex: 1, fontSize: 13},
   serviceBlock: {gap: 2},
+  serviceMetaRow: {flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap"},
   reviewRow: {gap: 4, borderWidth: 1, borderRadius: 12, padding: 10},
 });

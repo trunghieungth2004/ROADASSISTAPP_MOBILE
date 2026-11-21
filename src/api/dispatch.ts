@@ -34,6 +34,16 @@ export function isUnfixableStatus(status: string): boolean {
 
 export type FeedDirection = "in" | "out";
 
+export type TowOfferSnapshot = {
+  id?: string;
+  name?: string;
+  lat?: number;
+  lng?: number;
+  kind?: string;
+  label?: string | null;
+  source?: string;
+};
+
 export type FeedTicket = DispatchTicket & {
   direction: FeedDirection;
   otherParty?: {
@@ -73,13 +83,21 @@ export type FeedTicket = DispatchTicket & {
     status: string;
     shopId: string;
     destinationShopId: string | null;
+    destinationSnapshot?: TowOfferSnapshot | null;
+    originPoint?: {lat: number; lng: number} | null;
     mode?: string;
     towProviderId?: string | null;
     by: string;
     at: string;
     expiresAt?: string | null;
   } | null;
-  returnTowOffer?: {status: string; shopId: string; by: string; at: string} | null;
+  returnTowOffer?: {
+    status: string;
+    shopId: string;
+    originSnapshot?: TowOfferSnapshot | null;
+    by: string;
+    at: string;
+  } | null;
   mobileTowAvailable?: boolean;
   mobileTowMode?: "DIRECT" | "NETWORK";
   mobileTowState?: "DIRECT" | "TOW_OFF_DUTY" | "TOW_BUSY" | "NO_TOW" | "NONE_NEARBY";

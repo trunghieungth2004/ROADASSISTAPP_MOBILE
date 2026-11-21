@@ -125,20 +125,32 @@ test("register button opens the matching form", async () => {
       await button?.props.onPress();
       await flush();
     });
-    expect(textsUnder(renderer.root).filter((text) => text === en.provider.registerTow).length).toBe(2);
+    const all = textsUnder(renderer.root);
+    expect(all).toContain(en.tow.register);
+    expect(all).toContain(en.provider.towTruck);
   } finally {
     renderer.unmount();
   }
 });
 
-test("the tow form shows the platform fee limits", async () => {
+test("the tow edit form shows the platform fee limits", async () => {
+  mockMyProviders.mockResolvedValue([TOW]);
   const renderer = await mount();
   try {
-    const button = renderer.root
-      .findAll((n) => n.props?.accessibilityLabel === en.provider.registerTow && typeof n.props?.onPress === "function")
+    const row = renderer.root
+      .findAll((n) => typeof n.props?.accessibilityLabel === "string" && n.props.accessibilityLabel.startsWith("Haul,") && typeof n.props?.onPress === "function")
       .at(0);
+    expect(row).toBeDefined();
     await act(async () => {
-      await button?.props.onPress();
+      row?.props.onPress();
+      await flush();
+    });
+    const edit = renderer.root
+      .findAll((n) => n.props?.accessibilityLabel === en.provider.edit && typeof n.props?.onPress === "function")
+      .at(0);
+    expect(edit).toBeDefined();
+    await act(async () => {
+      edit?.props.onPress();
       await flush();
     });
     const all = textsUnder(renderer.root);

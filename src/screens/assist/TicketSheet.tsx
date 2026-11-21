@@ -1,13 +1,12 @@
 import type {ReactNode} from "react";
-import {Image, Pressable, ScrollView, StyleSheet, View} from "react-native";
-import {MaterialIcons} from "@expo/vector-icons";
+import {Pressable, StyleSheet, View} from "react-native";
 import {AppText as Text, AppTextInput as TextInput} from "../../components/ui/AppText";
 import type {Strings} from "../../i18n/en";
 import type {AppTheme} from "../../theme";
 import type {TicketType} from "../../api/dispatch";
 import Overlay from "../../components/overlay/Overlay";
-import {TICKET_PHOTO_MAX} from "../../services/photos";
-import {usePhotoViewer} from "../../components/ui/PhotoViewer";
+import {TICKET_PHOTO_MAX, type PhotoSource} from "../../services/photos";
+import PhotoAttachments from "../../components/ui/PhotoAttachments";
 
 type Props = {
   t: Strings;
@@ -25,7 +24,7 @@ type Props = {
   onDescription?: (s: string) => void;
   photos?: string[];
   photosBusy?: boolean;
-  onAddPhotos?: () => void;
+  onAddPhotos?: (source: PhotoSource) => void;
   onRemovePhoto?: (index: number) => void;
   destError?: string | null;
   photoError?: string | null;
@@ -42,7 +41,6 @@ function titleOf(ticketType: TicketType, t: Strings): string {
 export default function TicketSheet({t, theme, ticketType, note, onNote, symptom, onSymptom, towDest, busy, onSubmit, onClose, description, onDescription, photos, photosBusy, onAddPhotos, onRemovePhoto, destError, photoError, onRetryPhotos, onSubmitWithoutPhotos}: Props) {
   const showPhotos = photos !== undefined || onAddPhotos !== undefined;
   const list = photos ?? [];
-  const photoViewer = usePhotoViewer(t.common.cancel);
   const actions = photoError
     ? [
         {label: t.common.retry, tone: "primary" as const, busy, onPress: onRetryPhotos ?? onSubmit},
@@ -104,32 +102,16 @@ export default function TicketSheet({t, theme, ticketType, note, onNote, symptom
         {ticketType === "TOW" ? towDest : null}
         {destError ? <Text style={[styles.error, {color: theme.danger}]}>{destError}</Text> : null}
         {showPhotos ? (
-          <View style={styles.photoBlock}>
-            <Text style={[styles.photoLabel, {color: theme.muted}]}>{t.assist.photos} ({list.length}/{TICKET_PHOTO_MAX})</Text>
-            <ScrollView style={styles.photoScroll} contentContainerStyle={styles.photoList} nestedScrollEnabled showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {list.map((uri, i) => (
-                <View key={`${i}-${uri}`} style={styles.stripWrap}>
-                  <Pressable onPress={() => photoViewer.open(uri)} accessibilityRole="button" accessibilityLabel={`${t.assist.photos} ${i + 1}`}>
-                    <Image source={{uri}} style={styles.strip} />
-                  </Pressable>
-                  {onRemovePhoto ? (
-                    <Pressable style={[styles.removeBtn, {backgroundColor: theme.danger}]} onPress={() => onRemovePhoto(i)} accessibilityRole="button" accessibilityLabel={t.common.delete}>
-                      <MaterialIcons name="close" size={14} color="#fff" />
-                    </Pressable>
-                  ) : null}
-                </View>
-              ))}
-              {onAddPhotos && list.length < TICKET_PHOTO_MAX ? (
-                <Pressable style={[styles.addStrip, {borderColor: theme.primary}]} disabled={photosBusy === true} onPress={() => onAddPhotos()} accessibilityRole="button" accessibilityLabel={t.photos.take}>
-                  <MaterialIcons name="photo-camera" size={16} color={theme.primary} />
-                  <Text style={{color: theme.primary}}>{photosBusy === true ? t.common.loading : t.photos.take}</Text>
-                </Pressable>
-              ) : null}
-            </ScrollView>
-          </View>
+          <PhotoAttachments
+            t={t}
+            photos={list}
+            max={TICKET_PHOTO_MAX}
+            busy={photosBusy === true}
+            error={photoError ?? null}
+            onAdd={(source) => onAddPhotos?.(source)}
+            onRemove={(index) => onRemovePhoto?.(index)}
+          />
         ) : null}
-        {photoError ? <Text style={[styles.error, {color: theme.danger}]}>{photoError}</Text> : null}
-        {photoViewer.node}
       </View>
     </Overlay>
   );
@@ -143,13 +125,5 @@ const styles = StyleSheet.create({
   symptomChip: {borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10},
   input: {borderWidth: 1, borderRadius: 8, padding: 10},
   multiline: {minHeight: 72, textAlignVertical: "top"},
-  photoBlock: {gap: 6},
-  photoLabel: {fontSize: 12},
-  photoScroll: {maxHeight: 188},
-  photoList: {gap: 8},
-  stripWrap: {position: "relative", width: "100%"},
-  strip: {width: "100%", height: 56, borderRadius: 8},
-  removeBtn: {position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center"},
-  addStrip: {width: "100%", height: 56, minHeight: 56, borderWidth: 1, borderStyle: "dashed", borderRadius: 8, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6},
   error: {fontSize: 12},
 });

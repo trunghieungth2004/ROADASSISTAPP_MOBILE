@@ -93,8 +93,11 @@ export default function VehicleScreen() {
                       </View>
                     ) : null}
                     {(p.providerLinks ?? []).map((link) => (
-                      <View key={link.id} style={[styles.statusChip, {backgroundColor: theme.muted}]}>
-                        <Text style={styles.statusChipText}>{link.kind === "TOW" ? t.roles.tow : link.kind === "MOBILE_SHOP" ? t.roles.mobileShop : t.roles.shop}</Text>
+                      <View key={link.id} style={[styles.statusChip, {backgroundColor: link.status === "DENIED" ? theme.danger : theme.muted}]}>
+                        <Text style={styles.statusChipText}>
+                          {link.kind === "TOW" ? t.roles.tow : link.kind === "MOBILE_SHOP" ? t.roles.mobileShop : t.roles.shop}
+                          {link.status === "DENIED" ? ` · ${t.provider.denied}` : ""}
+                        </Text>
                       </View>
                     ))}
                   </View>

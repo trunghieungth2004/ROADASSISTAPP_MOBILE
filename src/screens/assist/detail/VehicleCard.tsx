@@ -2,6 +2,7 @@ import type {FeedTicket} from "../../../api/dispatch";
 import type {Strings} from "../../../i18n/en";
 import type {AppTheme} from "../../../theme";
 import {vehicleMeta, vehicleTypeName} from "../../../components/vehicles/vehicleMeta";
+import {vehicleClassOf} from "../vehicleClass";
 import {CardHead, DetailCard, FeeRow} from "./parts";
 
 export default function VehicleCard({t, theme, ticket}: {t: Strings; theme: AppTheme; ticket: FeedTicket}) {
@@ -18,7 +19,7 @@ export default function VehicleCard({t, theme, ticket}: {t: Strings; theme: AppT
     !ticket.vehiclePlate) return null;
   return (
     <DetailCard theme={theme}>
-      <CardHead theme={theme} icon="directions-car" title={label} />
+      <CardHead theme={theme} icon={vehicleClassOf(type) === "CAR" ? "directions-car" : "two-wheeler"} title={label} />
       <FeeRow
         theme={theme}
         label={t.vehicle.type}

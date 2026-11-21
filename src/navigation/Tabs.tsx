@@ -17,7 +17,7 @@ import OnboardingScreen, {type MobileShopDraft, type ShopDraft, type TowDraft} f
 import PermissionGateScreen from "../screens/PermissionGateScreen";
 import {getPermissionStates, openAppSettings, openBatterySettings, requestBackgroundLocationPermission, requestCameraPermission, requestMediaLibraryPermission, requestNotificationPermission, type AppPermissionStates} from "../services/permissions";
 import {syncPushToken} from "../services/push";
-import {normalizeTowPlate, parseTowWidth, validateTowDraft} from "../services/towPlates";
+import {normalizeTowPlate, parseTowWidth, parseVehicleHeight, validateTowDraft} from "../services/towPlates";
 import {createProvider} from "../api/providers";
 import RouteScreen from "../screens/RouteScreen";
 import HazardScreen from "../screens/HazardScreen";
@@ -154,21 +154,21 @@ function OnboardingGate() {
       if (token) {
         if (mobileShop) {
           try {
-            await createProvider({kind: "MOBILE_SHOP", name: mobileShop.name.trim(), lat: mobileShop.lat, lng: mobileShop.lng, ...(mobileShop.label ? {label: mobileShop.label} : {}), plate: normalizeTowPlate(mobileShop.plate), vehicleType: mobileShop.vehicleType, licenseNumber: mobileShop.licenseNumber.trim()}, token);
+            await createProvider({kind: "MOBILE_SHOP", name: mobileShop.name.trim(), lat: mobileShop.lat, lng: mobileShop.lng, ...(mobileShop.label ? {label: mobileShop.label} : {}), plate: normalizeTowPlate(mobileShop.plate), vehicleType: mobileShop.vehicleType, ...(mobileShop.vehicleLabel ? {vehicleLabel: mobileShop.vehicleLabel} : {}), vehicleWidth: parseTowWidth(mobileShop.vehicleWidth) ?? undefined, vehicleHeight: parseVehicleHeight(mobileShop.vehicleHeight) ?? undefined, licenseNumber: mobileShop.licenseNumber.trim(), ...(mobileShop.services ? {services: mobileShop.services} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createMobileShopFailed} ${toMessage(err)}`);
           }
         }
         if (shop) {
           try {
-            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {}), ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {})}, token);
+            await createProvider({kind: "SHOP", name: shop.name.trim(), lat: shop.lat, lng: shop.lng, ...(shop.label ? {label: shop.label} : {}), ...(shop.openHours ? {openHours: shop.openHours} : {}), ...(shop.vehicleClasses ? {vehicleClasses: shop.vehicleClasses} : {}), ...(shop.services ? {services: shop.services} : {})}, token);
           } catch (err) {
             throw new Error(`${t.provider.createShopFailed} ${toMessage(err)}`);
           }
         }
         if (tow) {
           try {
-            await createProvider({kind: "TOW", name: tow.name.trim(), lat: tow.lat, lng: tow.lng, plate: normalizeTowPlate(tow.plate), vehicleType: tow.vehicleType, vehicleWidth: parseTowWidth(tow.width) ?? undefined}, token);
+            await createProvider({kind: "TOW", name: tow.name.trim(), lat: tow.lat, lng: tow.lng, plate: normalizeTowPlate(tow.plate), vehicleType: tow.vehicleType, ...(tow.vehicleLabel ? {vehicleLabel: tow.vehicleLabel} : {}), vehicleWidth: parseTowWidth(tow.width) ?? undefined, vehicleHeight: parseVehicleHeight(tow.height) ?? undefined}, token);
           } catch (err) {
             throw new Error(`${t.provider.createTowFailed} ${toMessage(err)}`);
           }

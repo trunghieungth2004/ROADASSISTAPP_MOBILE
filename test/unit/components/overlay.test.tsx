@@ -1,7 +1,7 @@
 import {expect, test} from "@jest/globals";
 import {create, type ReactTestRenderer} from "react-test-renderer";
 import {SafeAreaProvider, type Metrics} from "react-native-safe-area-context";
-import {Modal, ScrollView, Text, ActivityIndicator} from "react-native";
+import {Modal, ScrollView, Text, ActivityIndicator, KeyboardAvoidingView} from "react-native";
 import Overlay from "../../../src/components/overlay/Overlay";
 import {en} from "../../../src/i18n/en";
 
@@ -43,6 +43,25 @@ test("sheet uses a transparent slide modal", () => {
   expect(modal.props.transparent).toBe(true);
   expect(modal.props.animationType).toBe("slide");
   rendered.unmount();
+});
+
+test("sheet and dialog lift above the keyboard on both platforms", () => {
+  const sheet = mount(
+    <Overlay visible variant="sheet" title={en.vehicle.title} closeLabel={en.common.close} onClose={() => undefined}>
+      <Text>body</Text>
+    </Overlay>,
+  );
+  const sheetAvoider = sheet.root.findByType(KeyboardAvoidingView);
+  expect(sheetAvoider.props.behavior).toBe("padding");
+  sheet.unmount();
+  const dialog = mount(
+    <Overlay visible variant="dialog" title={en.saved.title} closeLabel={en.common.close} onClose={() => undefined}>
+      <Text>body</Text>
+    </Overlay>,
+  );
+  const dialogAvoider = dialog.root.findByType(KeyboardAvoidingView);
+  expect(dialogAvoider.props.behavior).toBe("padding");
+  dialog.unmount();
 });
 
 test("fullScreen uses an opaque slide modal", () => {
