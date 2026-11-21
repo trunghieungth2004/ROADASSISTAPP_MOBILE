@@ -97,10 +97,11 @@ breaks updates without a compile error anywhere.
 
 ### Current rollout
 
-`v0.3.1` is the current release candidate. It adds the Cases center, Trust
-and Standing profile scores, read-only admin/payee bill views, full update
-changelogs, and profile standing/restriction fixes. Install it over `v0.3.0`
-with the same signing key to verify the in-app updater path.
+`v0.5.0` is the current release. It adds dashboard date ranges and service
+analytics, keyboard-safe sheets and dialogs, provider approval and vehicle
+lifecycle fixes, icon-first vehicle/service controls, and the SOS visit-fee
+breakdown. Install it over `v0.4.0` with the same signing key to verify the
+in-app updater path.
 
 ### Verify a published release
 

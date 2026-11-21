@@ -7,6 +7,76 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
+### Added
+
+- Dashboard date ranges with 7/30/90/365-day presets and a custom range, plus
+  service popularity, service types and the most popular service for both rider
+  and provider views.
+- Destination confirmation for mobile-shop tow offers and walk-in return tows,
+  showing the pickup and drop-off before the rider accepts.
+- Return-tow offers now show the repair-shop pickup name from the ticket.
+
+### Changed
+
+- The mobile dashboard reads the shared rider/provider analytics endpoint, so
+  trip, spending, booking and payout totals follow the selected date range.
+- Accepting a mobile-shop tow offer always opens the confirmation sheet, even
+  when the shop preselected a drop-off.
+- Photo attachments across ticket filing, hazard reports, disputes, behaviour
+  reports, appeals, warranty claims, handover photos and chat now share one
+  thumbnail grid, count label, camera/library choices and remove badge.
+- Dashboard redesigned around one hero metric, comparison deltas, a compact KPI
+  grid, taken/completed provider jobs, seven non-wrapping activity buckets, top-service bars and service-type breakdown; range and freshness moved
+  into one scope row.
+- Activity bars open a daily detail sheet with ticket, booking and payment tabs;
+  ticket rows open a bottom detail sheet. Service types and Assist request
+  buttons now share fixed SOS/TOW/WALK_IN/BOOKING tones.
+- User-facing dates now use `DD/MM/YYYY` across dashboards, bookings, bills,
+  cases, warranties, provider screens and admin timestamps; API payloads stay
+  ISO.
+- Provider onboarding now explains whether BIKE/CAR refers to the provider's
+  service vehicle, the customer vehicles a shop repairs, or the tow truck, and
+  SHOP/MOBILE_SHOP setup can add services immediately.
+- Provider service rows open a full service editor sheet on tap; inline
+  expand/delete controls were removed, and provider edit fields now include
+  inline hints.
+- Provider edit now uses a full-screen editor with the same visual shell,
+  labels, field order, compact hours row and shared service list as provider
+  setup; adding a missing provider on the Provider screen reuses the setup
+  wizard instead of a separate dialog.
+- TOW and MOBILE_SHOP setup/edit now capture the vehicle name, width and
+  height alongside plate/type, and offer plate-aware suggestions from the
+  user's other provider vehicles. Pending or denied applications no longer
+  add a vehicle to My Vehicles; approval creates or links it.
+- Service edit now places Remove and Cancel in the secondary footer row and
+  keeps Save as the filled primary action with text.
+- Vehicle classes, service categories, ticket statuses and dashboard KPIs now
+  use shared icon components. Bike/car choices are icon-first in onboarding,
+  provider editing, shop details and filters, with text kept as accessibility
+  labels and 44 px touch targets on icon-only controls.
+
+### Fixed
+
+- Mobile-shop accept notifications and chat now describe a visit estimate,
+  separating call-out and travel, naming waived or zero components, and making
+  clear that the repair is quoted separately and travel is not charged on an
+  unfixable close. The SOS detail sheet shows the same visit breakdown and
+  includes it in the pre-bill total.
+- Bottom sheets and dialogs now lift above the keyboard on Android and iOS, so
+  focused fields and pinned Save/Cancel actions are no longer covered;
+  full-screen onboarding owns the same keyboard avoidance.
+- The vehicle edit dialog now renders without a scroll container, so its
+  fixed fields and Save action stay together.
+- Snack notices now render inline instead of inside a blocking modal, so
+  saved/error messages no longer require a tap before the screen can be used.
+- Destination changes during a mobile-shop tow offer no longer accept the offer
+  immediately.
+- Ticket filing can now pick photos from the library instead of camera only.
+- Photo upload failures show the friendly retry message instead of raw storage
+  error codes, and partial uploads are rejected consistently.
+
 ## [0.4.0] - 2026-11-14
 
 ### Added
